@@ -1,0 +1,29 @@
+# General
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Environment / Credentials
+.env
+.env.local
+.env.production
+.env.*
+
+# Dependencies
+vendor/
+node_modules/
+
+# Application Storage
+storage/logs/*.log
+storage/payroll/*.pdf
+storage/cache/
+
+# Database
+database/seed.sql
+*.sqlite
+*.db
+
+# Testing
+tests/_output/
+tests/_support/_generated/
