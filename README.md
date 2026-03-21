@@ -35,3 +35,15 @@ To ensure absolutely no conflicts or errors between the two environments:
 2. **Never mix dependencies.** Node modules and `package.json` belong to the website. PHP `vendor` and `composer.json` belong to the CRM.
 3. **No shared databases.** The marketing site should never connect directly to the CRM database.
 4. **Separate Deployments.** Pushing to the marketing repo will not affect the CRM. Pushing to the CRM repo will not affect the marketing site.
+
+---
+
+## 🌐 Live DNS Configuration (Important)
+Because `base-fare.com` DNS records are hosted externally (Vercel/Namecheap/Cloudflare), creating the subdomain inside Hostinger only creates the folder — it does **not** route internet traffic there automatically.
+
+**When the CRM is ready to go live, you MUST do this:**
+1. Log into your external DNS provider (wherever `base-fare.com` nameservers point).
+2. Create a new **A Record**.
+3. Set the **Host/Name** to `crm`.
+4. Set the **Value/IP Address** to your Hostinger server's IP address (found in your Hostinger dashboard under "Hosting Details").
+5. Save changes and wait for propagation.
