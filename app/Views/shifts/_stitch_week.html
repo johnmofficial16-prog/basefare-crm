@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Shift Scheduling - Base Fare CRM</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-primary-fixed-variant": "#2a4386",
+              "outline": "#737784",
+              "on-secondary-container": "#4a6774",
+              "surface-bright": "#f8f9fa",
+              "inverse-primary": "#b3c5ff",
+              "on-secondary-fixed-variant": "#2e4b57",
+              "on-secondary-fixed": "#001f2a",
+              "surface-container-high": "#e7e8e9",
+              "on-tertiary-fixed": "#380d00",
+              "on-primary": "#ffffff",
+              "surface-container-low": "#f3f4f5",
+              "primary-fixed-dim": "#b3c5ff",
+              "outline-variant": "#c3c6d5",
+              "secondary-fixed-dim": "#adcbda",
+              "primary-fixed": "#dbe1ff",
+              "primary": "#163274",
+              "on-error-container": "#93000a",
+              "surface-container-lowest": "#ffffff",
+              "primary-container": "#314a8d",
+              "surface-container": "#edeeef",
+              "on-surface-variant": "#434653",
+              "background": "#f8f9fa",
+              "tertiary-container": "#8b2e01",
+              "on-tertiary-container": "#ffaa8a",
+              "error": "#ba1a1a",
+              "on-tertiary-fixed-variant": "#802900",
+              "on-tertiary": "#ffffff",
+              "on-primary-fixed": "#00174a",
+              "tertiary": "#651f00",
+              "tertiary-fixed-dim": "#ffb59a",
+              "surface-container-highest": "#e1e3e4",
+              "on-secondary": "#ffffff",
+              "on-primary-container": "#a8bcff",
+              "secondary-container": "#c6e4f4",
+              "inverse-on-surface": "#f0f1f2",
+              "tertiary-fixed": "#ffdbcf",
+              "on-background": "#191c1d",
+              "secondary": "#466270",
+              "inverse-surface": "#2e3132",
+              "secondary-fixed": "#c9e7f7",
+              "surface-variant": "#e1e3e4",
+              "on-surface": "#191c1d",
+              "on-error": "#ffffff",
+              "surface-dim": "#d9dadb",
+              "error-container": "#ffdad6",
+              "surface-tint": "#435b9f",
+              "surface": "#f8f9fa"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .glass-effect {
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+      }
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+    </style>
+</head>
+<body class="bg-background font-body text-on-surface antialiased overflow-x-hidden">
+<!-- TopAppBar -->
+<nav class="fixed top-0 w-full z-50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md flex items-center justify-between px-8 py-4 w-full shadow-sm shadow-blue-900/5">
+<div class="flex items-center gap-4">
+<span class="text-xl font-extrabold text-[#163274] dark:text-blue-400 tracking-tighter font-headline">Base Fare Travel</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-3">
+<span class="text-on-surface font-semibold font-headline">Sarah Khan</span>
+<img alt="Sarah Khan" class="w-10 h-10 rounded-full bg-surface-container-high object-cover border-2 border-primary-fixed" data-alt="Professional headshot of agent Sarah Khan" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBjptR-xjNfbDiDCOSuRrXo0RvqHSMQIrYVNS_wJpJoGlkB98MbnuAkGJXL3BbqwemMs3PXYsJ3YNzx7Gh4242l_pF9E1aL6PpP1dhYiK1oTETq-g4lB2vXjqLAJTbqV-3lS3nXCWu1mzfbEZT59xNTWXdu5_X-Uj5kW0nrA0N5UlWX-CTMJxh7kDSdGVpE8CqvhswnSX7O1JGdrQYMMmD94eUs2XkaU9L9owIOCvmK2wH7SaTLmqj8UFq3RnJyuBwJ3zo3Pf6adg"/>
+</div>
+<div class="h-6 w-[1px] bg-outline-variant"></div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors" data-icon="help_outline">help_outline</span>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors" data-icon="language">language</span>
+<button class="text-slate-500 hover:text-[#163274] font-headline font-bold transition-all active:scale-95 text-sm uppercase tracking-wider">Logout</button>
+</div>
+</div>
+</nav>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full w-64 z-40 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl flex flex-col pt-24 h-full shadow-[4px_0_24px_rgba(22,50,116,0.05)]">
+<div class="px-6 mb-8">
+<h2 class="text-[#163274] dark:text-blue-400 font-headline font-extrabold text-xs uppercase tracking-[0.2em]">Admin Portal</h2>
+<p class="text-slate-400 text-[10px] font-medium">Base Fare Management</p>
+</div>
+<nav class="flex flex-col gap-1 font-label text-sm font-medium tracking-wide">
+<a class="flex items-center gap-3 px-6 py-4 text-slate-500 dark:text-slate-400 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-all duration-200 ease-in-out active:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-6 py-4 bg-[#163274]/10 text-[#163274] border-r-4 border-[#163274] dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-400 transition-all duration-200 ease-in-out active:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_month">calendar_month</span>
+                Shift Scheduling
+            </a>
+<a class="flex items-center gap-3 px-6 py-4 text-slate-500 dark:text-slate-400 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-all duration-200 ease-in-out active:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="how_to_reg">how_to_reg</span>
+                Attendance
+            </a>
+<a class="flex items-center gap-3 px-6 py-4 text-slate-500 dark:text-slate-400 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-all duration-200 ease-in-out active:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+                Transactions
+            </a>
+<a class="flex items-center gap-3 px-6 py-4 text-slate-500 dark:text-slate-400 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-all duration-200 ease-in-out active:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="receipt_long">receipt_long</span>
+                Payroll
+            </a>
+<a class="flex items-center gap-3 px-6 py-4 text-slate-500 dark:text-slate-400 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-all duration-200 ease-in-out active:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                Settings
+            </a>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-24 pb-20 px-10 min-h-screen bg-surface">
+<!-- Header Section -->
+<header class="flex flex-col md:flex-row justify-between items-end md:items-center mb-10 gap-6">
+<div class="space-y-1">
+<h1 class="text-4xl font-headline font-extrabold text-primary tracking-tight">Shift Scheduling</h1>
+<p class="text-on-surface-variant font-medium opacity-70">Curate and manage your team's upcoming itineraries.</p>
+</div>
+<div class="flex items-center gap-4 bg-surface-container-lowest p-2 rounded-xl shadow-sm border border-outline-variant/15">
+<div class="flex items-center gap-2 px-4 py-2 hover:bg-surface-container-low transition-colors rounded-lg cursor-pointer text-sm font-semibold text-primary group">
+<span class="material-symbols-outlined text-lg" data-icon="chevron_left">chevron_left</span>
+<span>Prev Week</span>
+</div>
+<div class="px-6 py-2 bg-primary/5 rounded-lg border border-primary/10">
+<span class="font-headline font-bold text-primary">Week of Mar 24 – Mar 30, 2026</span>
+</div>
+<div class="flex items-center gap-2 px-4 py-2 hover:bg-surface-container-low transition-colors rounded-lg cursor-pointer text-sm font-semibold text-primary">
+<span>Next Week</span>
+<span class="material-symbols-outlined text-lg" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<button class="bg-gradient-to-r from-primary to-primary-container text-white px-8 py-3 rounded-lg font-headline font-bold text-sm shadow-xl shadow-primary/20 hover:opacity-90 transition-all active:scale-95 flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="publish">publish</span>
+                Publish Week
+            </button>
+</header>
+<!-- Grid Container -->
+<div class="bg-surface-container-low rounded-2xl overflow-hidden shadow-[0_20px_40px_rgba(22,50,116,0.04)]">
+<div class="overflow-x-auto no-scrollbar">
+<table class="w-full border-collapse text-left">
+<thead>
+<tr class="bg-surface-container-lowest/80 backdrop-blur-sm">
+<th class="px-6 py-5 font-headline font-extrabold text-primary uppercase text-[11px] tracking-widest border-b border-outline-variant/10">Agent Name</th>
+<th class="px-6 py-5 font-headline font-extrabold text-on-surface-variant uppercase text-[11px] tracking-widest border-b border-outline-variant/10">Mon <span class="block font-medium opacity-50 tracking-normal capitalize text-xs">Mar 24</span></th>
+<th class="px-6 py-5 font-headline font-extrabold text-on-surface-variant uppercase text-[11px] tracking-widest border-b border-outline-variant/10">Tue <span class="block font-medium opacity-50 tracking-normal capitalize text-xs">Mar 25</span></th>
+<th class="px-6 py-5 font-headline font-extrabold text-on-surface-variant uppercase text-[11px] tracking-widest border-b border-outline-variant/10">Wed <span class="block font-medium opacity-50 tracking-normal capitalize text-xs">Mar 26</span></th>
+<th class="px-6 py-5 font-headline font-extrabold text-on-surface-variant uppercase text-[11px] tracking-widest border-b border-outline-variant/10">Thu <span class="block font-medium opacity-50 tracking-normal capitalize text-xs">Mar 27</span></th>
+<th class="px-6 py-5 font-headline font-extrabold text-on-surface-variant uppercase text-[11px] tracking-widest border-b border-outline-variant/10">Fri <span class="block font-medium opacity-50 tracking-normal capitalize text-xs">Mar 28</span></th>
+<th class="px-6 py-5 font-headline font-extrabold text-on-surface-variant uppercase text-[11px] tracking-widest border-b border-outline-variant/10">Sat <span class="block font-medium opacity-50 tracking-normal capitalize text-xs">Mar 29</span></th>
+<th class="px-6 py-5 font-headline font-extrabold text-on-surface-variant uppercase text-[11px] tracking-widest border-b border-outline-variant/10">Sun <span class="block font-medium opacity-50 tracking-normal capitalize text-xs">Mar 30</span></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/10">
+<!-- Agent: John Doe -->
+<tr class="hover:bg-surface-container-lowest/50 transition-colors group">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-bold text-xs">JD</div>
+<span class="font-headline font-bold text-on-surface">John Doe</span>
+</div>
+</td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E3F2FD] text-[#1565C0]">Morning<br/>9AM–6PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E3F2FD] text-[#1565C0]">Morning<br/>9AM–6PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#F5F5F5] text-[#757575]">Off</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#F5F5F5] text-[#757575]">Off</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E8EAF6] text-[#283593]">Night<br/>10PM–7AM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E8EAF6] text-[#283593]">Night<br/>10PM–7AM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E8EAF6] text-[#283593]">Night<br/>10PM–7AM</span></td>
+</tr>
+<!-- Agent: Sarah Khan -->
+<tr class="hover:bg-surface-container-lowest/50 transition-colors group">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary font-bold text-xs">SK</div>
+<span class="font-headline font-bold text-on-surface">Sarah Khan</span>
+</div>
+</td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E8EAF6] text-[#283593]">Night<br/>10PM–7AM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E8EAF6] text-[#283593]">Night<br/>10PM–7AM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E3F2FD] text-[#1565C0]">Morning<br/>9AM–6PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E3F2FD] text-[#1565C0]">Morning<br/>9AM–6PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#F5F5F5] text-[#757575]">Off</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#F5F5F5] text-[#757575]">Off</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#FFF8E1] text-[#F57F17]">Evening<br/>2PM–11PM</span></td>
+</tr>
+<!-- Agent: Mike Patel -->
+<tr class="hover:bg-surface-container-lowest/50 transition-colors group">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-tertiary-fixed flex items-center justify-center text-tertiary font-bold text-xs">MP</div>
+<span class="font-headline font-bold text-on-surface">Mike Patel</span>
+</div>
+</td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#FFF8E1] text-[#F57F17]">Evening<br/>2PM–11PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#FFF8E1] text-[#F57F17]">Evening<br/>2PM–11PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#FFF8E1] text-[#F57F17]">Evening<br/>2PM–11PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#F5F5F5] text-[#757575]">Off</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#F5F5F5] text-[#757575]">Off</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E3F2FD] text-[#1565C0]">Morning<br/>9AM–6PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E3F2FD] text-[#1565C0]">Morning<br/>9AM–6PM</span></td>
+</tr>
+<!-- Agent: Anna Smith -->
+<tr class="hover:bg-surface-container-lowest/50 transition-colors group">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container font-bold text-xs">AS</div>
+<span class="font-headline font-bold text-on-surface">Anna Smith</span>
+</div>
+</td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#F5F5F5] text-[#757575]">Off</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E3F2FD] text-[#1565C0]">Morning<br/>9AM–6PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E3F2FD] text-[#1565C0]">Morning<br/>9AM–6PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E3F2FD] text-[#1565C0]">Morning<br/>9AM–6PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#FFF8E1] text-[#F57F17]">Evening<br/>2PM–11PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#FFF8E1] text-[#F57F17]">Evening<br/>2PM–11PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#F5F5F5] text-[#757575]">Off</span></td>
+</tr>
+<!-- Agent: David Wong -->
+<tr class="hover:bg-surface-container-lowest/50 transition-colors group">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-on-primary-fixed flex items-center justify-center text-primary-fixed font-bold text-xs">DW</div>
+<span class="font-headline font-bold text-on-surface">David Wong</span>
+</div>
+</td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E3F2FD] text-[#1565C0]">Morning<br/>9AM–6PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#F5F5F5] text-[#757575]">Off</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E8EAF6] text-[#283593]">Night<br/>10PM–7AM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E8EAF6] text-[#283593]">Night<br/>10PM–7AM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#F5F5F5] text-[#757575]">Off</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#E3F2FD] text-[#1565C0]">Morning<br/>9AM–6PM</span></td>
+<td class="px-6 py-4"><span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight bg-[#FFF8E1] text-[#F57F17]">Evening<br/>2PM–11PM</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Shift Templates Legend/Panel -->
+<section class="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
+<div class="lg:col-span-2 bg-white/40 p-8 rounded-2xl border border-outline-variant/15 glass-effect">
+<h3 class="font-headline font-extrabold text-primary mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
+                    Shift Templates
+                </h3>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<div class="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/10 shadow-sm flex flex-col items-center text-center gap-2 hover:translate-y-[-2px] transition-transform">
+<div class="w-3 h-3 rounded-full bg-[#1565C0]"></div>
+<span class="text-[11px] font-extrabold uppercase tracking-wider text-on-surface-variant">Morning</span>
+<span class="text-xs font-medium opacity-60">9AM – 6PM</span>
+</div>
+<div class="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/10 shadow-sm flex flex-col items-center text-center gap-2 hover:translate-y-[-2px] transition-transform">
+<div class="w-3 h-3 rounded-full bg-[#F57F17]"></div>
+<span class="text-[11px] font-extrabold uppercase tracking-wider text-on-surface-variant">Evening</span>
+<span class="text-xs font-medium opacity-60">2PM – 11PM</span>
+</div>
+<div class="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/10 shadow-sm flex flex-col items-center text-center gap-2 hover:translate-y-[-2px] transition-transform">
+<div class="w-3 h-3 rounded-full bg-[#283593]"></div>
+<span class="text-[11px] font-extrabold uppercase tracking-wider text-on-surface-variant">Night</span>
+<span class="text-xs font-medium opacity-60">10PM – 7AM</span>
+</div>
+<div class="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/10 shadow-sm flex flex-col items-center text-center gap-2 hover:translate-y-[-2px] transition-transform">
+<div class="w-3 h-3 rounded-full bg-tertiary"></div>
+<span class="text-[11px] font-extrabold uppercase tracking-wider text-on-surface-variant">Split</span>
+<span class="text-xs font-medium opacity-60">10AM – 7PM</span>
+</div>
+</div>
+</div>
+<div class="bg-primary-container text-white p-8 rounded-2xl flex flex-col justify-between relative overflow-hidden group">
+<div class="relative z-10">
+<h3 class="font-headline font-extrabold text-lg mb-2">Scheduling Insights</h3>
+<p class="text-on-primary-container text-sm leading-relaxed mb-6 opacity-90">Total coverage for the week is currently at 84% based on active traveler volume forecasts.</p>
+</div>
+<div class="flex items-center gap-4 relative z-10">
+<div class="flex-1 bg-white/20 h-2 rounded-full overflow-hidden">
+<div class="bg-white w-[84%] h-full rounded-full"></div>
+</div>
+<span class="font-bold text-lg">84%</span>
+</div>
+<!-- Abstract background pattern -->
+<div class="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-[120px]" data-icon="travel_explore">travel_explore</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="fixed bottom-0 w-full pb-8 bg-transparent text-slate-500 font-['Inter'] text-xs uppercase tracking-widest flex flex-col md:flex-row justify-center items-center gap-6 px-8 ml-64 pointer-events-none">
+<div class="pointer-events-auto flex items-center gap-6">
+<span class="opacity-80">© 2024 Base Fare Travel CRM. All rights reserved.</span>
+<div class="flex gap-4">
+<a class="text-slate-400 hover:text-slate-600 hover:underline decoration-blue-200 transition-opacity" href="#">Privacy Policy</a>
+<a class="text-slate-400 hover:text-slate-600 hover:underline decoration-blue-200 transition-opacity" href="#">Terms of Service</a>
+<a class="text-slate-400 hover:text-slate-600 hover:underline decoration-blue-200 transition-opacity" href="#">Support</a>
+</div>
+</div>
+</footer>
+</body></html>
