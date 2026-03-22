@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "inverse-on-surface": "#f0f1f2",
+              "inverse-surface": "#2e3132",
+              "on-primary-container": "#a8bcff",
+              "tertiary-fixed-dim": "#ffb59a",
+              "on-tertiary-fixed": "#380d00",
+              "on-tertiary-container": "#ffaa8a",
+              "on-tertiary-fixed-variant": "#802900",
+              "tertiary-fixed": "#ffdbcf",
+              "outline-variant": "#c3c6d5",
+              "primary-container": "#314a8d",
+              "on-surface": "#191c1d",
+              "background": "#f8f9fa",
+              "on-primary": "#ffffff",
+              "on-secondary-fixed": "#001f2a",
+              "secondary-container": "#c6e4f4",
+              "surface-container-low": "#f3f4f5",
+              "on-error": "#ffffff",
+              "on-tertiary": "#ffffff",
+              "on-secondary-fixed-variant": "#2e4b57",
+              "on-primary-fixed-variant": "#2a4386",
+              "outline": "#737784",
+              "primary": "#163274",
+              "on-secondary": "#ffffff",
+              "surface-tint": "#435b9f",
+              "surface-container-highest": "#e1e3e4",
+              "on-surface-variant": "#434653",
+              "secondary": "#466270",
+              "inverse-primary": "#b3c5ff",
+              "error-container": "#ffdad6",
+              "surface-container": "#edeeef",
+              "error": "#ba1a1a",
+              "surface-variant": "#e1e3e4",
+              "on-secondary-container": "#4a6774",
+              "surface-dim": "#d9dadb",
+              "surface": "#f8f9fa",
+              "on-error-container": "#93000a",
+              "surface-bright": "#f8f9fa",
+              "surface-container-high": "#e7e8e9",
+              "primary-fixed-dim": "#b3c5ff",
+              "on-background": "#191c1d",
+              "tertiary-container": "#8b2e01",
+              "on-primary-fixed": "#00174a",
+              "secondary-fixed": "#c9e7f7",
+              "secondary-fixed-dim": "#adcbda",
+              "surface-container-lowest": "#ffffff",
+              "tertiary": "#651f00",
+              "primary-fixed": "#dbe1ff"
+            },
+            fontFamily: {
+              "headline": ["Manrope", "sans-serif"],
+              "body": ["Inter", "sans-serif"],
+              "label": ["Inter", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+.material-symbols-outlined {
+    font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24
+}
+.glass-panel {
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px)
+}
+.editorial-shadow {
+    box-shadow: 0 20px 40px rgba(25, 28, 29, 0.05)
+}
+.hero-bg {
+    background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB6vwnTwodmE4hnZGyXAQjPH2sCdp72A0MY3uVtSBHsYl8_WkFXbb-e3GYTuO98FvCQmTsqeOYs68xOQdHMu8GWoDZWOQ6fqDL-0bWsnhjexDFQ_jxda2maIP6BM6ff3gS8Imv0aq0jqhuS4RiaGMJycufAf8tvJV9kr-17ysCyZh1DZzfa0r3-ZiaR5b1MdNThMKS4xSF0TCSo3HmY9-HgIqRrffGa9AXaVZXpiFplMA0EFeWCZw_1EFSxBfObtmx3iefPcaBHKg');
+    background-size: cover;
+    background-position: center
+}
+</style>
+<title>Login - Base Fare CRM</title>
+</head>
+<body class="font-body text-on-surface bg-surface min-h-screen flex items-center justify-center p-6 hero-bg" data-alt="Airplane wing against clear blue sky with soft focus">
+<!-- Main Content Canvas -->
+<main class="w-full max-w-lg">
+<!-- Login Card -->
+<div class="glass-panel editorial-shadow rounded-xl p-8 md:p-12 transition-all duration-500 hover:scale-[1.01]">
+<!-- Logo Section -->
+<div class="text-center mb-10">
+<div class="inline-flex items-center justify-center mb-4 text-primary">
+<span class="material-symbols-outlined text-4xl" data-icon="flight_takeoff">flight_takeoff</span>
+</div>
+<h1 class="font-headline font-extrabold text-3xl text-primary tracking-tighter mb-2">Base Fare CRM</h1>
+<p class="text-on-surface-variant text-sm font-medium tracking-wide">THE CONCIERGE LENS</p>
+</div>
+
+<!-- Output Error if any -->
+<?php if (isset($error) && $error): ?>
+    <div class="bg-error-container text-on-error-container text-sm font-semibold p-4 rounded-lg mb-6 border border-error/20 flex items-center gap-2">
+        <span class="material-symbols-outlined text-error">error</span>
+        <?= htmlspecialchars($error) ?>
+    </div>
+<?php endif; ?>
+
+<!-- Form -->
+<form class="space-y-6" method="POST" action="/login">
+<!-- Email Field -->
+<div class="space-y-2">
+<label class="text-xs font-semibold text-on-surface-variant uppercase tracking-widest pl-1" for="email">Email Address</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm" data-icon="mail">mail</span>
+<input class="w-full pl-11 pr-4 py-3.5 bg-surface-container-lowest rounded-lg border-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-outline-variant text-on-surface text-sm" id="email" name="email" placeholder="your@email.com" type="email" required autofocus/>
+</div>
+</div>
+<!-- Password Field -->
+<div class="space-y-2">
+<div class="flex justify-between items-center px-1">
+<label class="text-xs font-semibold text-on-surface-variant uppercase tracking-widest" for="password">Password</label>
+<a class="text-xs font-semibold text-primary hover:underline decoration-primary-container transition-all" href="#">Forgot Password?</a>
+</div>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm" data-icon="lock">lock</span>
+<input class="w-full pl-11 pr-4 py-3.5 bg-surface-container-lowest rounded-lg border-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-outline-variant text-on-surface text-sm" id="password" name="password" placeholder="Enter your password" type="password" required/>
+<button class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="visibility">visibility</span>
+</button>
+</div>
+</div>
+<!-- Remember Me -->
+<div class="flex items-center px-1">
+<div class="flex items-center">
+<input class="h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary/20" id="remember-me" name="remember-me" type="checkbox"/>
+<label class="ml-2 block text-sm text-on-surface-variant font-medium cursor-pointer" for="remember-me">Remember Me</label>
+</div>
+</div>
+<!-- Sign In Button -->
+<div class="pt-2">
+<button class="w-full py-4 px-6 bg-gradient-to-r from-primary to-primary-container text-on-primary font-headline font-bold rounded-lg shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 active:scale-95 transition-all duration-300 flex items-center justify-center gap-2" type="submit">
+                        Sign In
+                        <span class="material-symbols-outlined text-lg" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</form>
+<!-- Secondary Action -->
+<div class="mt-10 pt-8 border-t border-outline-variant/15 text-center">
+<p class="text-sm text-on-surface-variant">
+                    Need technical assistance? 
+                    <a class="text-primary font-semibold hover:underline" href="#">Contact Support</a>
+</p>
+</div>
+</div>
+<!-- Floating Badge / Editorial Note -->
+<div class="mt-8 flex justify-center">
+<div class="glass-panel px-4 py-2 rounded-full inline-flex items-center gap-2 editorial-shadow">
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="verified_user" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+<span class="text-[10px] uppercase font-bold tracking-widest text-on-surface-variant">Secure Enterprise Terminal</span>
+</div>
+</div>
+</main>
+<!-- Footer - Shell Component -->
+<footer class="fixed bottom-0 w-full pb-8">
+<div class="flex flex-col md:flex-row justify-center items-center gap-6 px-8">
+<p class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500">© 2026 Base Fare Travel CRM. All rights reserved.</p>
+</div>
+</footer>
+</body></html>
