@@ -47,6 +47,7 @@ class AuthController
 
             $_SESSION['user_id'] = $user->id;
             $_SESSION['role'] = $user->role;
+            $_SESSION['user_name'] = $user->name;
             
             return $response->withHeader('Location', '/dashboard')->withStatus(302);
         }
