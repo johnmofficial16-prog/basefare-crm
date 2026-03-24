@@ -28,6 +28,9 @@ $capsule->bootEloquent();
 // Start PHP session
 session_start();
 
+// Set application timezone (prevents date() showing wrong day on shared hosts)
+date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'Asia/Kolkata');
+
 // Instantiate App
 $app = AppFactory::create();
 

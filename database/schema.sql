@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS `shift_schedules` (
   `schedule_week` date NOT NULL COMMENT 'Monday of the ISO week for fast week-level queries',
   `created_by` int DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_agent_shift_date` (`agent_id`, `shift_date`),
   KEY `idx_schedule_week` (`schedule_week`),

@@ -6,7 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class ShiftSchedule extends Model
 {
-    public $timestamps = false;
+    public $timestamps = true;
+
+    const CREATED_AT = 'created_at';
+    const UPDATED_AT = 'updated_at';
 
     protected $table = 'shift_schedules';
 

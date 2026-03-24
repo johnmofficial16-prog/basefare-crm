@@ -35,66 +35,54 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 <body class="bg-background font-body text-on-surface antialiased overflow-x-hidden">
 
 <!-- Top Nav -->
-<nav class="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md flex items-center justify-between px-8 py-4 shadow-sm shadow-blue-900/5">
-  <span class="text-xl font-extrabold text-primary tracking-tighter font-headline">Base Fare CRM</span>
-  <div class="flex items-center gap-6">
-    <span class="font-semibold font-headline"><?= htmlspecialchars($_SESSION['user_name'] ?? 'Admin') ?></span>
-    <a href="/logout" class="text-slate-500 hover:text-primary font-headline font-bold text-sm uppercase tracking-wider">Logout</a>
-  </div>
-</nav>
-
-<!-- Sidebar -->
-<aside class="fixed left-0 top-0 h-full w-64 z-40 bg-white/60 backdrop-blur-xl flex flex-col pt-24 shadow-[4px_0_24px_rgba(22,50,116,0.05)]">
-  <div class="px-6 mb-8">
-    <h2 class="text-primary font-headline font-extrabold text-xs uppercase tracking-[0.2em]">Admin Portal</h2>
-  </div>
-  <nav class="flex flex-col gap-1 font-label text-sm font-medium tracking-wide">
-    <a class="flex items-center gap-3 px-6 py-4 text-slate-500 hover:bg-slate-50/50" href="/dashboard"><span class="material-symbols-outlined">dashboard</span> Dashboard</a>
-    <a class="flex items-center gap-3 px-6 py-4 text-slate-500 hover:bg-slate-50/50" href="/shifts/week"><span class="material-symbols-outlined">calendar_month</span> Shift Scheduling</a>
-    <a class="flex items-center gap-3 px-6 py-4 bg-[#163274]/10 text-primary border-r-4 border-primary" href="/attendance/admin"><span class="material-symbols-outlined">how_to_reg</span> Attendance</a>
-    <a class="flex items-center gap-3 px-6 py-4 text-slate-500 hover:bg-slate-50/50" href="#"><span class="material-symbols-outlined">payments</span> Transactions</a>
-    <a class="flex items-center gap-3 px-6 py-4 text-slate-500 hover:bg-slate-50/50" href="#"><span class="material-symbols-outlined">receipt_long</span> Payroll</a>
-    <a class="flex items-center gap-3 px-6 py-4 text-slate-500 hover:bg-slate-50/50" href="#"><span class="material-symbols-outlined">settings</span> Settings</a>
-  </nav>
-</aside>
+<!-- G5: Shared Admin Sidebar -->
+<?php $activePage = 'attendance'; require __DIR__ . '/../partials/admin_sidebar.php'; ?>
 
 <!-- Main Content -->
-<main class="ml-64 pt-24 pb-20 px-10 min-h-screen">
+<main class="ml-60 pt-8 pb-20 px-10 min-h-screen">
 
   <h1 class="text-4xl font-headline font-extrabold text-primary tracking-tight mb-2">Attendance Panel</h1>
   <p class="text-on-surface-variant font-medium opacity-70 mb-8">Live monitoring for <?= date('l, F j, Y') ?></p>
 
   <!-- Status Cards -->
-  <div class="grid grid-cols-4 gap-6 mb-10">
+  <div class="grid grid-cols-5 gap-4 mb-10">
     <!-- Clocked In -->
-    <div class="bg-green-50 rounded-2xl p-6">
+    <div class="bg-green-50 rounded-2xl p-5">
       <div class="flex items-center justify-between mb-2">
         <span class="material-symbols-outlined text-green-600 text-2xl">check_circle</span>
-        <span class="text-3xl font-headline font-extrabold text-green-700"><?= count($boardData['in']) ?></span>
+        <span class="text-3xl font-headline font-extrabold text-green-700" id="count-in"><?= count($boardData['in']) ?></span>
       </div>
       <p class="text-sm font-semibold text-green-800">Clocked In</p>
     </div>
     <!-- On Break -->
-    <div class="bg-amber-50 rounded-2xl p-6">
+    <div class="bg-amber-50 rounded-2xl p-5">
       <div class="flex items-center justify-between mb-2">
         <span class="material-symbols-outlined text-amber-600 text-2xl">coffee</span>
-        <span class="text-3xl font-headline font-extrabold text-amber-700"><?= count($boardData['on_break']) ?></span>
+        <span class="text-3xl font-headline font-extrabold text-amber-700" id="count-break"><?= count($boardData['on_break']) ?></span>
       </div>
       <p class="text-sm font-semibold text-amber-800">On Break</p>
     </div>
+    <!-- Completed Today -->
+    <div class="bg-blue-50 rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-2">
+        <span class="material-symbols-outlined text-blue-500 text-2xl">task_alt</span>
+        <span class="text-3xl font-headline font-extrabold text-blue-700" id="count-completed"><?= count($boardData['completed']) ?></span>
+      </div>
+      <p class="text-sm font-semibold text-blue-800">Completed</p>
+    </div>
     <!-- Absent -->
-    <div class="bg-gray-100 rounded-2xl p-6">
+    <div class="bg-gray-100 rounded-2xl p-5">
       <div class="flex items-center justify-between mb-2">
         <span class="material-symbols-outlined text-gray-500 text-2xl">person_off</span>
-        <span class="text-3xl font-headline font-extrabold text-gray-600"><?= count($boardData['absent']) ?></span>
+        <span class="text-3xl font-headline font-extrabold text-gray-600" id="count-absent"><?= count($boardData['absent']) ?></span>
       </div>
       <p class="text-sm font-semibold text-gray-700">Absent / Not In</p>
     </div>
     <!-- Pending Override -->
-    <div class="bg-red-50 rounded-2xl p-6">
+    <div class="bg-red-50 rounded-2xl p-5">
       <div class="flex items-center justify-between mb-2">
         <span class="material-symbols-outlined text-red-600 text-2xl">warning</span>
-        <span class="text-3xl font-headline font-extrabold text-red-700"><?= count($boardData['pending_override']) ?></span>
+        <span class="text-3xl font-headline font-extrabold text-red-700" id="count-override"><?= count($boardData['pending_override']) ?></span>
       </div>
       <p class="text-sm font-semibold text-red-800">Pending Override</p>
     </div>
@@ -148,7 +136,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-sm">
           <?= strtoupper(substr($item['agent']->name, 0, 1)) ?>
         </div>
-        <div>
+        <div class="flex-1">
           <p class="font-headline font-bold text-on-surface text-sm"><?= htmlspecialchars($item['agent']->name) ?></p>
           <p class="text-xs text-on-surface-variant">In since <?= date('g:i A', strtotime($item['session']->clock_in)) ?>
             <?php if ($item['session']->late_minutes > 0): ?>
@@ -156,6 +144,9 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <?php endif; ?>
           </p>
         </div>
+        <button onclick="manualClockOut(<?= $item['agent']->id ?>, '<?= addslashes($item['agent']->name) ?>')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-all" title="Manual Clock Out">
+          <span class="material-symbols-outlined text-sm">logout</span>
+        </button>
       </div>
       <?php endforeach; ?>
     </div>
@@ -170,14 +161,79 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     </h2>
     <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
       <?php foreach ($boardData['on_break'] as $item): ?>
+      <?php
+        $breakStartTs = strtotime($item['break']->break_start);
+        $breakElapsedMins = (int) round((time() - $breakStartTs) / 60);
+      ?>
       <div class="bg-amber-50 rounded-xl p-4 shadow-sm flex items-center gap-4">
         <div class="w-10 h-10 rounded-full bg-amber-200 flex items-center justify-center text-amber-800 font-bold text-sm">
           <?= strtoupper(substr($item['agent']->name, 0, 1)) ?>
         </div>
-        <div>
+        <div class="flex-1">
           <p class="font-headline font-bold text-on-surface text-sm"><?= htmlspecialchars($item['agent']->name) ?></p>
-          <p class="text-xs text-amber-700 font-semibold"><?= ucfirst($item['break']->break_type) ?> since <?= date('g:i A', strtotime($item['break']->break_start)) ?></p>
+          <p class="text-xs text-amber-700 font-semibold"><?= ucfirst($item['break']->break_type) ?> break · <?= $breakElapsedMins ?>m elapsed</p>
         </div>
+        <button onclick="adminForceEndBreak(<?= $item['agent']->id ?>, '<?= addslashes($item['agent']->name) ?>')" 
+                class="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg text-xs font-bold hover:bg-orange-200 transition-all flex items-center gap-1" title="Force End Break">
+          <span class="material-symbols-outlined text-xs">timer_off</span> End Break
+        </button>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </section>
+  <?php endif; ?>
+
+  <!-- Absent / Not In -->
+  <?php if (!empty($boardData['absent'])): ?>
+  <section class="mb-10">
+    <h2 class="text-xl font-headline font-extrabold text-primary mb-4 flex items-center gap-2">
+      <span class="material-symbols-outlined text-gray-500">person_off</span> Absent / Not Checked In
+    </h2>
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <?php foreach ($boardData['absent'] as $agent): ?>
+      <div class="bg-gray-50 rounded-xl p-4 shadow-sm flex items-center gap-4">
+        <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold text-sm">
+          <?= strtoupper(substr($agent->name, 0, 1)) ?>
+        </div>
+        <div class="flex-1">
+          <p class="font-headline font-bold text-on-surface text-sm"><?= htmlspecialchars($agent->name) ?></p>
+          <p class="text-xs text-on-surface-variant italic">Not on shift or missed gate</p>
+        </div>
+        <button onclick="manualClockIn(<?= $agent->id ?>, '<?= addslashes($agent->name) ?>')" 
+                class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-all flex items-center gap-1">
+          <span class="material-symbols-outlined text-xs">login</span> Clock In
+        </button>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </section>
+  <?php endif; ?>
+
+  <!-- Completed Today -->
+  <?php if (!empty($boardData['completed'])): ?>
+  <section class="mb-10">
+    <h2 class="text-xl font-headline font-extrabold text-primary mb-4 flex items-center gap-2">
+      <span class="material-symbols-outlined text-blue-500">task_alt</span> Completed Today
+    </h2>
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <?php foreach ($boardData['completed'] as $item): ?>
+      <div class="bg-blue-50 rounded-xl p-4 shadow-sm flex items-center gap-4">
+        <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
+          <?= strtoupper(substr($item['agent']->name, 0, 1)) ?>
+        </div>
+        <div class="flex-1">
+          <p class="font-headline font-bold text-on-surface text-sm"><?= htmlspecialchars($item['agent']->name) ?></p>
+          <p class="text-xs text-blue-600 font-semibold">
+            <?= floor(($item['session']->total_work_mins ?? 0) / 60) ?>h <?= ($item['session']->total_work_mins ?? 0) % 60 ?>m worked
+            <?php if ($item['session']->clock_out): ?>
+              · Out at <?= date('g:i A', strtotime($item['session']->clock_out)) ?>
+            <?php endif; ?>
+          </p>
+        </div>
+        <button onclick="manualClockIn(<?= $item['agent']->id ?>, '<?= addslashes($item['agent']->name) ?>')" 
+                class="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all flex items-center gap-1" title="Re-Clock In">
+          <span class="material-symbols-outlined text-xs">replay</span> Resume
+        </button>
       </div>
       <?php endforeach; ?>
     </div>
@@ -211,11 +267,20 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
   </section>
   <?php endif; ?>
 
+  <!-- Quick Links -->
+  <div class="flex gap-4 mt-4">
+    <a href="/attendance/admin/history" class="px-5 py-2 bg-surface-container text-on-surface-variant rounded-lg font-bold text-sm hover:bg-primary hover:text-white transition-all">
+      <span class="material-symbols-outlined text-sm align-[-3px]">history</span> View History
+    </a>
+  </div>
+
 </main>
 
 <script>
+let lastPendingCount = <?= count($boardData['pending_override']) ?>;
+
 async function approveOverride(agentId) {
-  const reason = document.getElementById('reason-' + agentId).value.trim();
+  const reason = document.getElementById('reason-' + agentId)?.value?.trim();
   if (!reason || reason.length < 5) {
     alert('Please enter a reason (at least 5 characters).');
     return;
@@ -234,13 +299,100 @@ async function approveOverride(agentId) {
   }
 }
 
-function denyOverride(agentId) {
-  document.getElementById('override-' + agentId).innerHTML = '<p class="text-red-500 font-semibold p-4">Override denied</p>';
+// P0 #9 — Deny with persistence
+async function denyOverride(agentId) {
+  const reason = prompt('Reason for denial (required):');
+  if (!reason || reason.trim().length < 3) {
+    alert('A reason of at least 3 characters is required.');
+    return;
+  }
+
+  const r = await fetch('/attendance/deny', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({agent_id: agentId, date: '<?= $today ?>', reason: reason.trim()})
+  });
+  const data = await r.json();
+  if (data.success) {
+    document.getElementById('override-' + agentId).innerHTML = '<p class="text-red-500 font-semibold p-4">✗ Override denied — ' + reason.trim() + '</p>';
+  } else {
+    alert(data.message || 'Error');
+  }
 }
 
-// Auto-refresh the page every 60 seconds
-setTimeout(() => window.location.reload(), 60000);
+// P1 #10 — Manual clock in/out
+async function adminForceEndBreak(agentId, agentName) {
+  if (!confirm('Force-end break for ' + agentName + '?')) return;
+  const r = await fetch('/attendance/admin/force-end-break', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({agent_id: agentId})
+  });
+  const data = await r.json();
+  alert(data.message);
+  if (data.success) refreshBoard();
+}
+
+async function manualClockIn(agentId, agentName) {
+  if (!confirm('Manually clock in ' + agentName + '?')) return;
+  const r = await fetch('/attendance/admin/clock-in', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({agent_id: agentId})
+  });
+  const data = await r.json();
+  alert(data.message);
+  if (data.success) refreshBoard();
+}
+
+async function manualClockOut(agentId, agentName) {
+  if (!confirm('Manually clock out ' + agentName + '?')) return;
+  const r = await fetch('/attendance/admin/clock-out', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({agent_id: agentId})
+  });
+  const data = await r.json();
+  alert(data.message);
+  if (data.success) refreshBoard();
+}
+
+// AJAX refresh — updates all counter cards using stable IDs
+async function refreshBoard() {
+  try {
+    const r = await fetch('/attendance/admin/data');
+    const d = await r.json();
+
+    // Update counter cards via stable IDs (5 cards now)
+    const inEl = document.getElementById('count-in');
+    const breakEl = document.getElementById('count-break');
+    const completedEl = document.getElementById('count-completed');
+    const absentEl = document.getElementById('count-absent');
+    const overrideEl = document.getElementById('count-override');
+    if (inEl) inEl.textContent = d.in_count;
+    if (breakEl) breakEl.textContent = d.break_count;
+    if (completedEl) completedEl.textContent = d.completed_count ?? 0;
+    if (absentEl) absentEl.textContent = d.absent_count;
+    if (overrideEl) overrideEl.textContent = d.pending_count;
+
+    // Check for new override requests
+    if (d.pending_count > lastPendingCount) {
+      if (Notification.permission === 'granted') {
+        new Notification('New Override Request', {body: 'An agent needs your approval to clock in.'});
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    }
+    lastPendingCount = d.pending_count;
+  } catch(e) {
+    console.error('Board refresh error:', e);
+  }
+}
+
+// Refresh every 60s via AJAX instead of full page reload
+setInterval(refreshBoard, 60000);
 </script>
 
 </body>
 </html>
+

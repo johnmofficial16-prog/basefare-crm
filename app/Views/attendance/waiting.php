@@ -26,8 +26,11 @@ tailwind.config = { theme:{ extend:{ colors:{primary:"#163274","primary-containe
 </head>
 <body class="bg-background font-body text-on-surface antialiased min-h-screen flex flex-col items-center justify-center p-4">
 
-<div class="mb-8 text-center">
+<div class="w-full max-w-md flex items-center justify-between mb-8">
   <h2 class="text-2xl font-extrabold text-primary tracking-tighter font-headline">Base Fare CRM</h2>
+  <a href="/logout" class="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-semibold text-on-surface-variant hover:text-red-600 hover:bg-red-50 transition-all">
+    <span class="material-symbols-outlined text-base">logout</span> Sign Out
+  </a>
 </div>
 
 <div class="w-full max-w-md bg-white/70 backdrop-blur-xl rounded-3xl shadow-[0_20px_60px_rgba(22,50,116,0.08)] p-10 text-center">
@@ -53,30 +56,38 @@ tailwind.config = { theme:{ extend:{ colors:{primary:"#163274","primary-containe
     </div>
   </div>
 
-  <p class="text-xs text-on-surface-variant">This page will automatically redirect when your admin approves.</p>
+  <p class="text-xs text-on-surface-variant mb-4">This page will automatically redirect when your admin approves.</p>
+  <a href="/clock-in" class="text-sm text-primary font-semibold hover:underline">← Back to Clock-In</a>
 </div>
 
 <footer class="mt-10 text-on-surface-variant text-xs uppercase tracking-widest">
   © 2026 Base Fare CRM
 </footer>
 
-<!-- Poll for override approval every 10 seconds -->
+<!-- B6 FIX: Poll status only — do NOT blindly POST /clock-in every 10s.
+     Blind POSTing creates duplicate clock_in_blocked entries, inflating the override queue.
+     We only attempt clock-in once the status poll confirms override_approved state. -->
 <script>
 async function checkOverride() {
   try {
     const r = await fetch('/attendance/status');
     const data = await r.json();
+
+    // Already clocked in (admin may have done it manually)
     if (data.state === 'clocked_in' || data.state === 'on_break') {
-      // Admin approved and agent somehow got clocked in
       window.location.href = '/dashboard';
+      return;
     }
-    // Check if override was just created — try clocking in again
-    const r2 = await fetch('/clock-in', {method:'POST'});
-    if (r2.redirected) {
-      window.location.href = r2.url;
-    } else if (r2.status === 302) {
-      window.location.href = '/dashboard';
+
+    // Check if an override record now exists for today by trying a lightweight clock-in probe
+    // Only attempt if we receive a signal that agent is no longer blocked (state = not_clocked_in
+    // after having been blocked = override was granted, they can now try)
+    if (data.state === 'not_clocked_in') {
+      // Admin approved the override — redirect to clock-in lobby so agent can click the button
+      document.getElementById('statusText').textContent = '✓ Override approved! Redirecting...';
+      setTimeout(() => { window.location.href = '/clock-in'; }, 1000);
     }
+
   } catch(e) {
     document.getElementById('statusText').textContent = 'Connection lost. Retrying...';
   }

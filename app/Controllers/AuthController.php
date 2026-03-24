@@ -62,6 +62,29 @@ class AuthController
      */
     public function logout(Request $request, Response $response): Response
     {
+        if (isset($_SESSION['user_id'])) {
+            $userId = $_SESSION['user_id'];
+            
+            // Auto-clock-out on logout to prevent abuse loopholes
+            $attendanceService = new \App\Services\AttendanceService();
+            $stateInfo = $attendanceService->getCurrentState($userId);
+            
+            if (in_array($stateInfo['state'], [\App\Services\AttendanceService::STATE_CLOCKED_IN, \App\Services\AttendanceService::STATE_ON_BREAK])) {
+                $attendanceService->clockOut($userId);
+                
+                // Log the auto-clock-out
+                \Illuminate\Database\Capsule\Manager::table('activity_log')->insert([
+                    'user_id'     => $userId,
+                    'action'      => 'auto_clock_out_on_logout',
+                    'entity_type' => 'attendance_sessions',
+                    'entity_id'   => $stateInfo['session']->id ?? null,
+                    'details'     => json_encode(['reason' => 'User logged out while active']),
+                    'ip_address'  => $_SERVER['REMOTE_ADDR'] ?? null,
+                    'created_at'  => date('Y-m-d H:i:s'),
+                ]);
+            }
+        }
+
         session_destroy();
         return $response->withHeader('Location', '/login')->withStatus(302);
     }

@@ -8,12 +8,16 @@
 
 use App\Services\AttendanceService;
 use App\Services\ShiftService;
+use App\Models\AttendanceOverride;
+use Illuminate\Database\Capsule\Manager as Capsule;
 
 $userId = $_SESSION['user_id'];
 $userName = $_SESSION['user_name'] ?? 'Agent';
 
-// Get today's shift info
+// Get today's shift info — bust cache to ensure fresh data on every lobby load
 $shiftService = new ShiftService();
+$shiftCacheKey = "shift_cache_{$userId}_" . date('Y-m-d');
+unset($_SESSION[$shiftCacheKey], $_SESSION[$shiftCacheKey . '_ts']);
 $todayShift = $shiftService->getAgentShiftForDate($userId, date('Y-m-d'));
 $shiftLabel = $todayShift && $todayShift->template
     ? $todayShift->template->name . ' (' . date('g:i A', strtotime($todayShift->shift_start)) . ' – ' . date('g:i A', strtotime($todayShift->shift_end)) . ')'
@@ -26,6 +30,20 @@ $flashInfo    = $_SESSION['flash_info'] ?? null;
 unset($_SESSION['flash_error'], $_SESSION['flash_success'], $_SESSION['flash_info']);
 
 $currentState = $stateInfo['state'] ?? AttendanceService::STATE_NOT_CLOCKED_IN;
+
+// G3: Check if admin denied the override today so we can show the reason to agent
+$denialReason = null;
+if ($currentState === AttendanceService::STATE_NOT_CLOCKED_IN) {
+    $denial = AttendanceOverride::where('agent_id', $userId)
+        ->where('shift_date', date('Y-m-d'))
+        ->where('override_type', AttendanceOverride::TYPE_DENIAL)
+        ->orderBy('created_at', 'desc')
+        ->first();
+    if ($denial) {
+        $denialReason = $denial->reason;
+    }
+}
+
 ?>
 <!DOCTYPE html>
 <html class="light" lang="en">
@@ -60,10 +78,15 @@ tailwind.config = {
 </head>
 <body class="bg-background font-body text-on-surface antialiased min-h-screen flex flex-col items-center justify-center p-4">
 
-<!-- Small top branding -->
-<div class="mb-8 text-center">
-  <h2 class="text-2xl font-extrabold text-primary tracking-tighter font-headline">Base Fare CRM</h2>
-  <p class="text-sm text-on-surface-variant mt-1">Admin Portal • Clock-In</p>
+<!-- Top bar with logout -->
+<div class="w-full max-w-md flex items-center justify-between mb-8">
+  <div>
+    <h2 class="text-2xl font-extrabold text-primary tracking-tighter font-headline">Base Fare CRM</h2>
+    <p class="text-sm text-on-surface-variant mt-1">Clock-In Portal</p>
+  </div>
+  <a href="/logout" class="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-semibold text-on-surface-variant hover:text-red-600 hover:bg-red-50 transition-all">
+    <span class="material-symbols-outlined text-base">logout</span> Sign Out
+  </a>
 </div>
 
 <!-- Main Glass Card -->
@@ -97,6 +120,18 @@ tailwind.config = {
   </div>
   <?php endif; ?>
 
+  <?php if ($denialReason): ?>
+  <!-- G3: Show denial reason from admin -->
+  <div class="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 rounded-xl text-sm">
+    <p class="font-bold flex items-center gap-2 mb-1">
+      <span class="material-symbols-outlined text-red-500 text-lg">block</span>
+      Override Request Denied
+    </p>
+    <p class="text-red-700">Admin reason: <strong><?= htmlspecialchars($denialReason) ?></strong></p>
+    <p class="text-red-500 text-xs mt-1">Please contact your admin if you believe this was an error.</p>
+  </div>
+  <?php endif; ?>
+
   <!-- Status Message -->
   <?php if ($currentState === AttendanceService::STATE_NOT_CLOCKED_IN): ?>
     <?php if ($shiftLabel): ?>
@@ -120,8 +155,8 @@ tailwind.config = {
 
   <!-- Clock In Button -->
   <?php if ($currentState === AttendanceService::STATE_NOT_CLOCKED_IN && $shiftLabel): ?>
-  <form method="POST" action="/clock-in">
-    <button type="submit" class="w-48 h-48 rounded-full bg-gradient-to-br from-primary to-primary-container text-white font-headline font-extrabold text-xl shadow-2xl shadow-primary/30 hover:opacity-90 active:scale-95 transition-all pulse-glow mx-auto flex items-center justify-center">
+  <form method="POST" action="/clock-in" id="clockInForm">
+    <button type="submit" id="clockInBtn" onclick="this.disabled=true;this.textContent='CLOCKING IN...';document.getElementById('clockInForm').submit();" class="w-48 h-48 rounded-full bg-gradient-to-br from-primary to-primary-container text-white font-headline font-extrabold text-xl shadow-2xl shadow-primary/30 hover:opacity-90 active:scale-95 transition-all pulse-glow mx-auto flex items-center justify-center">
       CLOCK IN
     </button>
   </form>

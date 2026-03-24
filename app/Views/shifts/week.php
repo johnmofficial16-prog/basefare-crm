@@ -62,33 +62,11 @@ tailwind.config = {
 </head>
 <body class="bg-background font-body text-on-surface antialiased overflow-x-hidden">
 
-<!-- Top Nav -->
-<nav class="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md flex items-center justify-between px-8 py-4 shadow-sm shadow-blue-900/5">
-  <span class="text-xl font-extrabold text-[#163274] tracking-tighter font-headline">Base Fare CRM</span>
-  <div class="flex items-center gap-6">
-    <span class="font-semibold font-headline"><?= htmlspecialchars($_SESSION['user_name'] ?? 'Admin') ?></span>
-    <a href="/logout" class="text-slate-500 hover:text-[#163274] font-headline font-bold transition-all text-sm uppercase tracking-wider">Logout</a>
-  </div>
-</nav>
-
-<!-- Sidebar -->
-<aside class="fixed left-0 top-0 h-full w-64 z-40 bg-white/60 backdrop-blur-xl flex flex-col pt-24 shadow-[4px_0_24px_rgba(22,50,116,0.05)]">
-  <div class="px-6 mb-8">
-    <h2 class="text-[#163274] font-headline font-extrabold text-xs uppercase tracking-[0.2em]">Admin Portal</h2>
-    <p class="text-slate-400 text-[10px] font-medium">Base Fare Management</p>
-  </div>
-  <nav class="flex flex-col gap-1 font-label text-sm font-medium tracking-wide">
-    <a class="flex items-center gap-3 px-6 py-4 text-slate-500 hover:bg-slate-50/50 transition-all" href="/dashboard"><span class="material-symbols-outlined">dashboard</span> Dashboard</a>
-    <a class="flex items-center gap-3 px-6 py-4 bg-[#163274]/10 text-[#163274] border-r-4 border-[#163274]" href="/shifts/week"><span class="material-symbols-outlined">calendar_month</span> Shift Scheduling</a>
-    <a class="flex items-center gap-3 px-6 py-4 text-slate-500 hover:bg-slate-50/50 transition-all" href="#"><span class="material-symbols-outlined">how_to_reg</span> Attendance</a>
-    <a class="flex items-center gap-3 px-6 py-4 text-slate-500 hover:bg-slate-50/50 transition-all" href="#"><span class="material-symbols-outlined">payments</span> Transactions</a>
-    <a class="flex items-center gap-3 px-6 py-4 text-slate-500 hover:bg-slate-50/50 transition-all" href="#"><span class="material-symbols-outlined">receipt_long</span> Payroll</a>
-    <a class="flex items-center gap-3 px-6 py-4 text-slate-500 hover:bg-slate-50/50 transition-all" href="#"><span class="material-symbols-outlined">settings</span> Settings</a>
-  </nav>
-</aside>
+<!-- Shared Admin Sidebar -->
+<?php $activePage = 'shifts'; require __DIR__ . '/../partials/admin_sidebar.php'; ?>
 
 <!-- Main Content -->
-<main class="ml-64 pt-24 pb-20 px-10 min-h-screen bg-surface">
+<main class="ml-60 pt-8 pb-20 px-10 min-h-screen bg-surface">
 
   <!-- Page Header -->
   <header class="flex flex-col md:flex-row justify-between items-end md:items-center mb-10 gap-6">
@@ -169,7 +147,7 @@ tailwind.config = {
                 data-agent="<?= $agent->id ?>" 
                 data-date="<?= $date ?>">
               <?php if ($schedule && $schedule->template): ?>
-                <div class="relative group/cell">
+                <div class="relative group/cell" data-assigned="1" data-start="<?= $schedule->shift_start ?>" data-end="<?= $schedule->shift_end ?>" data-template="<?= $schedule->template_id ?>">
                   <span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight cursor-pointer"
                         style="<?= shiftBadgeStyle($schedule->template->name) ?>">
                     <?= htmlspecialchars($schedule->template->name) ?><br/>
@@ -180,7 +158,7 @@ tailwind.config = {
                           class="absolute -top-1 -right-1 w-4 h-4 bg-red-400 text-white rounded-full text-[8px] hidden group-hover/cell:flex items-center justify-center font-bold">✕</button>
                 </div>
               <?php elseif ($schedule): ?>
-                <div class="relative group/cell">
+                <div class="relative group/cell" data-assigned="1" data-start="<?= $schedule->shift_start ?>" data-end="<?= $schedule->shift_end ?>">
                   <span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight cursor-pointer" style="background:#E8F5E9;color:#2E7D32">
                     Custom<br/>
                     <?= date('g:iA', strtotime($schedule->shift_start)) ?>–<?= date('g:iA', strtotime($schedule->shift_end)) ?>
@@ -364,22 +342,56 @@ document.getElementById('publishWeekBtn').addEventListener('click', async functi
   const entries = [];
 
   rows.forEach(row => {
-    row.querySelectorAll('td[data-agent]').forEach(cell => {
-      const badge = cell.querySelector('span[style]');
-      // Only include cells that already have a shift assigned
-      if (badge) {
-        // We don't re-collect UI data — the DB already has the data we want to "publish"
-        // Publishing is a no-op re-validation here. A real implementation would change a 'published' flag.
-        // For now, show a success confirmation.
+    const agentId = parseInt(row.dataset.agentId);
+    row.querySelectorAll('td[data-date]').forEach(cell => {
+      const date = cell.dataset.date;
+      const dataDiv = cell.querySelector('.group\\/cell[data-assigned="1"]');
+      
+      if (dataDiv) {
+        entries.push({
+          agent_id: agentId,
+          shift_date: date,
+          shift_start: dataDiv.dataset.start,
+          shift_end: dataDiv.dataset.end,
+          template_id: dataDiv.dataset.template || null
+        });
       }
     });
   });
 
-  alert('Week published successfully! The schedule is now live for attendance enforcement.');
+  if (entries.length === 0) {
+    alert('No shifts to publish.');
+    return;
+  }
+
+  const btn = document.getElementById('publishWeekBtn');
+  const ogText = btn.innerHTML;
+  btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-sm">sync</span> Publishing...';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch('/shifts/week/publish', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ week_start: '<?= $weekDates[0] ?>', entries: entries })
+    });
+    const data = await r.json();
+    if (data.success) {
+      alert('Week published successfully! The schedule is now live and enforced.');
+      window.location.reload();
+    } else {
+      alert(data.message || 'Error publishing week.');
+    }
+  } catch (err) {
+    alert('Network error during publish.');
+  } finally {
+    btn.innerHTML = ogText;
+    btn.disabled = false;
+  }
 });
 </script>
 
-<footer class="fixed bottom-0 right-0 left-64 pb-6 text-slate-400 font-label text-xs uppercase tracking-widest flex justify-center pointer-events-none">
+<footer class="fixed bottom-0 right-0 left-60 pb-6 text-slate-400 font-label text-xs uppercase tracking-widest flex justify-center pointer-events-none">
   <span>© 2026 Base Fare CRM. All rights reserved.</span>
 </footer>
 </body>

@@ -26,6 +26,7 @@ class AttendanceOverride extends Model
     const TYPE_MISSED_CLOCKOUT = 'missed_clockout';
     const TYPE_MANUAL_ENTRY    = 'manual_entry';
     const TYPE_TIME_CORRECTION = 'time_correction';
+    const TYPE_DENIAL          = 'denial';
 
     /**
      * The agent this override is for

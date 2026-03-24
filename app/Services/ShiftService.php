@@ -139,7 +139,9 @@ class ShiftService
 
         $grid = [];
         foreach ($rows as $row) {
-            $grid[$row->agent_id][$row->shift_date] = $row;
+            // shift_date is cast to a date object, so we must format it as string for the array key
+            $dateStr = is_string($row->shift_date) ? $row->shift_date : $row->shift_date->format('Y-m-d');
+            $grid[$row->agent_id][$dateStr] = $row;
         }
 
         return $grid;

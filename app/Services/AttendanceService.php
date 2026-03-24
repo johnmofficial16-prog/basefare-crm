@@ -75,20 +75,40 @@ class AttendanceService
             return ['state' => $cached['state'], 'session' => null, 'break' => null];
         }
 
-        // Fetch from DB
+        // B1 FIX: Check for ACTIVE session FIRST (today or yesterday for overnight).
+        // An agent who was re-clocked-in has both a completed + an active session in DB.
+        // The active session always wins.
         $session = AttendanceSession::active()
                        ->forUser($userId)
-                       ->forDate(date('Y-m-d'))
+                       ->where(function($q) {
+                           $q->forDate(date('Y-m-d'))
+                             ->orWhere('date', date('Y-m-d', strtotime('-1 day'))); // overnight
+                       })
+                       ->latest('id') // most recent active session wins
                        ->first();
 
         if (!$session) {
-            // Check if they completed a session today
-            $completed = AttendanceSession::forUser($userId)
+            // No active session — check if they completed ANY session today
+            $completedSession = AttendanceSession::forUser($userId)
                              ->forDate(date('Y-m-d'))
                              ->whereIn('status', [AttendanceSession::STATUS_COMPLETED, AttendanceSession::STATUS_AUTO_CLOSED])
-                             ->exists();
+                             ->latest('id')
+                             ->first();
 
-            $state = $completed ? self::STATE_CLOCKED_OUT : self::STATE_NOT_CLOCKED_IN;
+            $state = self::STATE_NOT_CLOCKED_IN;
+            
+            if ($completedSession) {
+                $state = self::STATE_CLOCKED_OUT;
+                // OPTION A FIX: If the admin updated their shift schedule AFTER they clocked out,
+                // auto-unlock the state so they can clock in for the new shift.
+                $shift = $this->shiftService->getAgentShiftForDate($userId, date('Y-m-d'));
+                if ($shift && $shift->updated_at && $completedSession->clock_out) {
+                    if (strtotime($shift->updated_at) > strtotime($completedSession->clock_out)) {
+                        $state = self::STATE_NOT_CLOCKED_IN;
+                    }
+                }
+            }
+
             $this->cacheState($userId, ['state' => $state]);
             return ['state' => $state, 'session' => null, 'break' => null];
         }
@@ -157,11 +177,13 @@ class AttendanceService
         // Case A: Too early
         if ($now < $earliestAllowed) {
             $startFormatted = $shiftStart->format('g:i A');
+            $earliestFormatted = $earliestAllowed->format('g:i A');
             return [
-                'success'        => false,
-                'message'        => "Too early. Your shift starts at {$startFormatted}.",
-                'blocked_reason' => 'too_early',
-                'shift_start'    => $shift->shift_start,
+                'success'          => false,
+                'message'          => "Too early. Your shift starts at {$startFormatted}. You can clock in from {$earliestFormatted}.",
+                'blocked_reason'   => 'too_early',
+                'shift_start'      => $shift->shift_start,
+                'earliest_allowed' => $earliestFormatted,
             ];
         }
 
@@ -241,15 +263,35 @@ class AttendanceService
             $netWorkMins = max(0, $grossMins - $totalBreakMins);
 
             $session->update([
-                'clock_out'       => $now,
-                'total_work_mins' => $netWorkMins,
-                'total_break_mins'=> $totalBreakMins,
-                'status'          => AttendanceSession::STATUS_COMPLETED,
+                'clock_out'        => $now,
+                'total_work_mins'  => $netWorkMins,
+                'total_break_mins' => $totalBreakMins,
+                'status'           => AttendanceSession::STATUS_COMPLETED,
             ]);
+
+            // P2 #26 — Detect early departure
+            $earlyNote = '';
+            if ($session->scheduled_end) {
+                $scheduledEndTs = strtotime(date('Y-m-d') . ' ' . $session->scheduled_end);
+                if ($clockOutTs < $scheduledEndTs) {
+                    $earlyMins = (int) round(($scheduledEndTs - $clockOutTs) / 60);
+                    $earlyNote = " (Left {$earlyMins} mins early)";
+                    // Log early departure
+                    Capsule::table('activity_log')->insert([
+                        'user_id'     => $userId,
+                        'action'      => 'early_departure',
+                        'entity_type' => 'attendance_sessions',
+                        'entity_id'   => $session->id,
+                        'details'     => json_encode(['early_minutes' => $earlyMins]),
+                        'ip_address'  => $_SERVER['REMOTE_ADDR'] ?? null,
+                        'created_at'  => date('Y-m-d H:i:s'),
+                    ]);
+                }
+            }
 
             $this->bustStateCache($userId);
 
-            return ['success' => true, 'message' => "Clocked out. Net work: {$netWorkMins} minutes."];
+            return ['success' => true, 'message' => "Clocked out. Net work: {$netWorkMins} minutes.{$earlyNote}"];
         } catch (\Throwable $e) {
             error_log("[AttendanceService::clockOut] Error: " . $e->getMessage());
             return ['success' => false, 'message' => 'An error occurred while clocking out.'];
@@ -442,6 +484,239 @@ class AttendanceService
         }
     }
 
+    /**
+     * Admin denies a late-login override for an agent.
+     * P0 #9 — Persist the denial in the database with a reason.
+     */
+    public function denyOverride(int $adminId, int $agentId, string $date, string $reason): array
+    {
+        $admin = User::find($adminId);
+        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            return ['success' => false, 'message' => 'Unauthorized.'];
+        }
+
+        if (strlen(trim($reason)) < 3) {
+            return ['success' => false, 'message' => 'Denial reason must be at least 3 characters.'];
+        }
+
+        try {
+            AttendanceOverride::create([
+                'agent_id'       => $agentId,
+                'shift_date'     => $date,
+                'override_type'  => AttendanceOverride::TYPE_DENIAL,
+                'override_by'    => $adminId,
+                'reason'         => trim($reason),
+                'original_value' => 'blocked',
+                'new_value'      => 'denied',
+            ]);
+
+            Capsule::table('activity_log')->insert([
+                'user_id'     => $adminId,
+                'action'      => 'override_denied',
+                'entity_type' => 'attendance_overrides',
+                'entity_id'   => $agentId,
+                'details'     => json_encode(['agent_id' => $agentId, 'date' => $date, 'reason' => $reason]),
+                'ip_address'  => $_SERVER['REMOTE_ADDR'] ?? null,
+                'created_at'  => date('Y-m-d H:i:s'),
+            ]);
+
+            $agent = User::find($agentId);
+            $agentName = $agent ? $agent->name : "Agent #{$agentId}";
+            return ['success' => true, 'message' => "Override denied for {$agentName} on {$date}."];
+        } catch (\Throwable $e) {
+            error_log("[AttendanceService::denyOverride] Error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'An error occurred while denying the override.'];
+        }
+    }
+
+    /**
+     * P1 #10 — Admin manually clocks in an agent, bypassing all rules.
+     */
+    public function adminClockIn(int $adminId, int $agentId, string $ip): array
+    {
+        $admin = User::find($adminId);
+        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            return ['success' => false, 'message' => 'Unauthorized.'];
+        }
+
+        $existing = AttendanceSession::active()->forUser($agentId)->first();
+        if ($existing) {
+            return ['success' => false, 'message' => 'Agent already has an active session.'];
+        }
+
+        $agent = User::find($agentId);
+        if (!$agent) {
+            return ['success' => false, 'message' => 'Agent not found.'];
+        }
+
+        // Get shift for default times, fallback to 9-6
+        $shift = $this->shiftService->getAgentShiftForDate($agentId, date('Y-m-d'));
+        $schedStart = $shift ? $shift->shift_start : '09:00:00';
+        $schedEnd   = $shift ? $shift->shift_end : '18:00:00';
+
+        $result = $this->createSession($agentId, $schedStart, $schedEnd, 0, $ip, 'admin-manual');
+
+        if ($result['success']) {
+            Capsule::table('activity_log')->insert([
+                'user_id'     => $adminId,
+                'action'      => 'admin_clock_in',
+                'entity_type' => 'attendance_sessions',
+                'entity_id'   => $result['session']->id ?? null,
+                'details'     => json_encode(['agent_id' => $agentId, 'agent_name' => $agent->name]),
+                'ip_address'  => $ip,
+                'created_at'  => date('Y-m-d H:i:s'),
+            ]);
+
+            // B4 FIX: Bust the agent's state cache so the middleware re-reads from DB.
+            // Without this, agent still sees STATE_CLOCKED_OUT from the old cached state.
+            $this->bustStateCache($agentId);
+        }
+
+        return $result;
+    }
+
+    /**
+     * P1 #10 — Admin manually clocks out an agent.
+     */
+    public function adminClockOut(int $adminId, int $agentId): array
+    {
+        $admin = User::find($adminId);
+        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            return ['success' => false, 'message' => 'Unauthorized.'];
+        }
+
+        $result = $this->clockOut($agentId);
+
+        if ($result['success']) {
+            $agent = User::find($agentId);
+            Capsule::table('activity_log')->insert([
+                'user_id'     => $adminId,
+                'action'      => 'admin_clock_out',
+                'entity_type' => 'attendance_sessions',
+                'entity_id'   => $agentId,
+                'details'     => json_encode(['agent_id' => $agentId, 'agent_name' => $agent?->name]),
+                'ip_address'  => $_SERVER['REMOTE_ADDR'] ?? null,
+                'created_at'  => date('Y-m-d H:i:s'),
+            ]);
+        }
+
+        return $result;
+    }
+
+    /**
+     * G2 — Admin force-ends an active break for an agent.
+     */
+    public function adminForceEndBreak(int $adminId, int $agentId): array
+    {
+        $admin = User::find($adminId);
+        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            return ['success' => false, 'message' => 'Unauthorized.'];
+        }
+
+        $session = AttendanceSession::active()->forUser($agentId)->latest('id')->first();
+        if (!$session) {
+            return ['success' => false, 'message' => 'Agent is not currently clocked in.'];
+        }
+
+        $activeBreak = $session->getActiveBreak();
+        if (!$activeBreak) {
+            return ['success' => false, 'message' => 'Agent is not currently on a break.'];
+        }
+
+        try {
+            $now = date('Y-m-d H:i:s');
+            $duration = max(1, (int) round((strtotime($now) - strtotime($activeBreak->break_start)) / 60));
+
+            $activeBreak->update(['break_end' => $now, 'duration_mins' => $duration]);
+
+            $totalBreakMins = (int) AttendanceBreak::where('session_id', $session->id)
+                ->whereNotNull('break_end')->sum('duration_mins');
+            $session->update(['total_break_mins' => $totalBreakMins]);
+
+            Capsule::table('activity_log')->insert([
+                'user_id'     => $adminId,
+                'action'      => 'admin_force_end_break',
+                'entity_type' => 'attendance_breaks',
+                'entity_id'   => $activeBreak->id,
+                'details'     => json_encode(['agent_id' => $agentId, 'break_type' => $activeBreak->break_type, 'duration_mins' => $duration]),
+                'ip_address'  => $_SERVER['REMOTE_ADDR'] ?? null,
+                'created_at'  => $now,
+            ]);
+
+            $this->bustStateCache($agentId);
+            $agent = User::find($agentId);
+            return ['success' => true, 'message' => "Break ended for {$agent?->name} ({$duration} mins)."];
+        } catch (\Throwable $e) {
+            error_log("[AttendanceService::adminForceEndBreak] Error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'An error occurred while ending the break.'];
+        }
+    }
+
+    /**
+     * P1 #6 — Get remaining break counts for a session.
+     */
+
+    public function getBreaksRemaining(?AttendanceSession $session): array
+    {
+        if (!$session) {
+            return ['lunch' => AttendanceBreak::MAX_LUNCH_BREAKS, 'short' => AttendanceBreak::MAX_SHORT_BREAKS, 'washroom' => 'unlimited'];
+        }
+
+        $lunchUsed = AttendanceBreak::where('session_id', $session->id)
+            ->where('break_type', AttendanceBreak::TYPE_LUNCH)->count();
+        $shortUsed = AttendanceBreak::where('session_id', $session->id)
+            ->where('break_type', AttendanceBreak::TYPE_SHORT)->count();
+
+        return [
+            'lunch'    => max(0, AttendanceBreak::MAX_LUNCH_BREAKS - $lunchUsed),
+            'short'    => max(0, AttendanceBreak::MAX_SHORT_BREAKS - $shortUsed),
+            'washroom' => 'unlimited',
+        ];
+    }
+
+    /**
+     * P1 #4 — Get agent's attendance history.
+     */
+    public function getAgentHistory(int $userId, int $days = 30): array
+    {
+        $sessions = AttendanceSession::forUser($userId)
+            ->where('date', '>=', date('Y-m-d', strtotime("-{$days} days")))
+            ->orderBy('date', 'desc')
+            ->with('breaks')
+            ->get();
+
+        $summary = [
+            'total_sessions'    => $sessions->count(),
+            'total_work_mins'   => $sessions->sum('total_work_mins'),
+            'total_break_mins'  => $sessions->sum('total_break_mins'),
+            'total_late_mins'   => $sessions->sum('late_minutes'),
+            'late_count'        => $sessions->where('late_minutes', '>', 0)->count(),
+            'flagged_breaks'    => 0,
+        ];
+
+        foreach ($sessions as $s) {
+            $summary['flagged_breaks'] += $s->breaks->where('flagged', 1)->count();
+        }
+
+        return ['sessions' => $sessions, 'summary' => $summary];
+    }
+
+    /**
+     * P2 #12 — Get historical attendance data for admin panel.
+     */
+    public function getHistoricalData(string $date, ?int $agentId = null): array
+    {
+        $query = AttendanceSession::forDate($date)
+            ->with(['breaks', 'user'])
+            ->orderBy('clock_in', 'asc');
+
+        if ($agentId) {
+            $query->forUser($agentId);
+        }
+
+        return $query->get()->toArray();
+    }
+
     // =========================================================================
     // ADMIN: Get Live Board Data (Section 1.9)
     // =========================================================================
@@ -462,22 +737,42 @@ class AttendanceService
             ->orderBy('name')
             ->get();
 
-        // All sessions for today
-        $todaySessions = AttendanceSession::forDate($today)
+        // B3 FIX: Get ALL sessions for today, then pick the most relevant per user.
+        // keyBy would silently drop the active session if a completed one had a lower index.
+        // Instead: group by user_id, then prioritise: active > completed > auto_closed.
+        $todaySessionsRaw = AttendanceSession::forDate($today)
             ->with(['breaks', 'user'])
-            ->get()
-            ->keyBy('user_id');
+            ->orderBy('id', 'asc') // oldest first so active (created later) overwrites completed
+            ->get();
 
-        $board = ['in' => [], 'on_break' => [], 'absent' => [], 'pending_override' => []];
+        // Build a map: user_id => best session (active beats completed)
+        $sessionMap = [];
+        foreach ($todaySessionsRaw as $s) {
+            $uid = $s->user_id;
+            if (!isset($sessionMap[$uid])) {
+                $sessionMap[$uid] = $s;
+            } elseif ($s->status === AttendanceSession::STATUS_ACTIVE) {
+                // An active session always replaces a completed one in the map
+                $sessionMap[$uid] = $s;
+            }
+        }
+
+        // B2 FIX: Added 'completed' bucket so finished agents don't vanish from the board.
+        $board = [
+            'in'               => [],
+            'on_break'         => [],
+            'completed'        => [], // Agents who finished their shift today
+            'absent'           => [],
+            'pending_override' => [],
+        ];
 
         foreach ($allAgents as $agent) {
-            $session = $todaySessions->get($agent->id);
+            $session = $sessionMap[$agent->id] ?? null;
 
             if (!$session) {
                 // No session today — check if they're waiting for an override
                 $hasOverride = AttendanceOverride::where('agent_id', $agent->id)
                     ->where('shift_date', $today)->exists();
-                // Check for failed login attempt in activity_log
                 $failedAttempt = Capsule::table('activity_log')
                     ->where('user_id', $agent->id)
                     ->where('action', 'clock_in_blocked')
@@ -496,18 +791,23 @@ class AttendanceService
                 $activeBreak = $session->getActiveBreak();
                 if ($activeBreak) {
                     $board['on_break'][] = [
-                        'agent' => $agent,
+                        'agent'   => $agent,
                         'session' => $session,
-                        'break' => $activeBreak,
+                        'break'   => $activeBreak,
                     ];
                 } else {
                     $board['in'][] = [
-                        'agent' => $agent,
+                        'agent'   => $agent,
                         'session' => $session,
                     ];
                 }
+            } else {
+                // Completed or auto_closed — show in 'Completed Today' section
+                $board['completed'][] = [
+                    'agent'   => $agent,
+                    'session' => $session,
+                ];
             }
-            // Completed/auto_closed sessions → they're done for the day, not "absent"
         }
 
         return $board;
@@ -523,28 +823,42 @@ class AttendanceService
     private function createSession(int $userId, string $schedStart, string $schedEnd, int $lateMins, string $ip, string $ua): array
     {
         try {
-            $session = AttendanceSession::create([
-                'user_id'          => $userId,
-                'clock_in'         => date('Y-m-d H:i:s'),
-                'scheduled_start'  => $schedStart,
-                'scheduled_end'    => $schedEnd,
-                'late_minutes'     => $lateMins,
-                'status'           => AttendanceSession::STATUS_ACTIVE,
-                'ip_address'       => $ip,
-                'user_agent'       => $ua,
-                'date'             => date('Y-m-d'),
-            ]);
+            // P1 #24 — Wrap in explicit transaction so SELECT FOR UPDATE actually acquires a row lock
+            $session = Capsule::connection()->transaction(function () use ($userId, $schedStart, $schedEnd, $lateMins, $ip, $ua) {
+                // Check for existing active session under lock — prevents race on rapid double-click
+                $locked = Capsule::connection()->select(
+                    'SELECT id FROM attendance_sessions WHERE user_id = ? AND status = ? FOR UPDATE',
+                    [$userId, AttendanceSession::STATUS_ACTIVE]
+                );
+                if (!empty($locked)) {
+                    throw new \RuntimeException('already_active');
+                }
 
-            // Log the clock-in
-            Capsule::table('activity_log')->insert([
-                'user_id'     => $userId,
-                'action'      => 'clock_in',
-                'entity_type' => 'attendance_sessions',
-                'entity_id'   => $session->id,
-                'details'     => json_encode(['late_minutes' => $lateMins, 'scheduled_start' => $schedStart]),
-                'ip_address'  => $ip,
-                'created_at'  => date('Y-m-d H:i:s'),
-            ]);
+                $sess = AttendanceSession::create([
+                    'user_id'          => $userId,
+                    'clock_in'         => date('Y-m-d H:i:s'),
+                    'scheduled_start'  => $schedStart,
+                    'scheduled_end'    => $schedEnd,
+                    'late_minutes'     => $lateMins,
+                    'status'           => AttendanceSession::STATUS_ACTIVE,
+                    'ip_address'       => $ip,
+                    'user_agent'       => $ua,
+                    'date'             => date('Y-m-d'),
+                ]);
+
+                // Log inside transaction — rolls back with the session if DB fails
+                Capsule::table('activity_log')->insert([
+                    'user_id'     => $userId,
+                    'action'      => 'clock_in',
+                    'entity_type' => 'attendance_sessions',
+                    'entity_id'   => $sess->id,
+                    'details'     => json_encode(['late_minutes' => $lateMins, 'scheduled_start' => $schedStart]),
+                    'ip_address'  => $ip,
+                    'created_at'  => date('Y-m-d H:i:s'),
+                ]);
+
+                return $sess;
+            });
 
             $this->bustStateCache($userId);
 
@@ -553,6 +867,13 @@ class AttendanceService
                 : "Clocked in successfully.";
 
             return ['success' => true, 'message' => $msg, 'session' => $session];
+
+        } catch (\RuntimeException $e) {
+            if ($e->getMessage() === 'already_active') {
+                return ['success' => false, 'message' => 'You already have an active clock-in session.', 'blocked_reason' => 'already_active'];
+            }
+            error_log("[AttendanceService::createSession] Runtime error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'An error occurred during clock-in.'];
         } catch (\Throwable $e) {
             error_log("[AttendanceService::createSession] Error: " . $e->getMessage());
             return ['success' => false, 'message' => 'An error occurred during clock-in.'];
