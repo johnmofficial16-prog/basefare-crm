@@ -5,6 +5,7 @@ use App\Controllers\AuthController;
 use App\Controllers\ShiftController;
 use App\Controllers\AttendanceController;
 use App\Controllers\DashboardController;
+use App\Controllers\AcceptanceController;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\AttendanceGateMiddleware;
 use App\Models\User;
@@ -62,6 +63,29 @@ $app->group('/shifts', function ($group) {
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
+
+// ==========================================================================
+// Acceptance Module — Agent-facing (behind Auth + AttendanceGate)
+// ==========================================================================
+$app->group('/acceptance', function ($group) {
+    $group->get('',              [AcceptanceController::class, 'index']);
+    $group->get('/create',       [AcceptanceController::class, 'createForm']);
+    $group->post('/create',      [AcceptanceController::class, 'store']);
+    $group->get('/{id:[0-9]+}',  [AcceptanceController::class, 'view']);
+    $group->get('/{id:[0-9]+}/receipt', [AcceptanceController::class, 'receipt']);
+    $group->post('/{id:[0-9]+}/resend', [AcceptanceController::class, 'resend']);
+    $group->post('/{id:[0-9]+}/cancel', [AcceptanceController::class, 'cancel']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new AuthMiddleware());
+
+// ==========================================================================
+// Acceptance Module — Public customer-facing (NO auth — token-based)
+// URL: https://base-fare.com/auth?token=xxx
+// ==========================================================================
+$app->get('/auth',           [AcceptanceController::class, 'publicView']);
+$app->post('/auth',          [AcceptanceController::class, 'publicSubmit']);
+$app->get('/auth/confirmed', [AcceptanceController::class, 'publicConfirmed']);
 
 // Redirect root to dashboard
 $app->get('/', function ($request, $response) {

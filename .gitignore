@@ -19,6 +19,14 @@ storage/logs/*.log
 storage/payroll/*.pdf
 storage/cache/
 
+# Acceptance module — uploaded customer PII (NEVER commit these)
+storage/acceptance/signatures/*
+storage/acceptance/evidence/*
+storage/acceptance/email_log.txt
+# Keep the folders themselves (via .gitkeep)
+!storage/acceptance/signatures/.gitkeep
+!storage/acceptance/evidence/.gitkeep
+
 # Database
 database/seed.sql
 *.sqlite
@@ -27,3 +35,6 @@ database/seed.sql
 # Testing
 tests/_output/
 tests/_support/_generated/
+
+# Local-only bootstrap script (contains plain-text default credentials)
+setup.php
