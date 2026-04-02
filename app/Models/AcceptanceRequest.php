@@ -12,7 +12,7 @@ use Carbon\Carbon;
  * Each record maps to one tokenized public link sent to a customer.
  *
  * Token expiry: 12 hours from created_at
- * Public URL:   https://base-fare.com/auth?token={token}
+ * Public URL:   https://crm.base-fare.com/auth?token={token}
  */
 class AcceptanceRequest extends Model
 {
@@ -231,7 +231,7 @@ class AcceptanceRequest extends Model
      */
     public function publicUrl(): string
     {
-        return 'https://base-fare.com/auth?token=' . $this->token;
+        return 'https://crm.base-fare.com/auth?token=' . $this->token;
     }
 
     /**
