@@ -666,6 +666,16 @@ tailwind.config = {
             Statement descriptor: <span class="font-semibold text-slate-600"><?= h($acceptance->statement_descriptor) ?></span>
           </p>
           <?php endif; ?>
+
+          <?php if (!empty($acceptance->split_charge_note)): ?>
+          <div class="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <span class="material-symbols-outlined text-amber-500 flex-none text-base mt-0.5">info</span>
+            <div>
+              <p class="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">Important — Split Charge Notice</p>
+              <p class="text-xs text-amber-800 leading-relaxed"><?= h($acceptance->split_charge_note) ?></p>
+            </div>
+          </div>
+          <?php endif; ?>
         </div>
 
         <!-- ── 4. DOCUMENT UPLOADS ── -->

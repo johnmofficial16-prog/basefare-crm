@@ -267,6 +267,18 @@ $error = $_GET['error'] ?? null;
           <?php endif; ?>
         </div>
 
+        <?php if (!empty($acceptance->split_charge_note)): ?>
+        <div class="section" style="background:#fffbeb; border-top:1px solid #fcd34d;">
+          <div style="display:flex; align-items:flex-start; gap:10px;">
+            <span class="material-symbols-outlined" style="color:#d97706; font-size:20px; flex-shrink:0; margin-top:1px;">info</span>
+            <div>
+              <div class="section-title" style="color:#92400e; margin-bottom:4px;">Important — Split Charge Notice</div>
+              <p style="font-size:13px; color:#78350f; line-height:1.6;"><?= htmlspecialchars($acceptance->split_charge_note) ?></p>
+            </div>
+          </div>
+        </div>
+        <?php endif; ?>
+
         <!-- Endorsements -->
         <?php if ($endorsements): ?>
         <div class="section">
