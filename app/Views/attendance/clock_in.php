@@ -156,6 +156,7 @@ tailwind.config = {
   <!-- Clock In Button -->
   <?php if ($currentState === AttendanceService::STATE_NOT_CLOCKED_IN && $shiftLabel): ?>
   <form method="POST" action="/clock-in" id="clockInForm">
+    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
     <button type="submit" id="clockInBtn" onclick="this.disabled=true;this.textContent='CLOCKING IN...';document.getElementById('clockInForm').submit();" class="w-48 h-48 rounded-full bg-gradient-to-br from-primary to-primary-container text-white font-headline font-extrabold text-xl shadow-2xl shadow-primary/30 hover:opacity-90 active:scale-95 transition-all pulse-glow mx-auto flex items-center justify-center">
       CLOCK IN
     </button>

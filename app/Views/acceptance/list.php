@@ -16,7 +16,8 @@ $page       = $data['page'];
 $totalPages = $data['total_pages'];
 $filters    = $filters ?? [];
 
-$userRole   = $_SESSION['user_role'] ?? 'agent';
+$userRole   = $_SESSION['role'] ?? 'agent';
+$isAdmin    = in_array($userRole, ['admin', 'manager']);
 
 $flashError   = $_SESSION['flash_error'] ?? null;
 $flashSuccess = $_SESSION['flash_success'] ?? null;
@@ -87,7 +88,7 @@ tailwind.config = {
 
 <?php require __DIR__ . '/../layout/sidebar.php'; ?>
 
-<div class="ml-64 min-h-screen">
+<div class="ml-60 min-h-screen">
   <div class="max-w-7xl mx-auto px-6 py-8 space-y-6">
 
     <!-- Page Header -->

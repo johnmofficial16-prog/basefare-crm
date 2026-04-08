@@ -304,7 +304,10 @@ document.getElementById('assignForm').addEventListener('submit', async function(
   try {
     const r = await fetch('/shifts/cell/update', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>'
+      },
       body: JSON.stringify(payload)
     });
     const data = await r.json();
@@ -328,8 +331,14 @@ async function deleteShift(agentId, date) {
   if (!confirm('Remove this shift assignment?')) return;
   const r = await fetch('/shifts/cell/delete', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({agent_id: agentId, shift_date: date})
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>'
+    },
+    body: JSON.stringify({
+      agent_id: agentId,
+      shift_date: date
+    })
   });
   const data = await r.json();
   if (data.success) window.location.reload();
@@ -372,8 +381,14 @@ document.getElementById('publishWeekBtn').addEventListener('click', async functi
   try {
     const r = await fetch('/shifts/week/publish', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ week_start: '<?= $weekDates[0] ?>', entries: entries })
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>'
+      },
+      body: JSON.stringify({
+        week_start: '<?= $weekDates[0] ?? '' ?>',
+        entries: entries
+      })
     });
     const data = await r.json();
     if (data.success) {

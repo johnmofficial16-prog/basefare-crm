@@ -6,6 +6,9 @@ use App\Controllers\ShiftController;
 use App\Controllers\AttendanceController;
 use App\Controllers\DashboardController;
 use App\Controllers\AcceptanceController;
+use App\Controllers\TransactionController;
+use App\Controllers\UserController;
+use App\Controllers\AdminController;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\AttendanceGateMiddleware;
 use App\Models\User;
@@ -65,6 +68,30 @@ $app->group('/shifts', function ($group) {
 ->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
 
 // ==========================================================================
+// Admin & User Management (admin only, behind AttendanceGate)
+// ==========================================================================
+$app->group('/users', function ($group) {
+    $group->get('', [UserController::class, 'index']);
+    $group->get('/create', [UserController::class, 'createForm']);
+    $group->post('/create', [UserController::class, 'store']);
+    $group->get('/{id:[0-9]+}/edit', [UserController::class, 'editForm']);
+    $group->post('/{id:[0-9]+}/edit', [UserController::class, 'update']);
+    $group->post('/{id:[0-9]+}/toggle-status', [UserController::class, 'toggleStatus']);
+    $group->post('/{id:[0-9]+}/reset-password', [UserController::class, 'resetPassword']);
+    $group->post('/{id:[0-9]+}/delete', [UserController::class, 'delete']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
+
+$app->group('/admin', function ($group) {
+    $group->get('/settings', [AdminController::class, 'settings']);
+    $group->post('/settings', [AdminController::class, 'saveSettings']);
+    $group->get('/activity-log', [AdminController::class, 'activityLog']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
+
+// ==========================================================================
 // Acceptance Module — Agent-facing (behind Auth + AttendanceGate)
 // ==========================================================================
 $app->group('/acceptance', function ($group) {
@@ -75,6 +102,28 @@ $app->group('/acceptance', function ($group) {
     $group->get('/{id:[0-9]+}/receipt', [AcceptanceController::class, 'receipt']);
     $group->post('/{id:[0-9]+}/resend', [AcceptanceController::class, 'resend']);
     $group->post('/{id:[0-9]+}/cancel', [AcceptanceController::class, 'cancel']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new AuthMiddleware());
+
+// ==========================================================================
+// Transaction Recorder — Agent-facing (behind Auth + AttendanceGate)
+// ==========================================================================
+$app->group('/transactions', function ($group) {
+    // List & Create
+    $group->get('',                          [TransactionController::class, 'index']);
+    $group->get('/create',                   [TransactionController::class, 'createForm']);
+    $group->post('/create',                  [TransactionController::class, 'store']);
+
+    // AJAX endpoints
+    $group->get('/autofill-options',         [TransactionController::class, 'autofillOptions']);
+    $group->get('/acceptance-data/{id:[0-9]+}', [TransactionController::class, 'acceptanceData']);
+    $group->post('/reveal-card',             [TransactionController::class, 'revealCard']);
+
+    // Single transaction actions
+    $group->get('/{id:[0-9]+}',              [TransactionController::class, 'view']);
+    $group->get('/{id:[0-9]+}/edit',         [TransactionController::class, 'editForm']);
+    $group->post('/{id:[0-9]+}/edit',        [TransactionController::class, 'update']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new AuthMiddleware());

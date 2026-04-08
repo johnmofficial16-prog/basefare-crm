@@ -75,15 +75,11 @@ class AttendanceService
             return ['state' => $cached['state'], 'session' => null, 'break' => null];
         }
 
-        // B1 FIX: Check for ACTIVE session FIRST (today or yesterday for overnight).
-        // An agent who was re-clocked-in has both a completed + an active session in DB.
-        // The active session always wins.
+        // B1 FIX: Check for ANY active session — no date restriction.
+        // The active session always wins regardless of which day it was opened.
+        // (Stranded sessions from missed clock-outs are caught this way.)
         $session = AttendanceSession::active()
                        ->forUser($userId)
-                       ->where(function($q) {
-                           $q->forDate(date('Y-m-d'))
-                             ->orWhere('date', date('Y-m-d', strtotime('-1 day'))); // overnight
-                       })
                        ->latest('id') // most recent active session wins
                        ->first();
 
@@ -585,22 +581,55 @@ class AttendanceService
             return ['success' => false, 'message' => 'Unauthorized.'];
         }
 
-        $result = $this->clockOut($agentId);
+        // Direct DB lookup — bypasses getCurrentState date-scope so stranded sessions are found.
+        $session = AttendanceSession::active()->forUser($agentId)->latest('id')->first();
+        if (!$session) {
+            return ['success' => false, 'message' => 'Agent does not have an active session.', 'code' => 409];
+        }
 
-        if ($result['success']) {
+        try {
+            $now = date('Y-m-d H:i:s');
+
+            // Auto-close any open break first
+            $activeBreak = $session->getActiveBreak();
+            if ($activeBreak) {
+                $breakDuration = max(1, (int) round((strtotime($now) - strtotime($activeBreak->break_start)) / 60));
+                $activeBreak->update(['break_end' => $now, 'duration_mins' => $breakDuration]);
+            }
+
+            $totalBreakMins = (int) \App\Models\AttendanceBreak::where('session_id', $session->id)
+                ->whereNotNull('break_end')->sum('duration_mins');
+
+            $clockInTs  = strtotime($session->clock_in);
+            $clockOutTs = strtotime($now);
+            $grossMins  = (int) round(($clockOutTs - $clockInTs) / 60);
+            $netWorkMins = max(0, $grossMins - $totalBreakMins);
+
+            $session->update([
+                'clock_out'        => $now,
+                'total_work_mins'  => $netWorkMins,
+                'total_break_mins' => $totalBreakMins,
+                'status'           => \App\Models\AttendanceSession::STATUS_COMPLETED,
+            ]);
+
+            $this->bustStateCache($agentId);
+
             $agent = User::find($agentId);
             Capsule::table('activity_log')->insert([
                 'user_id'     => $adminId,
                 'action'      => 'admin_clock_out',
                 'entity_type' => 'attendance_sessions',
-                'entity_id'   => $agentId,
-                'details'     => json_encode(['agent_id' => $agentId, 'agent_name' => $agent?->name]),
+                'entity_id'   => $session->id,
+                'details'     => json_encode(['agent_id' => $agentId, 'agent_name' => $agent?->name, 'net_work_mins' => $netWorkMins]),
                 'ip_address'  => $_SERVER['REMOTE_ADDR'] ?? null,
-                'created_at'  => date('Y-m-d H:i:s'),
+                'created_at'  => $now,
             ]);
-        }
 
-        return $result;
+            return ['success' => true, 'message' => "Clocked out {$agent?->name}. Net work: {$netWorkMins} minutes."];
+        } catch (\Throwable $e) {
+            error_log('[AttendanceService::adminClockOut] Error: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'An error occurred while clocking out.'];
+        }
     }
 
     /**
@@ -740,7 +769,11 @@ class AttendanceService
         // B3 FIX: Get ALL sessions for today, then pick the most relevant per user.
         // keyBy would silently drop the active session if a completed one had a lower index.
         // Instead: group by user_id, then prioritise: active > completed > auto_closed.
-        $todaySessionsRaw = AttendanceSession::forDate($today)
+        // Fetch sessions for today OR any session that is currently still active (e.g. forgot to checkout yesterday)
+        $todaySessionsRaw = AttendanceSession::where(function($q) use ($today) {
+                $q->where('date', $today)
+                  ->orWhere('status', AttendanceSession::STATUS_ACTIVE);
+            })
             ->with(['breaks', 'user'])
             ->orderBy('id', 'asc') // oldest first so active (created later) overwrites completed
             ->get();

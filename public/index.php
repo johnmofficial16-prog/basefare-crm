@@ -25,6 +25,16 @@ $capsule->addConnection([
 $capsule->setAsGlobal();
 $capsule->bootEloquent();
 
+// Secure session configuration
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path'     => '/',
+    'domain'   => '',
+    'secure'   => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on', // Enforce secure cookie if running on HTTPS
+    'httponly' => true, // Prevents Javascript from accessing session cookie
+    'samesite' => 'Lax' // Protects against broad cross-site attacks
+]);
+
 // Start PHP session
 session_start();
 
@@ -43,6 +53,9 @@ $errorMiddleware = $app->addErrorMiddleware($displayErrorDetails, true, true);
 
 // Include routes
 require __DIR__ . '/../app/routes.php';
+
+// Add Global CSRF Middleware (must be added after routes but executes early in stack or added via app directly)
+$app->add(new \App\Middleware\CsrfMiddleware());
 
 // Run App
 $app->run();

@@ -31,23 +31,13 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 <body class="bg-background font-body text-on-surface antialiased min-h-screen">
 
 <?php if ($isAdmin): ?>
-<!-- Admin: Shared Sidebar -->
+<!-- Admin/Manager: Admin Sidebar -->
 <?php $activePage = 'dashboard'; require __DIR__ . '/partials/admin_sidebar.php'; ?>
-<main class="ml-60 pt-8 pb-20 px-10">
 <?php else: ?>
-<!-- Agent: Top Bar -->
-<nav class="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md flex items-center justify-between px-8 py-4 shadow-sm shadow-blue-900/5">
-  <span class="text-xl font-extrabold text-primary tracking-tighter font-headline">Base Fare CRM</span>
-  <div class="flex items-center gap-6">
-    <div class="text-right">
-      <p class="text-sm font-bold text-on-surface"><?= htmlspecialchars($userName) ?></p>
-      <p class="text-[10px] font-bold text-primary uppercase tracking-widest opacity-70"><?= strtoupper($role) ?></p>
-    </div>
-    <a href="/logout" class="text-sm font-bold text-on-surface-variant hover:text-red-600 transition-all">Sign Out</a>
-  </div>
-</nav>
-<main class="pt-28 px-10 max-w-7xl mx-auto pb-20">
+<!-- Agent: Agent Sidebar -->
+<?php $activePage = 'dashboard'; require __DIR__ . '/partials/agent_sidebar.php'; ?>
 <?php endif; ?>
+<main class="ml-60 pt-8 pb-20 px-10">
 
   <!-- Header -->
   <div class="mb-8">
@@ -217,9 +207,13 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <span class="material-symbols-outlined text-primary group-hover:text-white">history</span>
             <span class="font-bold text-sm">My Attendance</span>
           </a>
-          <a href="#" class="flex items-center gap-4 p-3 rounded-xl bg-surface-container-low opacity-50 cursor-not-allowed">
-            <span class="material-symbols-outlined text-primary">payments</span>
-            <span class="font-bold text-sm">Transactions <span class="text-[10px] text-on-surface-variant">(Coming Soon)</span></span>
+          <a href="/transactions" class="flex items-center gap-4 p-3 rounded-xl bg-surface-container-low hover:bg-primary hover:text-white transition-all group">
+            <span class="material-symbols-outlined text-primary group-hover:text-white">payments</span>
+            <span class="font-bold text-sm">My Transactions</span>
+          </a>
+          <a href="/acceptance" class="flex items-center gap-4 p-3 rounded-xl bg-surface-container-low hover:bg-primary hover:text-white transition-all group">
+            <span class="material-symbols-outlined text-primary group-hover:text-white">verified</span>
+            <span class="font-bold text-sm">Acceptance</span>
           </a>
           <?php if ($isAdmin): ?>
           <a href="/attendance/admin" class="flex items-center gap-4 p-3 rounded-xl bg-blue-50 hover:bg-primary hover:text-white transition-all group">
@@ -241,9 +235,6 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
   </div>
 
 </main>
-
-<!-- ATTENDANCE WIDGET PARTIAL -->
-<?php include __DIR__ . '/partials/attendance_widget.php'; ?>
 
 </body>
 </html>

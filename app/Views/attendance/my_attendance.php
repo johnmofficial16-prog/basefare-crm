@@ -33,20 +33,13 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
 <?php if (in_array($role, ['admin', 'manager'])): ?>
   <!-- Shared Admin Sidebar -->
-  <?php $activePage = 'dashboard'; require __DIR__ . '/../partials/admin_sidebar.php'; ?>
+  <?php $activePage = 'attendance'; require __DIR__ . '/../partials/admin_sidebar.php'; ?>
 <?php else: ?>
-  <!-- Top Bar for Agents -->
-  <nav class="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md flex items-center justify-between px-8 py-4 shadow-sm shadow-blue-900/5">
-    <span class="text-xl font-extrabold text-primary tracking-tighter font-headline">Base Fare CRM</span>
-    <span class="text-lg font-headline font-bold text-on-surface">My Attendance</span>
-    <div class="flex items-center gap-4">
-      <span class="text-sm font-semibold text-on-surface-variant"><?= htmlspecialchars($userName) ?></span>
-      <a href="/logout" class="text-sm font-bold text-on-surface-variant hover:text-red-600 transition-all">Sign Out</a>
-    </div>
-  </nav>
+  <!-- Agent Sidebar -->
+  <?php $activePage = 'attendance'; require __DIR__ . '/../partials/agent_sidebar.php'; ?>
 <?php endif; ?>
 
-<main class="<?= in_array($role, ['admin', 'manager']) ? 'ml-60 pt-8' : 'pt-24' ?> pb-20 px-8 max-w-6xl mx-auto">
+<main class="ml-60 pt-8 pb-20 px-8 max-w-6xl">
 
   <!-- Back Link -->
   <a href="/dashboard" class="text-sm text-primary font-semibold hover:underline mb-6 inline-block">← Back to Dashboard</a>
@@ -133,7 +126,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 </main>
 
 <!-- ATTENDANCE WIDGET PARTIAL -->
-<?php include __DIR__ . '/../partials/attendance_widget.php'; ?>
+
 
 </body>
 </html>
