@@ -114,6 +114,7 @@
 
 <!-- Form -->
 <form class="space-y-6" method="POST" action="/login">
+  <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
 <!-- Email Field -->
 <div class="space-y-2">
 <label class="text-xs font-semibold text-on-surface-variant uppercase tracking-widest pl-1" for="email">Email Address</label>

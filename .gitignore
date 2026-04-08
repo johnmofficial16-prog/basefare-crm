@@ -38,3 +38,16 @@ tests/_support/_generated/
 
 # Local-only bootstrap script (contains plain-text default credentials)
 setup.php
+
+# Composer binary (3MB — use composer install on server instead)
+composer.phar
+
+# Local-only debug / migration scripts (must NOT be deployed)
+run_migration.php
+create_test_user.php
+check_sessions.php
+check_sessions2.php
+test_autofill.php
+add_updated_at.php
+update_acceptances.php
+update_mco_col.php

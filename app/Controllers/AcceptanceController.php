@@ -37,7 +37,7 @@ class AcceptanceController
     public function index(Request $request, Response $response): Response
     {
         $userId   = $_SESSION['user_id'];
-        $userRole = $_SESSION['user_role'] ?? 'agent';
+        $userRole = $_SESSION['role'] ?? 'agent';
         $params   = $request->getQueryParams();
 
         $page    = max(1, (int)($params['page'] ?? 1));
@@ -173,7 +173,7 @@ class AcceptanceController
     {
         $id         = (int)($args['id'] ?? 0);
         $userId     = $_SESSION['user_id'];
-        $userRole   = $_SESSION['user_role'] ?? 'agent';
+        $userRole   = $_SESSION['role'] ?? 'agent';
 
         $acceptance = AcceptanceRequest::with('agent')->find($id);
 
@@ -213,7 +213,7 @@ class AcceptanceController
     {
         $id         = (int)($args['id'] ?? 0);
         $userId     = $_SESSION['user_id'];
-        $userRole   = $_SESSION['user_role'] ?? 'agent';
+        $userRole   = $_SESSION['role'] ?? 'agent';
 
         $acceptance = AcceptanceRequest::find($id);
 

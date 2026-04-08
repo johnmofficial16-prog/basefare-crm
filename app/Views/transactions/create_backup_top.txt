@@ -1,0 +1,590 @@
+﻿<?php
+/**
+ * Transaction Recorder â€” Create Form
+ * Smart single-page form with type-driven field visibility.
+ * Speed-optimized for 30-50 transactions/day.
+ *
+ * @var array|null $prefill         Pre-fill data from Acceptance autofill
+ * @var array      $autofillOptions Approved acceptance requests for import dropdown
+ * @var string|null $flashError     Flash error
+ * @var string|null $flashSuccess   Flash success
+ */
+
+use App\Models\Transaction;
+
+$prefill       = $prefill ?? null;
+$autofillOptions = $autofillOptions ?? [];
+$flashError    = $flashError ?? null;
+$flashSuccess  = $flashSuccess ?? null;
+$isAdmin       = in_array($_SESSION['role'] ?? 'agent', ['admin', 'manager']);
+
+// Pre-fill helpers
+$pre = [
+    'acceptance_id'   => $prefill['acceptance_id'] ?? '',
+    'type'            => $prefill['type'] ?? '',
+    'customer_name'   => htmlspecialchars($prefill['customer_name'] ?? ''),
+    'customer_email'  => htmlspecialchars($prefill['customer_email'] ?? ''),
+    'customer_phone'  => htmlspecialchars($prefill['customer_phone'] ?? ''),
+    'pnr'             => htmlspecialchars(strtoupper($prefill['pnr'] ?? '')),
+    'airline'         => htmlspecialchars($prefill['airline'] ?? ''),
+    'order_id'        => htmlspecialchars($prefill['order_id'] ?? ''),
+    'total_amount'    => $prefill['total_amount'] ?? '',
+    'currency'        => $prefill['currency'] ?? 'USD',
+    'card_type'       => htmlspecialchars($prefill['card_type'] ?? ''),
+    'cardholder_name' => htmlspecialchars($prefill['cardholder_name'] ?? ''),
+    'card_last_4'     => htmlspecialchars($prefill['card_last_4'] ?? ''),
+    'billing_address' => htmlspecialchars($prefill['billing_address'] ?? ''),
+    'passengers'      => $prefill['passengers'] ?? [],
+    'flight_data'     => $prefill['flight_data'] ?? null,
+    'fare_breakdown'  => $prefill['fare_breakdown'] ?? [],
+];
+
+// Type card definitions
+$typeCards = [
+    ['value' => 'new_booking',     'label' => 'New Booking',              'sub' => 'New flight ticket purchase',          'icon' => 'flight_takeoff',            'color' => 'blue'],
+    ['value' => 'exchange',        'label' => 'Exchange / Date Change',   'sub' => 'Flight change or date swap',          'icon' => 'swap_horiz',                'color' => 'violet'],
+    ['value' => 'cancel_refund',   'label' => 'Cancellation & Refund',    'sub' => 'Cancellation with refund to card',    'icon' => 'money_off',                 'color' => 'rose'],
+    ['value' => 'cancel_credit',   'label' => 'Cancellation & Credit',    'sub' => 'Cancellation with future credit',     'icon' => 'savings',                   'color' => 'orange'],
+    ['value' => 'seat_purchase',   'label' => 'Seat Purchase',            'sub' => 'Seat selection or upgrade fee',        'icon' => 'airline_seat_recline_extra', 'color' => 'cyan'],
+    ['value' => 'cabin_upgrade',   'label' => 'Cabin Upgrade',            'sub' => 'Upgrade from economy to business etc','icon' => 'upgrade',                   'color' => 'emerald'],
+    ['value' => 'name_correction', 'label' => 'Name Correction',          'sub' => 'Passenger name correction',           'icon' => 'edit',                      'color' => 'amber'],
+    ['value' => 'other',           'label' => 'Other',                    'sub' => 'Miscellaneous charges & fees',        'icon' => 'more_horiz',                'color' => 'gray'],
+];
+$activePage = 'transactions';
+?>
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Record Transaction - Base Fare CRM</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script>
+tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","primary-container":"#314a8d",background:"#f8f9fa",surface:"#f8f9fa","surface-container":"#edeeef","surface-container-low":"#f3f4f5","on-surface":"#191c1d","on-surface-variant":"#434653"},fontFamily:{headline:["Manrope"],body:["Inter"],label:["Inter"]}}}}
+</script>
+<style>
+.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
+.type-card{transition:all .2s ease}
+.type-card:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(0,0,0,.12)}
+.type-card.selected{ring:3px;transform:translateY(-2px)}
+.section-card{transition:all .3s ease}
+.field-input{@apply w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all}
+.field-label{@apply block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5}
+.field-required{@apply text-rose-500}
+/* Type-specific sections - hidden by default */
+.type-section{display:none}
+.type-section.active{display:block}
+</style>
+</head>
+<body class="bg-background font-body text-on-surface antialiased min-h-screen">
+
+<?php require __DIR__ . '/../partials/admin_sidebar.php'; ?>
+
+<main class="<?= $isAdmin ? 'ml-60' : '' ?> pt-6 pb-20 px-8">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-headline font-extrabold text-primary tracking-tight flex items-center gap-2">
+        <span class="material-symbols-outlined text-2xl">add_card</span>
+        Record Transaction
+      </h1>
+      <p class="text-sm text-on-surface-variant mt-0.5">Fill in the details below. All fields marked <span class="text-rose-500 font-bold">*</span> are required.</p>
+    </div>
+    <a href="/transactions" class="inline-flex items-center gap-1.5 text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors">
+      <span class="material-symbols-outlined text-sm">arrow_back</span> Back to List
+    </a>
+  </div>
+
+  <!-- Flash Messages -->
+  <?php if ($flashError): ?>
+  <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm font-semibold text-red-700 flex items-center gap-2">
+    <span class="material-symbols-outlined text-base">error</span>
+    <?= htmlspecialchars($flashError) ?>
+  </div>
+  <?php endif; ?>
+  <?php if ($flashSuccess): ?>
+  <div class="mb-4 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm font-semibold text-emerald-700 flex items-center gap-2">
+    <span class="material-symbols-outlined text-base">check_circle</span>
+    <?= htmlspecialchars($flashSuccess) ?>
+  </div>
+  <?php endif; ?>
+
+  <!-- Import from Acceptance -->
+  <?php if (!empty($autofillOptions)): ?>
+  <div class="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
+    <div class="flex items-center gap-3">
+      <span class="material-symbols-outlined text-blue-600">magic_button</span>
+      <div class="flex-1">
+        <p class="text-sm font-bold text-blue-900">Import from Approved Acceptance</p>
+        <p class="text-xs text-blue-700">Auto-fill customer, PNR, passengers, and payment info from a signed acceptance receipt.</p>
+      </div>
+      <select id="acceptance_import_select" onchange="importAcceptance(this.value)"
+        class="text-sm border border-blue-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 min-w-[280px]">
+        <option value="">Select an acceptance...</option>
+        <?php foreach ($autofillOptions as $opt): ?>
+        <option value="<?= $opt['id'] ?>"><?= htmlspecialchars($opt['label']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+  </div>
+  <?php endif; ?>
+
+  <form id="txnForm" method="POST" action="/transactions/create" class="space-y-6">
+    <?php if ($pre['acceptance_id']): ?>
+    <input type="hidden" name="acceptance_id" value="<?= (int)$pre['acceptance_id'] ?>">
+    <?php endif; ?>
+
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <!-- SECTION 1: Transaction Type -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+        <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">
+          <span class="material-symbols-outlined text-base align-text-bottom mr-1">category</span>
+          Transaction Type <span class="text-rose-500">*</span>
+        </h2>
+      </div>
+      <div class="p-6">
+        <input type="hidden" name="type" id="field_type" value="<?= $pre['type'] ?>" required>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <?php foreach ($typeCards as $tc): ?>
+          <div onclick="selectType('<?= $tc['value'] ?>')"
+               class="type-card cursor-pointer rounded-xl border-2 p-4 text-center
+               <?= $pre['type'] === $tc['value']
+                   ? 'border-' . $tc['color'] . '-500 bg-' . $tc['color'] . '-50 ring-2 ring-' . $tc['color'] . '-300 selected'
+                   : 'border-slate-200 hover:border-' . $tc['color'] . '-300 bg-white' ?>"
+               data-type="<?= $tc['value'] ?>">
+            <span class="material-symbols-outlined text-2xl text-<?= $tc['color'] ?>-500 mb-2"><?= $tc['icon'] ?></span>
+            <p class="text-xs font-bold text-slate-900"><?= $tc['label'] ?></p>
+            <p class="text-[10px] text-slate-500 mt-0.5"><?= $tc['sub'] ?></p>
+          </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    </div>
+
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <!-- SECTION 2: Customer & Booking Details -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+        <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">
+          <span class="material-symbols-outlined text-base align-text-bottom mr-1">person</span>
+          Customer & Booking
+        </h2>
+      </div>
+      <div class="p-6 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="field-label">Customer Name <span class="field-required">*</span></label>
+            <input type="text" name="customer_name" id="field_customer_name" required
+              value="<?= $pre['customer_name'] ?>" placeholder="Full Name"
+              class="field-input">
+          </div>
+          <div>
+            <label class="field-label">Email <span class="field-required">*</span></label>
+            <input type="email" name="customer_email" id="field_customer_email" required
+              value="<?= $pre['customer_email'] ?>" placeholder="email@example.com"
+              class="field-input">
+          </div>
+          <div>
+            <label class="field-label">Phone</label>
+            <input type="text" name="customer_phone" id="field_customer_phone"
+              value="<?= $pre['customer_phone'] ?>" placeholder="+1 234 567 8900"
+              class="field-input">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div>
+            <label class="field-label">PNR <span class="field-required">*</span></label>
+            <input type="text" name="pnr" id="field_pnr" required maxlength="20"
+              value="<?= $pre['pnr'] ?>" placeholder="ABC123"
+              class="field-input font-mono font-bold tracking-wider uppercase">
+          </div>
+          <div>
+            <label class="field-label">Airline</label>
+            <input type="text" name="airline" id="field_airline"
+              value="<?= $pre['airline'] ?>" placeholder="e.g. Air Canada"
+              class="field-input">
+          </div>
+          <div>
+            <label class="field-label">Order ID</label>
+            <input type="text" name="order_id" id="field_order_id"
+              value="<?= $pre['order_id'] ?>" placeholder="Internal ref"
+              class="field-input">
+          </div>
+          <div>
+            <label class="field-label">Currency</label>
+            <select name="currency" id="field_currency" class="field-input">
+              <?php foreach (['USD','CAD','GBP','EUR','INR'] as $cur): ?>
+              <option value="<?= $cur ?>" <?= ($pre['currency'] ?? 'USD') === $cur ? 'selected' : '' ?>><?= $cur ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+        </div>
+        <!-- Travel Dates -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="field-label">Travel Date</label>
+            <input type="date" name="travel_date" id="field_travel_date" class="field-input">
+          </div>
+          <div>
+            <label class="field-label">Departure Time</label>
+            <input type="time" name="departure_time" id="field_departure_time" class="field-input">
+          </div>
+          <div>
+            <label class="field-label">Return Date</label>
+            <input type="date" name="return_date" id="field_return_date" class="field-input">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <!-- SECTION 3: Passengers -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+        <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">
+          <span class="material-symbols-outlined text-base align-text-bottom mr-1">groups</span>
+          Passengers <span class="text-rose-500">*</span>
+        </h2>
+        <button type="button" onclick="paxMgr.add()"
+          class="inline-flex items-center gap-1 text-xs text-primary font-semibold hover:text-primary/70 transition-colors">
+          <span class="material-symbols-outlined text-sm">add_circle</span> Add Passenger
+        </button>
+      </div>
+      <div class="p-6">
+        <div id="pax-list" class="space-y-3"></div>
+        <input type="hidden" name="passengers_json" id="passengers_json">
+      </div>
+    </div>
+
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <!-- SECTION 4: Flight Itinerary (GDS Parser + Manual) -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden" id="section_flights">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+        <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">
+          <span class="material-symbols-outlined text-base align-text-bottom mr-1">connecting_airports</span>
+          Flight Itinerary
+        </h2>
+        <div class="flex items-center gap-3">
+          <button type="button" onclick="toggleGdsParser()" id="btn_gds_toggle"
+            class="inline-flex items-center gap-1 text-xs text-violet-600 font-semibold hover:text-violet-500 transition-colors">
+            <span class="material-symbols-outlined text-sm">terminal</span> Paste GDS
+          </button>
+          <button type="button" onclick="flightMgr.add()"
+            class="inline-flex items-center gap-1 text-xs text-primary font-semibold hover:text-primary/70 transition-colors">
+            <span class="material-symbols-outlined text-sm">add_circle</span> Add Segment
+          </button>
+        </div>
+      </div>
+      <div class="p-6 space-y-4">
+        <!-- GDS Parser (hidden by default) -->
+        <div id="gds_parser_box" class="hidden">
+          <div class="bg-violet-50 border border-violet-200 rounded-xl p-4">
+            <label class="field-label text-violet-600">Paste GDS Itinerary (Amadeus / Sabre / Galileo)</label>
+            <textarea id="gds_input" rows="4" placeholder="Paste your GDS output here..."
+              class="w-full border border-violet-200 rounded-lg px-3 py-2 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"></textarea>
+            <button type="button" onclick="parseGds()"
+              class="mt-2 px-4 py-1.5 bg-violet-600 text-white text-xs font-bold rounded-lg hover:bg-violet-500 transition-colors">
+              Parse Itinerary
+            </button>
+          </div>
+        </div>
+        <!-- Flight segments list -->
+        <div id="flight-list" class="space-y-2"></div>
+        <input type="hidden" name="flight_data_json" id="flight_data_json">
+      </div>
+    </div>
+
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <!-- SECTION 5: Type-Specific Fields -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden" id="section_type_specific">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+        <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;" id="type_specific_title">
+          <span class="material-symbols-outlined text-base align-text-bottom mr-1">tune</span>
+          Type-Specific Details
+        </h2>
+      </div>
+      <div class="p-6 space-y-4">
+        <!-- Exchange fields -->
+        <div class="type-section" data-for="exchange">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label class="field-label">Old PNR</label>
+              <input type="text" data-field="old_pnr" class="field-input font-mono uppercase" placeholder="Old PNR">
+            </div>
+            <div>
+              <label class="field-label">Fare Difference</label>
+              <input type="number" step="0.01" data-field="fare_diff" class="field-input" placeholder="0.00">
+            </div>
+            <div>
+              <label class="field-label">Exchange Penalty</label>
+              <input type="number" step="0.01" data-field="penalty" class="field-input" placeholder="0.00">
+            </div>
+          </div>
+        </div>
+
+        <!-- Seat Purchase fields -->
+        <div class="type-section" data-for="seat_purchase">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="field-label">Seat Numbers</label>
+              <input type="text" data-field="seats" class="field-input" placeholder="e.g. 12A, 12B">
+            </div>
+            <div>
+              <label class="field-label">Per-Seat Cost</label>
+              <input type="number" step="0.01" data-field="per_seat_cost" class="field-input" placeholder="0.00">
+            </div>
+          </div>
+        </div>
+
+        <!-- Cabin Upgrade fields -->
+        <div class="type-section" data-for="cabin_upgrade">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label class="field-label">Old Cabin</label>
+              <select data-field="old_cabin" class="field-input">
+                <option value="">Select</option>
+                <option>Economy</option><option>Premium Economy</option><option>Business</option><option>First</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">New Cabin</label>
+              <select data-field="new_cabin" class="field-input">
+                <option value="">Select</option>
+                <option>Economy</option><option>Premium Economy</option><option>Business</option><option>First</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">Upgrade Cost</label>
+              <input type="number" step="0.01" data-field="upgrade_cost" class="field-input" placeholder="0.00">
+            </div>
+          </div>
+        </div>
+
+        <!-- Cancel/Refund fields -->
+        <div class="type-section" data-for="cancel_refund">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label class="field-label">Cancel Fee</label>
+              <input type="number" step="0.01" data-field="cancel_fee" class="field-input" placeholder="0.00">
+            </div>
+            <div>
+              <label class="field-label">Refund Amount</label>
+              <input type="number" step="0.01" data-field="refund_amount" class="field-input" placeholder="0.00">
+            </div>
+            <div>
+              <label class="field-label">Refund Method</label>
+              <select data-field="refund_method" class="field-input">
+                <option value="">Select</option>
+                <option>Back to Card</option><option>Bank Transfer</option><option>Cheque</option><option>Credit Shell</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cancel/Credit fields -->
+        <div class="type-section" data-for="cancel_credit">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label class="field-label">Credit Amount</label>
+              <input type="number" step="0.01" data-field="credit_amount" class="field-input" placeholder="0.00">
+            </div>
+            <div>
+              <label class="field-label">Credit Expiry</label>
+              <input type="date" data-field="credit_expiry" class="field-input">
+            </div>
+            <div>
+              <label class="field-label">Airline Credit Code</label>
+              <input type="text" data-field="airline_credit_code" class="field-input font-mono uppercase" placeholder="e.g. AC-CRD-123456">
+            </div>
+          </div>
+        </div>
+
+        <!-- Name Correction fields -->
+        <div class="type-section" data-for="name_correction">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label class="field-label">Old Name</label>
+              <input type="text" data-field="old_name" class="field-input" placeholder="As originally booked">
+            </div>
+            <div>
+              <label class="field-label">New Name</label>
+              <input type="text" data-field="new_name" class="field-input" placeholder="Corrected name">
+            </div>
+            <div>
+              <label class="field-label">Correction Fee</label>
+              <input type="number" step="0.01" data-field="correction_fee" class="field-input" placeholder="0.00">
+            </div>
+          </div>
+        </div>
+
+        <!-- Other fields -->
+        <div class="type-section" data-for="other">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="field-label">Category</label>
+              <input type="text" data-field="category" class="field-input" placeholder="e.g. Insurance, Visa Fee">
+            </div>
+            <div>
+              <label class="field-label">Description</label>
+              <input type="text" data-field="description" class="field-input" placeholder="Brief description">
+            </div>
+          </div>
+        </div>
+
+        <!-- Placeholder for new_booking (no extra fields â€” main form covers it) -->
+        <div class="type-section" data-for="new_booking">
+          <p class="text-xs text-slate-400 italic">All details are captured in the sections above and below.</p>
+        </div>
+
+        <input type="hidden" name="type_specific_data_json" id="type_specific_data_json">
+      </div>
+    </div>
+
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <!-- SECTION 6: Payment Details (Full Card Entry) -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+        <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">
+          <span class="material-symbols-outlined text-base align-text-bottom mr-1">credit_card</span>
+          Payment Details
+        </h2>
+      </div>
+      <div class="p-6 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="field-label">Payment Method <span class="field-required">*</span></label>
+            <select name="payment_method" id="field_payment_method" class="field-input">
+              <option value="credit_card">Credit Card</option>
+              <option value="debit_card">Debit Card</option>
+              <option value="bank_transfer">Bank Transfer</option>
+              <option value="cash">Cash</option>
+              <option value="credit_shell">Credit Shell</option>
+              <option value="cheque">Cheque</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Payment Status <span class="field-required">*</span></label>
+            <select name="payment_status" id="field_payment_status" class="field-input">
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+              <option value="partial">Partial</option>
+              <option value="refunded">Refunded</option>
+              <option value="credited">Credited</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Primary Card -->
+        <div id="card_entry_section">
+          <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">Primary Card</p>
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div>
+              <label class="field-label">Card Type</label>
+              <select name="primary_card_type" id="field_primary_card_type" class="field-input">
+                <option value="">-- Select --</option>
+                <option <?= $pre['card_type'] === 'Visa' ? 'selected' : '' ?>>Visa</option>
+                <option <?= $pre['card_type'] === 'Mastercard' ? 'selected' : '' ?>>Mastercard</option>
+                <option <?= $pre['card_type'] === 'Amex' ? 'selected' : '' ?>>Amex</option>
+                <option <?= $pre['card_type'] === 'Discover' ? 'selected' : '' ?>>Discover</option>
+                <option <?= $pre['card_type'] === 'UnionPay' ? 'selected' : '' ?>>UnionPay</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">Card Number</label>
+              <input type="text" name="primary_card_number" id="field_primary_card_number"
+                maxlength="19" placeholder="â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢"
+                class="field-input font-mono tracking-widest">
+            </div>
+            <div>
+              <label class="field-label">Expiry (MM/YYYY)</label>
+              <input type="text" name="primary_card_expiry" id="field_primary_card_expiry"
+                maxlength="7" placeholder="MM/YYYY"
+                class="field-input font-mono">
+            </div>
+            <div>
+              <label class="field-label">CVV</label>
+              <input type="password" name="primary_card_cvv" id="field_primary_card_cvv"
+                maxlength="4" placeholder="â€¢â€¢â€¢"
+                class="field-input font-mono tracking-widest w-24">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+            <div>
+              <label class="field-label">Cardholder Name</label>
+              <input type="text" name="primary_cardholder_name" id="field_primary_cardholder_name"
+                value="<?= $pre['cardholder_name'] ?>" placeholder="As it appears on card"
+                class="field-input">
+            </div>
+            <div>
+              <label class="field-label">Amount Charged</label>
+              <input type="number" step="0.01" name="primary_card_amount" id="field_primary_card_amount"
+                placeholder="0.00" class="field-input">
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="field-label">Billing Address</label>
+            <textarea name="primary_billing_address" id="field_primary_billing_address" rows="2"
+              placeholder="123 Main St, City, Province/State, Postal Code, Country"
+              class="field-input resize-none w-full"><?= $pre['billing_address'] ?></textarea>
+          </div>
+        </div>
+
+        <!-- Additional Cards (Split Charge) -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="field-label mb-0">Additional Cards (Split Charge)</label>
+            <button type="button" onclick="cardMgr.add()"
+              class="inline-flex items-center gap-1 text-xs text-primary font-semibold hover:text-primary/70 transition-colors">
+              <span class="material-symbols-outlined text-sm">add_circle</span> Add Card
+            </button>
+          </div>
+          <div id="additional-cards" class="space-y-3"></div>
+          <input type="hidden" name="additional_cards_json" id="additional_cards_json">
+        </div>
+      </div>
+    </div>
+
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <!-- SECTION 7: Fare Breakdown & Profit / MCO -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+        <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">
+          <span class="material-symbols-outlined text-base align-text-bottom mr-1">receipt_long</span>
+          Fare & Profit / MCO
+        </h2>
+        <button type="button" onclick="fareMgr.addRow()"
+          class="inline-flex items-center gap-1 text-xs text-primary font-semibold hover:text-primary/70 transition-colors">
+          <span class="material-symbols-outlined text-sm">add_circle</span> Add Line
+        </button>
+      </div>
+      <div class="p-6 space-y-4">
+        <!-- Fare breakdown rows -->
+        <div id="fare-rows" class="space-y-2"></div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+          <div>
+            <label class="field-label">Total Amount <span class="field-required">*</span></label>
+            <input type="number" step="0.01" name="total_amount" id="field_total_amount" required
+              value="<?= $pre['total_amount'] ?>" placeholder="0.00"
+              class="field-input font-mono font-bold text-lg" oninput="calcMco()">
+          </div>
+          <div>
+            <label class="field-label">Cost Amount</label>
+            <input type="number" step="0.01" name="cost_amount" id="field_cost_amount"
+              placeholder="0.00"
+              class="field-input font-mono" oninput="calcMco()">
+          </div>
+          <div>
+            <label class="field-label">Profit / MCO</label>

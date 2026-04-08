@@ -11,11 +11,12 @@ $navItems = [
     ['href' => '/dashboard',               'icon' => 'dashboard',      'label' => 'Dashboard',        'key' => 'dashboard'],
     ['href' => '/attendance/admin',         'icon' => 'groups',         'label' => 'Live Board',       'key' => 'attendance'],
     ['href' => '/attendance/admin/history', 'icon' => 'history',        'label' => 'History',          'key' => 'history'],
-    ['href' => '/shifts/week',             'icon' => 'calendar_month', 'label' => 'Shift Schedule',   'key' => 'shifts'],
+        ['href' => '/shifts/week',             'icon' => 'calendar_month', 'label' => 'Shift Schedule',   'key' => 'shifts'],
     ['href' => '/acceptance',              'icon' => 'verified',       'label' => 'Acceptance',       'key' => 'acceptance'],
-    ['href' => '#',                        'icon' => 'payments',       'label' => 'Transactions',     'key' => 'transactions', 'disabled' => true],
+    ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',     'key' => 'transactions'],
+    ['href' => '/users',                   'icon' => 'manage_accounts','label' => 'Users',            'key' => 'users'],
     ['href' => '#',                        'icon' => 'receipt_long',   'label' => 'Payroll',          'key' => 'payroll',      'disabled' => true],
-    ['href' => '#',                        'icon' => 'settings',       'label' => 'Settings',         'key' => 'settings',     'disabled' => true],
+    ['href' => '/admin/settings',          'icon' => 'settings',       'label' => 'Settings',         'key' => 'settings'],
 ];
 ?>
 <aside class="fixed left-0 top-0 h-full w-60 bg-white border-r border-gray-100 flex flex-col z-30 shadow-sm">

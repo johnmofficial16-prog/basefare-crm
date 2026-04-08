@@ -30,7 +30,7 @@ class AuthController
     }
 
     /**
-     * Process the login form submission
+     * Process the login form submission with rate limiting
      */
     public function processLogin(Request $request, Response $response): Response
     {
@@ -38,21 +38,37 @@ class AuthController
         $email = $parsedBody['email'] ?? '';
         $password = $parsedBody['password'] ?? '';
 
+        // -----------------------------------------------------------------
+        // Rate limiting – check if this IP is currently locked out
+        // -----------------------------------------------------------------
+        $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        $attempt = \App\Models\LoginAttempt::forIp($ip);
+        if ($attempt && $attempt->isLockedOut()) {
+            // Too many attempts – inform the user and abort login
+            $minutes = $attempt->minutesRemaining();
+            $_SESSION['login_error'] = "Too many login attempts. Please try again in {$minutes} minute(s).";
+            return $response->withHeader('Location', '/login')->withStatus(302);
+        }
+
         $user = \App\Models\User::where('email', $email)->where('status', 'active')->first();
 
         // Check against secure Bcrypt password hash
         if ($user && password_verify($password, $user->password_hash)) {
+            // Successful login – reset any failure counters for this IP
+            \App\Models\LoginAttempt::clearFor($ip);
+
             // Regenerate session ID to prevent fixation payload injections
             session_regenerate_id(true);
 
             $_SESSION['user_id'] = $user->id;
             $_SESSION['role'] = $user->role;
             $_SESSION['user_name'] = $user->name;
-            
+
             return $response->withHeader('Location', '/dashboard')->withStatus(302);
         }
 
-        // Failure
+        // Failure – record the attempt
+        \App\Models\LoginAttempt::recordFailure($ip, $email);
         $_SESSION['login_error'] = 'Invalid email or password.';
         return $response->withHeader('Location', '/login')->withStatus(302);
     }

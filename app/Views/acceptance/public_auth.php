@@ -170,6 +170,7 @@ $error = $_GET['error'] ?? null;
       <?php endif; ?>
 
       <form id="authForm" method="POST" action="/auth" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
         <input type="hidden" name="token" value="<?= $token ?>">
         <input type="hidden" name="device_fingerprint" id="deviceFingerprint" value="">
         <input type="hidden" name="signature_data" id="signatureData" value="">

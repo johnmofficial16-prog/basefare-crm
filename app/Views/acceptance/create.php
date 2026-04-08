@@ -88,8 +88,8 @@ tailwind.config = {
 
 <?php require __DIR__ . '/../layout/sidebar.php'; ?>
 
-<div class="ml-64 min-h-screen">
-<div class="max-w-5xl mx-auto px-6 py-8 space-y-6">
+<div class="ml-60 min-h-screen">
+<div class="max-w-7xl mx-auto px-6 py-8 space-y-6">
 
   <!-- Flash Error -->
   <?php if ($flashError): ?>
@@ -146,6 +146,7 @@ tailwind.config = {
 
   <!-- MAIN FORM -->
   <form id="acceptanceForm" method="POST" action="/acceptance/create" novalidate>
+    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
   <?php if ($pre['transaction_id']): ?>
   <input type="hidden" name="transaction_id" value="<?= $pre['transaction_id'] ?>">
   <?php endif; ?>
@@ -157,10 +158,10 @@ tailwind.config = {
   <input type="hidden" name="extra_data_json"        id="hidExtraData"       value="null">
   <input type="hidden" name="additional_cards_json"  id="hidAdditionalCards" value="null">
 
-  <div class="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-6 items-start">
+  <div style="display:grid; grid-template-columns:1fr 300px; gap:1.5rem; align-items:start;">
 
     <!-- LEFT: Steps Column -->
-    <div>
+    <div style="min-width:0;">
 
       <!-- ═══════════════════════════════════════════════════════════════ -->
       <!-- STEP 1: Request Type                                            -->
@@ -190,6 +191,26 @@ tailwind.config = {
               </div>
             </label>
             <?php endforeach; ?>
+          </div>
+
+          <!-- ── Other type description ─────────── -->
+          <div id="section-other-desc" class="hidden mt-6 mx-6 mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <h3 class="text-amber-900 font-bold text-sm flex items-center gap-1.5 mb-3">
+              <span class="material-symbols-outlined text-lg">description</span>
+              Charge Description <span class="text-[10px] bg-amber-100 px-2 py-0.5 rounded-full ml-1">Required for Other</span>
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[10px] font-bold text-amber-900 uppercase mb-1">Charge Title *</label>
+                <input type="text" id="field_other_title" placeholder="e.g. Airport transfer fee..."
+                       class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 bg-white">
+                <p class="text-[10px] text-amber-700 mt-1">A short title describing the charge.</p>
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-amber-900 uppercase mb-1">Additional Notes</label>
+                <textarea id="field_other_notes" rows="2" class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 bg-white resize-none"></textarea>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -469,11 +490,38 @@ tailwind.config = {
           <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
             <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">Authorization Details</h2>
           </div>
-          <div class="p-6">
-            <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Description / Details</label>
-            <textarea id="other-desc" rows="4" placeholder="Describe the service/charge being authorized..."
-              class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 resize-none focus:outline-none focus:ring-2 focus:ring-primary-600"
-              oninput="syncExtraData()"></textarea>
+          <div class="p-6 space-y-4">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Description / Details</label>
+              <textarea id="other-desc" rows="4" placeholder="Describe the service/charge being authorized..."
+                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 resize-none focus:outline-none focus:ring-2 focus:ring-primary-600"
+                oninput="syncExtraData()"></textarea>
+            </div>
+
+            <!-- Optional Flight Panel for Other -->
+            <div class="border border-slate-200 rounded-lg overflow-hidden">
+              <button type="button" onclick="toggleOtherFlights()"
+                class="w-full flex items-center justify-between px-4 py-3 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
+                <span class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-base text-violet-600">connecting_airports</span>
+                  Optional: Add Flight Details (GDS / Manual)
+                </span>
+                <span id="other-flights-chevron" class="material-symbols-outlined text-slate-400 transition-transform">expand_more</span>
+              </button>
+              <div id="other-flights-panel" class="hidden p-4 space-y-3 bg-white border-t border-slate-100">
+                <p class="text-xs text-slate-500">If this charge is related to a flight, paste the GDS itinerary or add segments manually.</p>
+                <label class="block text-[10px] font-bold text-violet-700 uppercase tracking-wider mb-1">Paste GDS Itinerary (Amadeus / Sabre)</label>
+                <textarea id="gds-other" rows="3" placeholder="Paste GDS output here..."
+                  class="gds-terminal w-full rounded-lg px-3 py-2.5 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  oninput="flightMgr.parse('other', this.value)"></textarea>
+                <div id="parse-status-other" class="text-xs min-h-[18px]"></div>
+                <div id="segs-other" class="space-y-2"></div>
+                <button type="button" onclick="flightMgr.addManual('other')"
+                  class="inline-flex items-center gap-1.5 text-sm text-primary-600 font-semibold hover:text-primary-500 transition-colors">
+                  <span class="material-symbols-outlined text-base">add_circle</span> Add Segment Manually
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -777,7 +825,7 @@ tailwind.config = {
     <!-- ═══════════════════════════════════════════════════════════════ -->
     <!-- RIGHT: Sticky Sidebar                                           -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <div class="space-y-4 sticky top-6">
+    <div style="position:sticky; top:24px; width:300px; display:flex; flex-direction:column; gap:1rem;">
 
       <!-- Draft Summary -->
       <div class="bg-white border border-primary-100 rounded-xl shadow-sm overflow-hidden">
@@ -871,7 +919,7 @@ tailwind.config = {
   </form><!-- /acceptanceForm -->
 
 </div><!-- /max-w -->
-</div><!-- /ml-64 -->
+</div><!-- /ml-60 -->
 
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
@@ -940,7 +988,7 @@ const state = {
   type: '',
   passengers: [],        // [{name:'', dob:'', paxType:'adult'}]
   segments: {            // group → [{airline_iata, flight_no, date, from, to, dep_time, arr_time, arr_next_day}]
-    main: [], old: [], new: []
+    main: [], old: [], new: [], other: []
   },
   fareItems: [],         // [{label:'', amount:0}]
   extraCards: []         // [{cardholder_name:'', card_last_four:'', card_type:''}]
@@ -952,7 +1000,7 @@ const state = {
 const wizard = {
   totalSteps: 5,
 
-  goTo(n) {
+  goTo: function(n) {
     if (n < 1 || n > this.totalSteps) return;
     // Hide all panels
     for (let i = 1; i <= this.totalSteps; i++) {
@@ -983,13 +1031,14 @@ const wizard = {
       }
     }
     state.step = n;
-    document.getElementById('sum-step').textContent = n + ' / ' + this.totalSteps;
+    const sumStep = document.getElementById('sum-step');
+    if (sumStep) sumStep.textContent = n + ' / ' + this.totalSteps;
     window.scrollTo({ top: 0, behavior: 'smooth' });
     // On Step 5, build preview
     if (n === 5) preview.build();
   },
 
-  next() {
+  next: function() {
     const { valid, msg } = this.validate(state.step);
     if (!valid) {
       this._showError(state.step, msg);
@@ -999,7 +1048,7 @@ const wizard = {
     this.goTo(state.step + 1);
   },
 
-  prev() {
+  prev: function() {
     this._clearError(state.step);
     this.goTo(state.step - 1);
   },
@@ -1099,11 +1148,20 @@ function selectType(type) {
   _toggleSec('sec-name-correction',nameCorrect.includes(type));
   _toggleSec('sec-cabin-upgrade',  cabinUpg.includes(type));
   _toggleSec('sec-other-info',     otherSec.includes(type));
+  _toggleSec('section-other-desc', type === 'other');
 }
 
 function _toggleSec(id, show) {
   const el = document.getElementById(id);
   if (el) el.classList.toggle('hidden', !show);
+}
+
+function toggleOtherFlights() {
+  const panel   = document.getElementById('other-flights-panel');
+  const chevron = document.getElementById('other-flights-chevron');
+  if (!panel) return;
+  const isHidden = panel.classList.toggle('hidden');
+  if (chevron) chevron.style.transform = isHidden ? '' : 'rotate(180deg)';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1112,22 +1170,26 @@ function _toggleSec(id, show) {
 const paxManager = {
   mode: 'gds',
 
-  toggleMode(m) {
+  toggleMode: function(m) {
     this.mode = m;
-    document.getElementById('pax-gds-mode').classList.toggle('hidden', m !== 'gds');
-    document.getElementById('pax-manual-mode').classList.toggle('hidden', m !== 'manual');
-    document.getElementById('btn-gds-mode').className   = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ' + (m==='gds'?'bg-primary-600 text-white':'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50');
-    document.getElementById('btn-manual-mode').className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ' + (m==='manual'?'bg-primary-600 text-white':'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50');
+    const gdsEl = document.getElementById('pax-gds-mode');
+    const manualEl = document.getElementById('pax-manual-mode');
+    const btnGds = document.getElementById('btn-gds-mode');
+    const btnManual = document.getElementById('btn-manual-mode');
+    if (gdsEl) gdsEl.classList.toggle('hidden', m !== 'gds');
+    if (manualEl) manualEl.classList.toggle('hidden', m !== 'manual');
+    if (btnGds) btnGds.className   = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ' + (m==='gds'?'bg-primary-600 text-white':'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50');
+    if (btnManual) btnManual.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ' + (m==='manual'?'bg-primary-600 text-white':'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50');
     if (m === 'manual' && state.passengers.length === 0) this.addManual();
   },
 
-  parseGDS(raw) {
+  parseGDS: function(raw) {
     const statusEl  = document.getElementById('gds-pax-status');
     const previewEl = document.getElementById('pax-preview');
     if (!raw.trim()) {
       state.passengers = [];
-      statusEl.innerHTML = '';
-      previewEl.classList.add('hidden');
+      if (statusEl) statusEl.innerHTML = '';
+      if (previewEl) previewEl.classList.add('hidden');
       this._syncCount();
       return;
     }
@@ -1135,7 +1197,7 @@ const paxManager = {
     const re = /\d+\s*\.\s*([A-Z][A-Z\-]+)\/([A-Z][A-Z\s\-]*?)(?:\s+(MR|MRS|MS|MISS|MSTR|DR|REV))?\s*(?:\((?:CHD|INF)[^)]*\))?(?:\s+INF\/\S+)?\s*$/gim;
     let m, pax = [];
     const lines = raw.split('\n');
-    lines.forEach(line => {
+    lines.forEach(function(line) {
       const ln = line.trim().replace(/\r/g,'');
       if (!ln) return;
       const match = /^\s*\d+\.?\s*([A-Z][A-Z\-]+)\/([A-Z][A-Z\s\-]*)(\s+(?:MR|MRS|MS|MISS|MSTR|DR|REV|CHD|INF))?/i.exec(ln);
@@ -1147,44 +1209,44 @@ const paxManager = {
       const isInf = /INF/i.test(title) || /INF\//i.test(ln);
       const paxType = isInf ? 'infant' : (isChd ? 'child' : 'adult');
       const name = last + '/' + first + (title && !['CHD','INF'].includes(title) ? ' ' + title : '');
-      pax.push({ name, dob: '', paxType });
+      pax.push({ name: name, dob: '', paxType: paxType });
     });
 
     if (pax.length) {
       state.passengers = pax;
-      statusEl.innerHTML = '<span class="text-emerald-600 font-semibold">✓ Parsed ' + pax.length + ' passenger' + (pax.length>1?'s':'') + '</span>';
+      if (statusEl) statusEl.innerHTML = '<span class="text-emerald-600 font-semibold">✓ Parsed ' + pax.length + ' passenger' + (pax.length>1?'s':'') + '</span>';
       this._renderPreview();
     } else {
       state.passengers = [];
-      statusEl.innerHTML = '<span class="text-rose-600">⚠ Could not parse — try: 1.SMITH/JOHN MR</span>';
-      previewEl.classList.add('hidden');
+      if (statusEl) statusEl.innerHTML = '<span class="text-rose-600">⚠ Could not parse — try: 1.SMITH/JOHN MR</span>';
+      if (previewEl) previewEl.classList.add('hidden');
     }
     this._syncCount();
   },
 
-  addManual() {
+  addManual: function() {
     state.passengers.push({ name: '', dob: '', paxType: 'adult' });
     this._renderManual();
     this._renderPreview();
     this._syncCount();
   },
 
-  removePassenger(idx) {
+  removePassenger: function(idx) {
     state.passengers.splice(idx, 1);
     this._renderManual();
     this._renderPreview();
     this._syncCount();
   },
 
-  _updatePassenger(idx, field, val) {
+  _updatePassenger: function(idx, field, val) {
     if (!state.passengers[idx]) return;
     state.passengers[idx][field] = val;
     if (field === 'name') this._renderPreview();
   },
 
-  _renderManual() {
+  _renderManual: function() {
     const el = document.getElementById('manual-pax-list');
-    el.innerHTML = state.passengers.map((p, i) => `
+    el.innerHTML = state.passengers.map(function(p, i) { return `
       <div class="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg fare-row">
         <input type="text" value="${_esc(p.name)}" placeholder="SMITH/JOHN MR"
           class="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 uppercase"
@@ -1202,25 +1264,26 @@ const paxManager = {
           class="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg transition-colors flex-none">
           <span class="material-symbols-outlined text-sm">delete</span>
         </button>
-      </div>`).join('');
+      </div>`; }).join('');
   },
 
-  _renderPreview() {
+  _renderPreview: function() {
     const previewEl  = document.getElementById('pax-preview');
     const previewList = document.getElementById('pax-preview-list');
-    const filled = state.passengers.filter(p => p.name.trim());
-    if (!filled.length) { previewEl.classList.add('hidden'); return; }
-    previewEl.classList.remove('hidden');
-    previewList.innerHTML = filled.map(p =>
-      `<span class="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-mono font-semibold">
+    const filled = state.passengers.filter(function(p) { return p.name.trim(); });
+    if (!filled.length) { if (previewEl) previewEl.classList.add('hidden'); return; }
+    if (previewEl) previewEl.classList.remove('hidden');
+    if (previewList) previewList.innerHTML = filled.map(function(p) { return `
+      <span class="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-mono font-semibold">
         <span class="material-symbols-outlined text-xs text-primary-600">person</span>${_esc(p.name)}
-      </span>`
-    ).join('');
+      </span>`;
+    }).join('');
   },
 
-  _syncCount() {
+  _syncCount: function() {
     const n = state.passengers.length;
-    document.getElementById('sum-pax').textContent = n;
+    const el = document.getElementById('sum-pax');
+    if (el) el.textContent = n;
   }
 };
 
@@ -1323,7 +1386,7 @@ const flightMgr = {
     return null;
   },
 
-  parse(group, raw) {
+  parse: function(group, raw) {
     const statusEl = document.getElementById('parse-status-' + group);
     if (!raw.trim()) {
       state.segments[group] = [];
@@ -1332,8 +1395,10 @@ const flightMgr = {
       return;
     }
     const segs = [];
-    raw.split('\n').forEach(line => {
-      const seg = this._parseOneLine(line);
+    const lines = raw.split('\n');
+    const self = this;
+    lines.forEach(function(line) {
+      const seg = self._parseOneLine(line);
       if (seg) segs.push(seg);
     });
     if (segs.length) {
@@ -1346,8 +1411,7 @@ const flightMgr = {
     this._render(group);
   },
 
-
-  addManual(group) {
+  addManual: function(group) {
     state.segments[group].push({
       airline_iata:'', flight_no:'', cabin_class:'Y', date:'', from:'', to:'',
       dep_time:'', arr_time:'', arr_next_day:false
@@ -1355,12 +1419,12 @@ const flightMgr = {
     this._render(group);
   },
 
-  removeSegment(group, idx) {
+  removeSegment: function(group, idx) {
     state.segments[group].splice(idx, 1);
     this._render(group);
   },
 
-  _updateSeg(group, idx, field, val) {
+  _updateSeg: function(group, idx, field, val) {
     if (!state.segments[group] || !state.segments[group][idx]) return;
     state.segments[group][idx][field] = val;
     if (field === 'airline_iata' && val.length === 2 && !state.segments[group][idx].flight_no) {
@@ -1368,19 +1432,18 @@ const flightMgr = {
     }
   },
 
-  _render(group) {
+  _render: function(group) {
     const el = document.getElementById('segs-' + group);
     if (!el) return;
     const segs = state.segments[group];
     if (!segs || !segs.length) { el.innerHTML = ''; return; }
 
-    // Single render pass — parsed segments get flight cards, unparsed get manual entry forms
-    // Layovers are interleaved between parsed segments
-    el.innerHTML = segs.map((seg, i) => {
+    const self = this;
+    el.innerHTML = segs.map(function(seg, i) {
       const aName  = AIRLINES[seg.airline_iata] || seg.airline_iata || '';
       const fCity  = CITIES[seg.from] || seg.from;
       const tCity  = CITIES[seg.to]   || seg.to;
-      const logoUrl= seg.airline_iata ? `https://www.gstatic.com/flights/airline_logos/35px/${seg.airline_iata}.png` : '';
+      const logoUrl= seg.airline_iata ? "https://www.gstatic.com/flights/airline_logos/35px/" + seg.airline_iata + ".png" : "";
       const parsed = !!(seg.from && seg.to && seg.dep_time);
 
       const card = parsed
@@ -1533,9 +1596,10 @@ const cardMgr = {
     if (!state.extraCards[idx]) return;
     state.extraCards[idx][field] = val;
   },
-  _render() {
+  _render: function() {
     const el = document.getElementById('additional-cards');
-    el.innerHTML = state.extraCards.map((c, i) => `
+    if (!el) return;
+    el.innerHTML = state.extraCards.map(function(c, i) { return `
       <div class="fare-row grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-end p-3 bg-slate-50 border border-slate-200 rounded-lg">
         <div>
           <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Card Type</label>
@@ -1560,7 +1624,7 @@ const cardMgr = {
           class="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg transition-colors self-end">
           <span class="material-symbols-outlined text-sm">delete</span>
         </button>
-      </div>`).join('');
+      </div>`; }).join('');
   }
 };
 
@@ -1575,35 +1639,56 @@ function syncExtraData() {
 // SUMMARY SIDEBAR SYNC
 // ─────────────────────────────────────────────────────────────────────────────
 function syncSummary() {
-  const pnr   = (document.getElementById('field_pnr')?.value || '').trim();
-  const name  = (document.getElementById('field_customer_name')?.value || '').trim();
-  const total = (document.getElementById('field_total_amount')?.value || '').trim();
-  const curr  = (document.getElementById('field_currency')?.value || 'CAD');
-  document.getElementById('sum-pnr').textContent   = pnr  || '—';
-  document.getElementById('sum-name').textContent  = name || '—';
-  document.getElementById('sum-total').textContent = total ? curr + ' ' + parseFloat(total).toLocaleString('en-CA',{minimumFractionDigits:2}) : '—';
+  const pnrEl = document.getElementById('field_pnr');
+  const nameEl = document.getElementById('field_customer_name');
+  const totalEl = document.getElementById('field_total_amount');
+  const currEl = document.getElementById('field_currency');
+  const pnr   = (pnrEl ? pnrEl.value : '').trim();
+  const name  = (nameEl ? nameEl.value : '').trim();
+  const total = (totalEl ? totalEl.value : '').trim();
+  const curr  = (currEl ? currEl.value : 'CAD');
+  const sumPnr = document.getElementById('sum-pnr');
+  const sumName = document.getElementById('sum-name');
+  const sumTotal = document.getElementById('sum-total');
+  if (sumPnr) sumPnr.textContent   = pnr  || '—';
+  if (sumName) sumName.textContent  = name || '—';
+  if (sumTotal) sumTotal.textContent = total ? curr + ' ' + parseFloat(total).toLocaleString('en-CA',{minimumFractionDigits:2}) : '—';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PREVIEW BUILDER (Step 5)
 // ─────────────────────────────────────────────────────────────────────────────
 const preview = {
-  build() {
-    const pnr    = document.getElementById('field_pnr')?.value || '—';
-    const name   = document.getElementById('field_customer_name')?.value || '—';
-    const email  = document.getElementById('field_customer_email')?.value || '—';
-    const total  = parseFloat(document.getElementById('field_total_amount')?.value) || 0;
-    const curr   = document.getElementById('field_currency')?.value || 'CAD';
-    const holder = document.getElementById('field_cardholder_name')?.value || '';
-    const last4  = document.getElementById('field_card_last_four')?.value || '';
-    const ctype  = document.getElementById('field_card_type')?.value || '';
+  build: function() {
+    const pnrEl    = document.getElementById('field_pnr');
+    const nameEl   = document.getElementById('field_customer_name');
+    const emailEl  = document.getElementById('field_customer_email');
+    const totalEl  = document.getElementById('field_total_amount');
+    const currEl   = document.getElementById('field_currency');
+    const holderEl = document.getElementById('field_cardholder_name');
+    const lastEl   = document.getElementById('field_card_last_four');
+    const typeEl   = document.getElementById('field_card_type');
+
+    const pnr    = (pnrEl ? pnrEl.value : '') || '—';
+    const name   = (nameEl ? nameEl.value : '') || '—';
+    const email  = (emailEl ? emailEl.value : '') || '—';
+    const total  = parseFloat(totalEl ? totalEl.value : '0') || 0;
+    const curr   = (currEl ? currEl.value : '') || 'CAD';
+    const holder = (holderEl ? holderEl.value : '');
+    const last4  = (lastEl ? lastEl.value : '');
+    const ctype  = (typeEl ? typeEl.value : '');
 
     // Basic info
-    document.getElementById('prev-pnr').textContent   = pnr;
-    document.getElementById('prev-name').textContent  = name;
-    document.getElementById('prev-email').textContent = email;
-    document.getElementById('prev-pax-count').textContent = state.passengers.length;
-    document.getElementById('preview-type-badge').textContent = TYPE_LABELS[state.type] || '';
+    const prevPnr = document.getElementById('prev-pnr');
+    const prevName = document.getElementById('prev-name');
+    const prevEmail = document.getElementById('prev-email');
+    const prevPaxCount = document.getElementById('prev-pax-count');
+    const prevBadge = document.getElementById('preview-type-badge');
+    if (prevPnr) prevPnr.textContent   = pnr;
+    if (prevName) prevName.textContent  = name;
+    if (prevEmail) prevEmail.textContent = email;
+    if (prevPaxCount) prevPaxCount.textContent = state.passengers.length;
+    if (prevBadge) prevBadge.textContent = TYPE_LABELS[state.type] || '';
 
     // Passengers
     const paxFilled = state.passengers.filter(p => p.name.trim());
@@ -1616,7 +1701,7 @@ const preview = {
     } else paxSec.classList.add('hidden');
 
     // Flights (combine all segment groups for preview)
-    const allSegs = [...(state.segments.main||[]), ...(state.segments.old||[]), ...(state.segments.new||[])];
+    const allSegs = [...(state.segments.main||[]), ...(state.segments.old||[]), ...(state.segments.new||[]), ...(state.segments.other||[])];
     const flightsSec = document.getElementById('prev-flights-section');
     if (allSegs.length) {
       flightsSec.classList.remove('hidden');
@@ -1691,6 +1776,9 @@ const formAssembly = {
       flightData.old_cabin = document.getElementById('cu-old-cabin')?.value || '';
       flightData.new_cabin = document.getElementById('cu-new-cabin')?.value || '';
     }
+    if (t === 'other') {
+      flightData = { flights: state.segments.other || [] };
+    }
     document.getElementById('hidFlightData').value = JSON.stringify(flightData);
 
     // 4. Fare breakdown
@@ -1703,7 +1791,8 @@ const formAssembly = {
     // 5. Extra data (other description)
     const extraData = {};
     if (t === 'other') {
-      extraData.description = (document.getElementById('other-desc')?.value || '').trim();
+      extraData.other_title = (document.getElementById('field_other_title')?.value || '').trim();
+      extraData.other_notes = (document.getElementById('field_other_notes')?.value || '').trim();
     }
     document.getElementById('hidExtraData').value = Object.keys(extraData).length ? JSON.stringify(extraData) : 'null';
 

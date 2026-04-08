@@ -101,7 +101,7 @@ tailwind.config = {
 
 <?php require __DIR__ . '/../layout/sidebar.php'; ?>
 
-<div class="ml-64 min-h-screen">
+<div class="ml-60 min-h-screen">
 <div class="max-w-5xl mx-auto px-6 py-8 space-y-5">
 
   <!-- Flash messages -->
@@ -159,6 +159,12 @@ tailwind.config = {
         class="inline-flex items-center gap-2 bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 font-semibold py-2 px-4 rounded-lg text-sm transition-colors">
         <span class="material-symbols-outlined text-base">cancel</span> Cancel
       </button>
+      <?php endif; ?>
+      <?php if ($isApproved): ?>
+      <a href="/transactions/create?autofill=<?= $acceptance->id ?>"
+        class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors shadow-sm">
+        <span class="material-symbols-outlined text-base">add_card</span> Record Transaction
+      </a>
       <?php endif; ?>
       <button onclick="window.print()"
         class="inline-flex items-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold py-2 px-3 rounded-lg text-sm transition-colors">
@@ -835,12 +841,14 @@ tailwind.config = {
   </div><!-- /grid -->
 
 </div><!-- /max-w -->
-</div><!-- /ml-64 -->
+</div><!-- /ml-60 -->
 
 <!-- Resend / Cancel hidden forms -->
 <form id="form-resend" method="POST" action="/acceptance/<?= $acceptance->id ?>/resend" class="hidden">
+  <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
 </form>
 <form id="form-cancel" method="POST" action="/acceptance/<?= $acceptance->id ?>/cancel" class="hidden">
+  <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
 </form>
 
 <script>

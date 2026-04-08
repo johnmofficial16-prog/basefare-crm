@@ -1,11 +1,16 @@
 <?php
 /**
- * Layout Sidebar — Alias for the shared admin sidebar.
+ * Layout Sidebar — Role-aware sidebar dispatcher.
  *
  * Acceptance module views (create, list, view) include this path.
- * We simply delegate to the canonical sidebar partial so there's one source of truth.
+ * Routes to agent_sidebar or admin_sidebar based on session role.
  *
  * @var string $activePage  Set by the including view before require().
  */
 $activePage = $activePage ?? 'acceptance';
-require __DIR__ . '/../partials/admin_sidebar.php';
+$_sidebarRole = $_SESSION['role'] ?? 'agent';
+if (in_array($_sidebarRole, ['admin', 'manager'])) {
+    require __DIR__ . '/../partials/admin_sidebar.php';
+} else {
+    require __DIR__ . '/../partials/agent_sidebar.php';
+}

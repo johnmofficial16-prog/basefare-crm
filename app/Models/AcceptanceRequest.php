@@ -138,10 +138,10 @@ class AcceptanceRequest extends Model
      * The linked transaction record (if created from Transaction Recorder)
      * Will be wired up when Transaction Recorder module is built.
      */
-    // public function transaction()
-    // {
-    //     return $this->belongsTo(Transaction::class, 'transaction_id');
-    // }
+    public function transaction()
+    {
+        return $this->hasOne(Transaction::class, 'acceptance_id');
+    }
 
     // =========================================================================
     // Scopes
