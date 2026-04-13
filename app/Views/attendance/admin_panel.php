@@ -277,6 +277,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 </main>
 
 <script>
+const csrfToken = '<?= $_SESSION['csrf_token'] ?? '' ?>';
 let lastPendingCount = <?= count($boardData['pending_override']) ?>;
 
 async function approveOverride(agentId) {
@@ -288,7 +289,7 @@ async function approveOverride(agentId) {
 
   const r = await fetch('/attendance/override', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers: {'Content-Type':'application/json', 'X-CSRF-Token': csrfToken},
     body: JSON.stringify({agent_id: agentId, date: '<?= $today ?>', reason: reason})
   });
   const data = await r.json();
@@ -309,7 +310,7 @@ async function denyOverride(agentId) {
 
   const r = await fetch('/attendance/deny', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers: {'Content-Type':'application/json', 'X-CSRF-Token': csrfToken},
     body: JSON.stringify({agent_id: agentId, date: '<?= $today ?>', reason: reason.trim()})
   });
   const data = await r.json();
@@ -325,7 +326,7 @@ async function adminForceEndBreak(agentId, agentName) {
   if (!confirm('Force-end break for ' + agentName + '?')) return;
   const r = await fetch('/attendance/admin/force-end-break', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers: {'Content-Type':'application/json', 'X-CSRF-Token': csrfToken},
     body: JSON.stringify({agent_id: agentId})
   });
   const data = await r.json();
@@ -337,7 +338,7 @@ async function manualClockIn(agentId, agentName) {
   if (!confirm('Manually clock in ' + agentName + '?')) return;
   const r = await fetch('/attendance/admin/clock-in', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers: {'Content-Type':'application/json', 'X-CSRF-Token': csrfToken},
     body: JSON.stringify({agent_id: agentId})
   });
   const data = await r.json();
@@ -349,7 +350,7 @@ async function manualClockOut(agentId, agentName) {
   if (!confirm('Manually clock out ' + agentName + '?')) return;
   const r = await fetch('/attendance/admin/clock-out', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers: {'Content-Type':'application/json', 'X-CSRF-Token': csrfToken},
     body: JSON.stringify({agent_id: agentId})
   });
   const data = await r.json();
