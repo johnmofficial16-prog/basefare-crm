@@ -47,8 +47,8 @@ $app = AppFactory::create();
 // Add Routing Middleware
 $app->addRoutingMiddleware();
 
-// Add Error Middleware (display errors if APP_ENV=local)
-$displayErrorDetails = ($_ENV['APP_ENV'] === 'local');
+// Add Error Middleware (display errors if APP_ENV=local OR APP_DEBUG=true)
+$displayErrorDetails = ($_ENV['APP_ENV'] === 'local') || (($_ENV['APP_DEBUG'] ?? 'false') === 'true');
 $errorMiddleware = $app->addErrorMiddleware($displayErrorDetails, true, true);
 
 // Include routes

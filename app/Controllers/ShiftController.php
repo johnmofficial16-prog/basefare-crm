@@ -138,8 +138,9 @@ class ShiftController
         if (empty($name)) $errors['name'] = 'Template name is required.';
         if (empty($start)) $errors['start_time'] = 'Start time is required.';
         if (empty($end)) $errors['end_time'] = 'End time is required.';
-        if (!empty($start) && !empty($end) && strtotime($start) >= strtotime($end)) {
-            $errors['end_time'] = 'End time must be after start time.';
+        // Overnight shifts (e.g. 21:00 → 06:00) are valid — only reject if times are identical
+        if (!empty($start) && !empty($end) && $start === $end) {
+            $errors['end_time'] = 'Start and end time cannot be the same.';
         }
 
         if (!empty($errors)) {

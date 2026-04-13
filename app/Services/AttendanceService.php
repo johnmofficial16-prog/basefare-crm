@@ -265,10 +265,15 @@ class AttendanceService
                 'status'           => AttendanceSession::STATUS_COMPLETED,
             ]);
 
-            // P2 #26 — Detect early departure
+            // P2 #26 — Detect early departure (overnight-shift aware)
             $earlyNote = '';
             if ($session->scheduled_end) {
-                $scheduledEndTs = strtotime(date('Y-m-d') . ' ' . $session->scheduled_end);
+                $clockInDate    = date('Y-m-d', $clockInTs);
+                $scheduledEndTs = strtotime($clockInDate . ' ' . $session->scheduled_end);
+                // If shift crosses midnight (overnight), shift end is on the next day
+                if ($scheduledEndTs <= strtotime($clockInDate . ' ' . $session->scheduled_start)) {
+                    $scheduledEndTs += 86400;
+                }
                 if ($clockOutTs < $scheduledEndTs) {
                     $earlyMins = (int) round(($scheduledEndTs - $clockOutTs) / 60);
                     $earlyNote = " (Left {$earlyMins} mins early)";
