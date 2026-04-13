@@ -49,11 +49,18 @@ class ShiftService
             $errors['shift_end'] = 'Shift end time is required.';
         }
 
-        // Shift start must be strictly before shift end
+        // Shift start must be strictly before shift end.
+        // For overnight shifts (e.g. 18:00 → 03:00), end time wraps past midnight.
+        // We detect this by checking if end < start, and if so, add 24hrs to end.
         if (empty($errors['shift_start']) && empty($errors['shift_end'])) {
             $start = strtotime($data['shift_start']);
             $end   = strtotime($data['shift_end']);
-            if ($start >= $end) {
+            if ($end <= $start) {
+                // Could be an overnight shift — add 24 hours to end and re-check
+                $end += 86400;
+            }
+            // After adjustment, end must still be after start (catches identical times)
+            if ($end <= $start) {
                 $errors['shift_end'] = 'Shift end time must be after shift start time.';
             }
         }
