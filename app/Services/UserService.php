@@ -198,11 +198,12 @@ class UserService
             return ['success' => false, 'error' => 'User not found.'];
         }
 
-        $newStatus = ($user->status === 'active') ? 'suspended' : 'active';
+        $oldStatus = $user->status;
+        $newStatus = ($oldStatus === 'active') ? 'suspended' : 'active';
         $user->update(['status' => $newStatus]);
 
         $this->log($adminId, $newStatus === 'suspended' ? 'user_suspended' : 'user_reactivated', 'users', $userId, [
-            'previous_status' => $user->status,
+            'previous_status' => $oldStatus,
             'new_status'      => $newStatus,
             'target_name'     => $user->name,
         ]);
