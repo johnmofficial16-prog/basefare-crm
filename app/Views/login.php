@@ -132,7 +132,7 @@
 <div class="relative">
 <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm" data-icon="lock">lock</span>
 <input class="w-full pl-11 pr-4 py-3.5 bg-surface-container-lowest rounded-lg border-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-outline-variant text-on-surface text-sm" id="password" name="password" placeholder="Enter your password" type="password" required/>
-<button class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors" type="button">
+<button class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors" type="button" onclick="const pwd = document.getElementById('password'); const icon = this.querySelector('span'); if (pwd.type === 'password') { pwd.type = 'text'; icon.textContent = 'visibility_off'; icon.dataset.icon = 'visibility_off'; } else { pwd.type = 'password'; icon.textContent = 'visibility'; icon.dataset.icon = 'visibility'; }">
 <span class="material-symbols-outlined text-sm" data-icon="visibility">visibility</span>
 </button>
 </div>
