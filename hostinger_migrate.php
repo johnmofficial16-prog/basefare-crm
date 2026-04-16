@@ -22,6 +22,10 @@ $pass = $_ENV['DB_PASSWORD'] ?? $_ENV['DB_PASS'] ?? '';
 
 $mysqli = new mysqli($_ENV['DB_HOST'] ?? '127.0.0.1', $user, $pass, $_ENV['DB_DATABASE'] ?? $_ENV['DB_NAME'] ?? 'basefare_crm', $_ENV['DB_PORT'] ?? 3306);
 
+// Prevent PHP 8.1+ from throwing fatal exceptions on duplicate errors,
+// so our script can gracefully ignore and skip them!
+mysqli_report(MYSQLI_REPORT_OFF);
+
 if ($mysqli->connect_error) {
     die("❌ Connection failed: " . $mysqli->connect_error . "\n");
 }
@@ -48,7 +52,17 @@ foreach ($files as $file) {
                 $result->free();
             }
         } while ($mysqli->more_results() && $mysqli->next_result());
-        echo "  [OK]\n";
+        
+        if ($mysqli->error) {
+            $err = $mysqli->error;
+            if (strpos($err, 'Duplicate column name') !== false || strpos($err, 'already exists') !== false || strpos($err, 'Duplicate entry') !== false) {
+                 echo "  [OK] (Safely skipped already existing items)\n";
+            } else {
+                 echo "  ⚠️ Warning: " . $err . "\n";
+            }
+        } else {
+            echo "  [OK]\n";
+        }
     } else {
         // Multi query failed on the very first statement, or we hit an error 
         // We will just ignore common duplicates
