@@ -1753,8 +1753,8 @@ const flightMgr = {
         : `<div class="seg-card p-3 bg-slate-50 border border-slate-200 rounded-xl fare-row space-y-2">
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Airline IATA</label>
-                <input type="text" maxlength="3" placeholder="LH" value="${_esc(seg.airline_iata)}"
+                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Airline</label>
+                <input type="text" placeholder="LH or Lufthansa" value="${_esc(seg.airline_iata)}"
                   class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono font-bold uppercase bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
                   oninput="flightMgr._updateSeg('${group}',${i},'airline_iata',this.value.toUpperCase())">
               </div>
