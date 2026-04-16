@@ -2,6 +2,7 @@
 
 namespace App\Controllers;
 
+use App\Models\User;
 use App\Services\AttendanceService;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -161,7 +162,18 @@ class AttendanceController
      */
     public function adminPanel(Request $request, Response $response): Response
     {
-        $boardData = $this->service->getLiveBoardData();
+        $actorId   = (int)$_SESSION['user_id'];
+        $actorRole = $_SESSION['role'] ?? 'agent';
+
+        // Supervisors only see their team on the live board
+        $agentIds = null;
+        if ($actorRole === User::ROLE_SUPERVISOR) {
+            $supervisor = User::find($actorId);
+            $teamIds    = $supervisor ? $supervisor->getTeamAgentIds() : [];
+            $agentIds   = count($teamIds) ? $teamIds : [-1];
+        }
+
+        $boardData = $this->service->getLiveBoardData($agentIds);
 
         ob_start();
         require __DIR__ . '/../Views/attendance/admin_panel.php';
@@ -252,7 +264,18 @@ class AttendanceController
      */
     public function adminBoardData(Request $request, Response $response): Response
     {
-        $boardData = $this->service->getLiveBoardData();
+        $actorId   = (int)$_SESSION['user_id'];
+        $actorRole = $_SESSION['role'] ?? 'agent';
+
+        // Scope to supervisor's team
+        $agentIds = null;
+        if ($actorRole === User::ROLE_SUPERVISOR) {
+            $supervisor = User::find($actorId);
+            $teamIds    = $supervisor ? $supervisor->getTeamAgentIds() : [];
+            $agentIds   = count($teamIds) ? $teamIds : [-1];
+        }
+
+        $boardData = $this->service->getLiveBoardData($agentIds);
         $today = date('Y-m-d');
 
         $abuseAlerts = \Illuminate\Database\Capsule\Manager::table('activity_log')
@@ -322,6 +345,42 @@ class AttendanceController
         return $response;
     }
 
+
+    // =========================================================================
+    // CSV EXPORT  —  GET /attendance/admin/export  (admin/manager/supervisor)
+    // =========================================================================
+
+    public function exportCsv(Request $request, Response $response): Response
+    {
+        $params  = $request->getQueryParams();
+        $date    = $params['date'] ?? date('Y-m-d');
+        $agentId = isset($params['agent_id']) ? (int)$params['agent_id'] : null;
+
+        $sessions = $this->service->getHistoricalData($date, $agentId);
+
+        $headers = [
+            'Date', 'Agent', 'Clock In', 'Clock Out',
+            'Work (mins)', 'Break (mins)', 'Late (mins)', 'Status',
+        ];
+
+        $rows = [];
+        foreach ($sessions as $s) {
+            $rows[] = [
+                $date,
+                $s->agent->name ?? '—',
+                $s->clock_in ?? '',
+                $s->clock_out ?? '',
+                $s->work_minutes ?? 0,
+                $s->total_break_mins ?? 0,
+                $s->late_minutes ?? 0,
+                $s->status ?? '',
+            ];
+        }
+
+        $filename = 'attendance_' . $date . '.csv';
+        return $this->csvResponse($response, $headers, $rows, $filename);
+    }
+
     // =========================================================================
     // HELPER
     // =========================================================================
@@ -331,5 +390,23 @@ class AttendanceController
         $response->getBody()->write(json_encode($data));
         return $response->withHeader('Content-Type', 'application/json')->withStatus($status);
     }
-}
 
+    private function csvResponse(Response $response, array $headers, iterable $rows, string $filename): Response
+    {
+        $tmp = fopen('php://temp', 'r+');
+        fputcsv($tmp, $headers);
+        foreach ($rows as $row) {
+            fputcsv($tmp, array_values((array)$row));
+        }
+        rewind($tmp);
+        $csv = stream_get_contents($tmp);
+        fclose($tmp);
+
+        $response->getBody()->write("\xEF\xBB\xBF" . $csv);
+        return $response
+            ->withHeader('Content-Type', 'text/csv; charset=UTF-8')
+            ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
+            ->withHeader('Cache-Control', 'no-cache, no-store')
+            ->withHeader('Pragma', 'no-cache');
+    }
+}

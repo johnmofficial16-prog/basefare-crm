@@ -35,6 +35,18 @@ $fareBreakdown= $acceptance->fare_breakdown ?? [];
 $passengers   = $acceptance->passengers    ?? [];
 $additionalCards = $acceptance->additional_cards ?? [];
 
+// Extra data — cancel/refund and cancel/credit fields
+$extraData    = $acceptance->extra_data ?? [];
+if (is_string($extraData)) $extraData = json_decode($extraData, true) ?: [];
+$crRefundAmt  = $extraData['refund_amount']   ?? null;
+$crCancelFee  = $extraData['cancel_fee']      ?? null;
+$crMethod     = $extraData['refund_method']   ?? null;
+$crTimeline   = $extraData['refund_timeline'] ?? null;
+$ccCreditAmt  = $extraData['credit_amount']   ?? null;
+$ccValidUntil = $extraData['valid_until']     ?? null;
+$ccInstructions= $extraData['instructions']   ?? null;
+$ccEtktList   = $extraData['etkt_list']       ?? [];
+
 // Primary airline IATA (from first flight segment, if available)
 $primaryIata = '';
 if (!empty($flightData['flights'][0]['airline_iata'])) {
@@ -145,6 +157,9 @@ tailwind.config = {
         <?= htmlspecialchars($acceptance->typeLabel()) ?> &middot;
         PNR: <strong class="font-mono text-primary-600"><?= htmlspecialchars($acceptance->pnr) ?></strong>
         &middot; Created <?= Carbon::parse($acceptance->created_at)->format('M j, Y \a\t g:i A') ?>
+        <?php if (!empty($acceptance->is_preauth)): ?>
+        &middot; <span class="inline-flex items-center gap-0.5 text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200 ml-1"><span class="material-symbols-outlined text-[10px]">bolt</span>PRE-AUTH</span>
+        <?php endif; ?>
       </p>
     </div>
 
@@ -161,10 +176,18 @@ tailwind.config = {
       </button>
       <?php endif; ?>
       <?php if ($isApproved): ?>
+      <?php if (!empty($acceptance->is_preauth)): ?>
+      <!-- Pre-auth approved: show promote button -->
+      <a href="/acceptance/create?from_preauth=<?= $acceptance->id ?>"
+        class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors shadow-sm">
+        <span class="material-symbols-outlined text-base">upgrade</span> Create Full Acceptance
+      </a>
+      <?php else: ?>
       <a href="/transactions/create?autofill=<?= $acceptance->id ?>"
         class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors shadow-sm">
         <span class="material-symbols-outlined text-base">add_card</span> Record Transaction
       </a>
+      <?php endif; ?>
       <?php endif; ?>
       <button onclick="window.print()"
         class="inline-flex items-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold py-2 px-3 rounded-lg text-sm transition-colors">
@@ -175,6 +198,33 @@ tailwind.config = {
       </a>
     </div>
   </div>
+
+  <!-- Pre-auth relationship banner -->
+  <?php if (!empty($acceptance->is_preauth)): ?>
+  <div class="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3.5 flex items-center gap-3">
+    <span class="material-symbols-outlined text-amber-600 text-lg">bolt</span>
+    <div class="flex-1">
+      <p class="font-bold text-amber-900 text-sm">Quick Pre-Authorization</p>
+      <p class="text-amber-700 text-xs mt-0.5">This is a simplified pre-auth. Once approved, create a Full Acceptance with the complete fare breakdown.</p>
+    </div>
+    <?php if ($isApproved): ?>
+    <a href="/acceptance/create?from_preauth=<?= $acceptance->id ?>" class="flex-none inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-3 rounded-lg text-xs transition-colors">
+      <span class="material-symbols-outlined text-sm">upgrade</span> Create Full Acceptance
+    </a>
+    <?php endif; ?>
+  </div>
+  <?php elseif ($acceptance->preauth_id): ?>
+  <?php $parentPreauth = \App\Models\AcceptanceRequest::find($acceptance->preauth_id); ?>
+  <?php if ($parentPreauth): ?>
+  <div class="bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-3.5 flex items-center gap-3">
+    <span class="material-symbols-outlined text-indigo-600 text-lg">link</span>
+    <div class="flex-1">
+      <p class="font-bold text-indigo-900 text-sm">Full Acceptance — Promoted from Pre-Auth</p>
+      <p class="text-indigo-600 text-xs mt-0.5">This record was created from Pre-Auth <a href="/acceptance/<?= $parentPreauth->id ?>" class="font-bold underline">#<?= $parentPreauth->id ?></a> (<?= htmlspecialchars($parentPreauth->customer_name) ?>, approved <?= $parentPreauth->approved_at ? Carbon::parse($parentPreauth->approved_at)->format('M j g:i A') : '—' ?>).</p>
+    </div>
+  </div>
+  <?php endif; ?>
+  <?php endif; ?>
 
   <!-- ── MAIN GRID ── -->
   <div class="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-5">
@@ -513,12 +563,39 @@ tailwind.config = {
           <!-- Payment Card -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
             <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-              <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Primary Card</p>
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Primary Card</p>
+                <?php
+                $canRevealCC = in_array($_SESSION['role'] ?? '', ['admin', 'manager']);
+                $hasFullCC   = !empty($acceptance->card_number_enc);
+                ?>
+                <?php if ($canRevealCC && $hasFullCC): ?>
+                <button type="button" id="cc-eye-btn" onclick="revealCC()"
+                  class="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors">
+                  <span class="material-symbols-outlined text-sm" id="cc-eye-icon">visibility</span>
+                  <span id="cc-eye-label">Reveal</span>
+                </button>
+                <?php endif; ?>
+              </div>
               <div class="flex items-center gap-3">
                 <span class="material-symbols-outlined text-slate-500">credit_card</span>
-                <div>
+                <div class="flex-1 min-w-0">
                   <p class="text-sm font-bold text-slate-900"><?= htmlspecialchars($acceptance->cardholder_name) ?></p>
-                  <p class="text-xs font-mono text-slate-500"><?= htmlspecialchars($acceptance->card_type) ?> &middot; <?= htmlspecialchars($acceptance->maskedCard()) ?></p>
+                  <!-- Masked view (always visible) -->
+                  <p class="text-xs font-mono text-slate-500" id="cc-masked">
+                    <?= htmlspecialchars($acceptance->card_type) ?> &middot; <?= htmlspecialchars($acceptance->maskedCard()) ?>
+                  </p>
+                  <?php if ($canRevealCC && $hasFullCC): ?>
+                  <!-- Revealed view (hidden until eye clicked) -->
+                  <div id="cc-revealed" class="hidden space-y-0.5 mt-1">
+                    <p class="text-xs font-mono font-bold text-slate-900 tracking-widest" id="cc-full-number">—</p>
+                    <p class="text-xs font-mono text-slate-600"><span class="text-slate-400 text-[10px]">EXP</span> <span id="cc-expiry">—</span> &nbsp; <span class="text-slate-400 text-[10px]">CVV</span> <span id="cc-cvv">—</span></p>
+                    <p class="text-[9px] text-amber-700 flex items-center gap-0.5 mt-1"><span class="material-symbols-outlined text-xs">warning</span> Sensitive — do not share screen</p>
+                  </div>
+                  <?php if (!$hasFullCC): ?>
+                  <p class="text-[10px] text-slate-400 italic mt-0.5">Full CC not recorded for this entry</p>
+                  <?php endif; ?>
+                  <?php endif; ?>
                 </div>
               </div>
             </div>
@@ -529,6 +606,56 @@ tailwind.config = {
             </div>
             <?php endif; ?>
           </div>
+
+          <!-- CC Reveal AJAX script -->
+          <?php if ($canRevealCC && $hasFullCC): ?>
+          <script>
+          async function revealCC() {
+            const btn = document.getElementById('cc-eye-btn');
+            const revealed = document.getElementById('cc-revealed');
+            const masked   = document.getElementById('cc-masked');
+            if (!revealed.classList.contains('hidden')) {
+              // Hide again
+              revealed.classList.add('hidden');
+              masked.classList.remove('hidden');
+              document.getElementById('cc-eye-icon').textContent  = 'visibility';
+              document.getElementById('cc-eye-label').textContent = 'Reveal';
+              return;
+            }
+            btn.disabled = true;
+            document.getElementById('cc-eye-icon').textContent = 'hourglass_empty';
+            try {
+              const res = await fetch('/acceptance/<?= $acceptance->id ?>/reveal-cc', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Requested-With': 'XMLHttpRequest',
+                  'X-CSRF-Token': '<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>'
+                },
+                body: JSON.stringify({ _csrf: '<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>' })
+              });
+              if (!res.ok) throw new Error('Server error ' + res.status);
+              const data = await res.json();
+              if (data.error) throw new Error(data.error);
+              const raw = data.card_number || '';
+              // Format as groups of 4
+              const formatted = raw.replace(/(.{4})/g, '$1 ').trim();
+              document.getElementById('cc-full-number').textContent = formatted;
+              document.getElementById('cc-expiry').textContent = data.card_expiry || '—';
+              document.getElementById('cc-cvv').textContent    = data.card_cvv    || '—';
+              revealed.classList.remove('hidden');
+              masked.classList.add('hidden');
+              document.getElementById('cc-eye-icon').textContent  = 'visibility_off';
+              document.getElementById('cc-eye-label').textContent = 'Hide';
+            } catch (err) {
+              alert('Could not reveal card details: ' + err.message);
+              document.getElementById('cc-eye-icon').textContent = 'visibility';
+            }
+            btn.disabled = false;
+          }
+          </script>
+          <?php endif; ?>
+
 
           <!-- Additional Cards -->
           <?php if (!empty($additionalCards)): ?>
@@ -586,6 +713,92 @@ tailwind.config = {
       </div>
       <?php endif; ?>
 
+      <!-- ── CANCEL / REFUND DETAILS (shown only if type=cancel_refund and extra_data set) ── -->
+      <?php if ($acceptance->type === 'cancel_refund' && ($crRefundAmt !== null || $crMethod)): ?>
+      <div class="bg-white border-2 border-rose-200 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-rose-100" style="background:linear-gradient(135deg,#881337,#be123c);">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-rose-300 text-base">money_off</span>
+            <h2 class="font-bold text-white text-sm" style="font-family:Manrope,sans-serif;">Cancellation &amp; Refund Summary</h2>
+          </div>
+        </div>
+        <div class="p-5 grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <?php if ($crRefundAmt !== null): ?>
+          <div class="p-3 bg-rose-50 border border-rose-100 rounded-lg">
+            <p class="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Refund Amount</p>
+            <p class="text-base font-black text-rose-900 mt-1 font-mono"><?= htmlspecialchars($acceptance->currency) ?> <?= number_format((float)$crRefundAmt, 2) ?></p>
+          </div>
+          <?php endif; ?>
+          <?php if ($crCancelFee): ?>
+          <div class="p-3 bg-rose-50 border border-rose-100 rounded-lg">
+            <p class="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Cancellation Fee</p>
+            <p class="text-base font-black text-rose-900 mt-1 font-mono"><?= htmlspecialchars($acceptance->currency) ?> <?= number_format((float)$crCancelFee, 2) ?></p>
+          </div>
+          <?php endif; ?>
+          <?php if ($crMethod): ?>
+          <div class="p-3 bg-rose-50 border border-rose-100 rounded-lg">
+            <p class="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Refund Method</p>
+            <p class="text-sm font-bold text-rose-900 mt-1"><?= htmlspecialchars(ucwords(str_replace('_',' ',$crMethod))) ?></p>
+          </div>
+          <?php endif; ?>
+          <?php if ($crTimeline): ?>
+          <div class="p-3 bg-rose-50 border border-rose-100 rounded-lg sm:col-span-2">
+            <p class="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Estimated Timeline</p>
+            <p class="text-sm text-rose-900 mt-1"><?= htmlspecialchars($crTimeline) ?></p>
+          </div>
+          <?php endif; ?>
+        </div>
+      </div>
+      <?php endif; ?>
+
+      <!-- ── CANCEL / CREDIT DETAILS (shown only if type=cancel_credit and extra_data set) ── -->
+      <?php if ($acceptance->type === 'cancel_credit' && ($ccCreditAmt !== null || !empty($ccEtktList))): ?>
+      <div class="bg-white border-2 border-violet-200 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-violet-100" style="background:linear-gradient(135deg,#4c1d95,#6d28d9);">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-violet-300 text-base">savings</span>
+            <h2 class="font-bold text-white text-sm" style="font-family:Manrope,sans-serif;">Future Travel Credit Summary</h2>
+          </div>
+        </div>
+        <div class="p-5 space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <?php if ($ccCreditAmt !== null): ?>
+            <div class="p-3 bg-violet-50 border border-violet-100 rounded-lg">
+              <p class="text-[10px] font-bold text-violet-600 uppercase tracking-wider">Credit Value</p>
+              <p class="text-base font-black text-violet-900 mt-1 font-mono"><?= htmlspecialchars($acceptance->currency) ?> <?= number_format((float)$ccCreditAmt, 2) ?></p>
+            </div>
+            <?php endif; ?>
+            <?php if ($ccValidUntil): ?>
+            <div class="p-3 bg-violet-50 border border-violet-100 rounded-lg">
+              <p class="text-[10px] font-bold text-violet-600 uppercase tracking-wider">Valid Until</p>
+              <p class="text-sm font-black text-violet-900 mt-1"><?= htmlspecialchars(date('M d, Y', strtotime($ccValidUntil))) ?></p>
+            </div>
+            <?php endif; ?>
+          </div>
+          <?php if (!empty($ccEtktList)): ?>
+          <div>
+            <p class="text-[10px] font-bold text-violet-600 uppercase tracking-wider mb-2">E-Ticket Numbers</p>
+            <div class="space-y-1.5">
+              <?php foreach ($ccEtktList as $row): ?>
+              <div class="flex items-center gap-3 p-2.5 bg-violet-50 border border-violet-100 rounded-lg">
+                <span class="material-symbols-outlined text-violet-400 text-sm">confirmation_number</span>
+                <span class="text-sm font-medium text-violet-900"><?= htmlspecialchars($row['pax_name'] ?? '') ?></span>
+                <span class="text-xs font-mono text-violet-700 ml-auto"><?= htmlspecialchars($row['etkt'] ?? '—') ?></span>
+              </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+          <?php endif; ?>
+          <?php if ($ccInstructions): ?>
+          <div class="p-3 bg-violet-50 border border-violet-100 rounded-lg">
+            <p class="text-[10px] font-bold text-violet-600 uppercase tracking-wider mb-1">Credit Instructions</p>
+            <p class="text-sm text-violet-900 leading-relaxed"><?= nl2br(htmlspecialchars($ccInstructions)) ?></p>
+          </div>
+          <?php endif; ?>
+        </div>
+      </div>
+      <?php endif; ?>
+
       <!-- ── FORENSIC AUDIT BLOCK ── -->
       <?php if ($isApproved): ?>
       <div class="bg-white border border-emerald-200 rounded-xl shadow-sm overflow-hidden">
@@ -633,15 +846,30 @@ tailwind.config = {
           <div>
             <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Digital Signature</p>
             <?php
-            $sigPath = __DIR__ . '/../../../storage/acceptance/signatures/' . $acceptance->digital_signature;
+            $sigFile = $acceptance->digital_signature;
+            $sigPath = __DIR__ . '/../../../storage/acceptance/signatures/' . $sigFile;
+            $isEsign = str_ends_with($sigFile, '_esign.json');
             ?>
-            <?php if (file_exists($sigPath)): ?>
+            <?php if ($isEsign && file_exists($sigPath)): ?>
+            <?php $esignData = json_decode(file_get_contents($sigPath), true); ?>
+            <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="material-symbols-outlined text-emerald-600 text-lg">verified</span>
+                <span class="text-sm font-bold text-emerald-800">Digitally Signed</span>
+              </div>
+              <div class="space-y-1 text-xs text-slate-600">
+                <p><strong>Signer:</strong> <?= htmlspecialchars($esignData['signer'] ?? '—') ?></p>
+                <p><strong>Timestamp:</strong> <?= htmlspecialchars($esignData['timestamp'] ?? '—') ?></p>
+                <p><strong>Fingerprint:</strong> <span class="font-mono text-[10px]"><?= htmlspecialchars($esignData['fingerprint'] ?? '—') ?></span></p>
+              </div>
+            </div>
+            <?php elseif (file_exists($sigPath)): ?>
             <div class="p-3 bg-white border border-slate-200 rounded-xl inline-block">
-              <img src="/storage/acceptance/signatures/<?= htmlspecialchars($acceptance->digital_signature) ?>"
+              <img src="/acceptance/<?= $acceptance->id ?>/download/signature"
                 alt="Customer Signature" class="sig-img max-h-24 max-w-xs">
             </div>
             <?php else: ?>
-            <p class="text-xs text-slate-400 italic">Signature file: <?= htmlspecialchars($acceptance->digital_signature) ?></p>
+            <p class="text-xs text-slate-400 italic">Signature file: <?= htmlspecialchars($sigFile) ?></p>
             <?php endif; ?>
           </div>
           <?php endif; ?>
@@ -652,28 +880,26 @@ tailwind.config = {
             <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Uploaded Evidence</p>
             <div class="flex flex-wrap gap-3">
               <?php if ($acceptance->passport_image): ?>
-              <div class="p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center gap-2">
-                <span class="material-symbols-outlined text-slate-500 text-sm">description</span>
+              <a href="/acceptance/<?= $acceptance->id ?>/download/passport"
+                class="inline-flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-colors group">
+                <span class="material-symbols-outlined text-slate-500 group-hover:text-blue-600 text-sm">description</span>
                 <div>
                   <p class="text-[10px] font-bold text-slate-500">Passport / ID</p>
-                  <a href="/storage/acceptance/evidence/<?= htmlspecialchars($acceptance->passport_image) ?>"
-                    target="_blank" class="text-[11px] text-primary-600 hover:underline font-mono">
-                    <?= htmlspecialchars($acceptance->passport_image) ?>
-                  </a>
+                  <p class="text-[11px] text-primary-600 font-mono"><?= htmlspecialchars($acceptance->passport_image) ?></p>
                 </div>
-              </div>
+                <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 text-sm ml-1">download</span>
+              </a>
               <?php endif; ?>
               <?php if ($acceptance->card_image_front): ?>
-              <div class="p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center gap-2">
-                <span class="material-symbols-outlined text-slate-500 text-sm">credit_card</span>
+              <a href="/acceptance/<?= $acceptance->id ?>/download/cc_front"
+                class="inline-flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-colors group">
+                <span class="material-symbols-outlined text-slate-500 group-hover:text-blue-600 text-sm">credit_card</span>
                 <div>
                   <p class="text-[10px] font-bold text-slate-500">CC Front</p>
-                  <a href="/storage/acceptance/evidence/<?= htmlspecialchars($acceptance->card_image_front) ?>"
-                    target="_blank" class="text-[11px] text-primary-600 hover:underline font-mono">
-                    <?= htmlspecialchars($acceptance->card_image_front) ?>
-                  </a>
+                  <p class="text-[11px] text-primary-600 font-mono"><?= htmlspecialchars($acceptance->card_image_front) ?></p>
                 </div>
-              </div>
+                <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 text-sm ml-1">download</span>
+              </a>
               <?php endif; ?>
             </div>
           </div>
@@ -840,6 +1066,15 @@ tailwind.config = {
 
   </div><!-- /grid -->
 
+<?php
+$notes         = $acceptance->notes ?? collect([]);
+$notePostUrl   = '/acceptance/' . $acceptance->id . '/note';
+$recordId      = $acceptance->id;
+$currentUserId = $_SESSION['user_id'] ?? 0;
+$currentRole   = $_SESSION['role'] ?? 'agent';
+require __DIR__ . '/../partials/notes_panel.php';
+?>
+
 </div><!-- /max-w -->
 </div><!-- /ml-60 -->
 
@@ -878,7 +1113,7 @@ async function doResend() {
     btn.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">progress_activity</span> Sending...';
   }
   try {
-    const res = await fetch(`/acceptance/<?= $acceptance->id ?>/resend`, { method: 'POST' });
+    const res = await fetch(`/acceptance/<?= $acceptance->id ?>/resend`, { method: 'POST', headers: { 'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>' } });
     const data = await res.json();
     if (data.success) location.reload();
     else alert('Error: ' + data.error);
@@ -890,7 +1125,7 @@ async function doResend() {
 async function confirmCancel() {
   if (confirm('Cancel this acceptance request? The link will be invalidated immediately.\n\nThis cannot be undone.')) {
     try {
-      const res = await fetch(`/acceptance/<?= $acceptance->id ?>/cancel`, { method: 'POST' });
+      const res = await fetch(`/acceptance/<?= $acceptance->id ?>/cancel`, { method: 'POST', headers: { 'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>' } });
       const data = await res.json();
       if (data.success) location.reload();
       else alert('Error: ' + (data.error || 'Failed to cancel'));
@@ -900,5 +1135,6 @@ async function confirmCancel() {
   }
 }
 </script>
+
 </body>
 </html>

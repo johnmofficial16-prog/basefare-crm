@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Models\ShiftSchedule;
 use App\Models\ShiftTemplate;
+use App\Models\User;
 use App\Services\ShiftService;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -28,16 +29,27 @@ class ShiftController
     public function weekView(Request $request, Response $response): Response
     {
         $queryParams = $request->getQueryParams();
+        $actorId     = (int)$_SESSION['user_id'];
+        $actorRole   = $_SESSION['role'] ?? 'agent';
 
         // Default to the Monday of the current week if no date passed
         $weekStart = isset($queryParams['week'])
             ? ShiftSchedule::getMondayOfWeek($queryParams['week'])
             : ShiftSchedule::getMondayOfWeek(date('Y-m-d'));
 
-        $weekDates  = $this->getWeekDates($weekStart);
-        $agents     = $this->shiftService->getActiveAgents();
-        $grid       = $this->shiftService->getWeekSchedule($weekStart);
-        $templates  = ShiftTemplate::orderBy('name')->get();
+        $weekDates = $this->getWeekDates($weekStart);
+        $templates = ShiftTemplate::orderBy('name')->get();
+
+        // Supervisors only see their own team; managers/admins see everyone
+        $supervisorId = ($actorRole === User::ROLE_SUPERVISOR) ? $actorId : null;
+        $agents       = $this->shiftService->getActiveAgents($supervisorId);
+        $grid         = $this->shiftService->getWeekSchedule($weekStart);
+
+        // Pending approvals badge for managers/admins
+        $pendingApprovals = [];
+        if (in_array($actorRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            $pendingApprovals = $this->shiftService->getPendingApprovals();
+        }
 
         ob_start();
         require __DIR__ . '/../Views/shifts/week.php';
@@ -65,8 +77,9 @@ class ShiftController
             return $this->jsonResponse($response, ['success' => false, 'message' => 'No schedule entries provided.'], 422);
         }
 
-        $adminId = $_SESSION['user_id'];
-        $result  = $this->shiftService->publishWeek($entries, $adminId);
+        $adminId   = (int)$_SESSION['user_id'];
+        $actorRole = $_SESSION['role'] ?? 'agent';
+        $result    = $this->shiftService->publishWeek($entries, $adminId, $actorRole);
 
         $statusCode = $result['success'] ? 200 : 422;
         return $this->jsonResponse($response, $result, $statusCode);
@@ -83,12 +96,13 @@ class ShiftController
      */
     public function updateCell(Request $request, Response $response): Response
     {
-        $body    = json_decode((string)$request->getBody(), true);
-        $agentId = (int)($body['agent_id'] ?? 0);
-        $date    = $body['shift_date'] ?? '';
-        $adminId = $_SESSION['user_id'];
+        $body      = json_decode((string)$request->getBody(), true);
+        $agentId   = (int)($body['agent_id'] ?? 0);
+        $date      = $body['shift_date'] ?? '';
+        $adminId   = (int)$_SESSION['user_id'];
+        $actorRole = $_SESSION['role'] ?? 'agent';
 
-        $result = $this->shiftService->updateCell($agentId, $date, $body, $adminId);
+        $result = $this->shiftService->updateCell($agentId, $date, $body, $adminId, $actorRole);
         return $this->jsonResponse($response, $result, $result['success'] ? 200 : 422);
     }
 
@@ -99,12 +113,59 @@ class ShiftController
      */
     public function deleteCell(Request $request, Response $response): Response
     {
-        $body    = json_decode((string)$request->getBody(), true);
-        $agentId = (int)($body['agent_id'] ?? 0);
-        $date    = $body['shift_date'] ?? '';
+        $body      = json_decode((string)$request->getBody(), true);
+        $agentId   = (int)($body['agent_id'] ?? 0);
+        $date      = $body['shift_date'] ?? '';
+        $actorId   = (int)$_SESSION['user_id'];
+        $actorRole = $_SESSION['role'] ?? 'agent';
 
-        $result = $this->shiftService->deleteCell($agentId, $date);
+        $result = $this->shiftService->deleteCell($agentId, $date, $actorId, $actorRole);
         return $this->jsonResponse($response, $result, $result['success'] ? 200 : 404);
+    }
+
+    // -------------------------------------------------------------------------
+    // APPROVE PUBLISH (Manager/Admin only)
+    // -------------------------------------------------------------------------
+
+    /**
+     * POST /shifts/week/approve
+     * Approve pending_approval shifts for a given week.
+     * Expects JSON: { week_start: "YYYY-MM-DD", supervisor_id?: int }
+     */
+    public function approvePublish(Request $request, Response $response): Response
+    {
+        $actorRole = $_SESSION['role'] ?? 'agent';
+        if (!in_array($actorRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            return $this->jsonResponse($response, ['success' => false, 'message' => 'Insufficient permissions.'], 403);
+        }
+
+        $body        = json_decode((string)$request->getBody(), true);
+        $weekStart   = $body['week_start'] ?? '';
+        $supervisorId = !empty($body['supervisor_id']) ? (int)$body['supervisor_id'] : null;
+
+        if (empty($weekStart)) {
+            return $this->jsonResponse($response, ['success' => false, 'message' => 'week_start is required.'], 422);
+        }
+
+        $approverId = (int)$_SESSION['user_id'];
+        $result     = $this->shiftService->approveShiftPublish($weekStart, $approverId, $supervisorId);
+
+        return $this->jsonResponse($response, $result, $result['success'] ? 200 : 500);
+    }
+
+    /**
+     * GET /shifts/pending-approvals
+     * Returns pending approval weeks as JSON (manager/admin only).
+     */
+    public function pendingApprovals(Request $request, Response $response): Response
+    {
+        $actorRole = $_SESSION['role'] ?? 'agent';
+        if (!in_array($actorRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            return $this->jsonResponse($response, ['success' => false, 'message' => 'Insufficient permissions.'], 403);
+        }
+
+        $pending = $this->shiftService->getPendingApprovals();
+        return $this->jsonResponse($response, ['success' => true, 'pending' => $pending], 200);
     }
 
     // -------------------------------------------------------------------------

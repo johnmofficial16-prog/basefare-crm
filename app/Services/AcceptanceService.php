@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AcceptanceRequest;
+use App\Models\RecordNote;
 use Carbon\Carbon;
 
 
@@ -54,6 +55,35 @@ class AcceptanceService
         $token     = $this->generateToken();
         $expiresAt = Carbon::now()->addHours(self::EXPIRY_HOURS);
 
+        // ── Encrypt full CC details ────────────────────────────────────────
+        $cardNumberEnc = null;
+        $cardExpiryEnc = null;
+        $cardCvvEnc    = null;
+        $cardLastFour  = preg_replace('/\D/', '', $data['card_last_four'] ?? '');
+
+        $rawCardNumber = preg_replace('/\D/', '', $data['card_number'] ?? '');
+        if (!empty($rawCardNumber)) {
+            try {
+                $enc           = new \App\Services\EncryptionService();
+                $cardNumberEnc = $enc->encrypt($rawCardNumber);
+                // Derive last-4 from the full number (authoritative)
+                $cardLastFour  = substr($rawCardNumber, -4);
+
+                $rawExpiry = trim($data['card_expiry'] ?? '');
+                if (!empty($rawExpiry)) {
+                    $cardExpiryEnc = $enc->encrypt($rawExpiry);
+                }
+
+                $rawCvv = trim($data['card_cvv'] ?? '');
+                if (!empty($rawCvv)) {
+                    $cardCvvEnc = $enc->encrypt($rawCvv);
+                }
+            } catch (\Throwable $e) {
+                // If encryption fails, still store last-4 but log the error
+                error_log('AcceptanceService CC encryption failure: ' . $e->getMessage());
+            }
+        }
+
         $acceptance = AcceptanceRequest::create([
             'token'               => $token,
             'transaction_id'      => $data['transaction_id'] ?? null,
@@ -65,9 +95,9 @@ class AcceptanceService
             'pnr'                 => strtoupper(trim($data['pnr'])),
             'airline'             => trim($data['airline'] ?? ''),
             'order_id'            => trim($data['order_id'] ?? ''),
-            'passengers'          => $data['passengers'],           // array of {name, dob, type}
-            'flight_data'         => $data['flight_data'] ?? null,  // JSON per type
-            'fare_breakdown'      => $data['fare_breakdown'] ?? [],  // [{label, amount}]
+            'passengers'          => $data['passengers'],
+            'flight_data'         => $data['flight_data'] ?? null,
+            'fare_breakdown'      => $data['fare_breakdown'] ?? [],
             'total_amount'        => (float)($data['total_amount'] ?? 0),
             'currency'            => strtoupper($data['currency'] ?? 'USD'),
             'split_charge_note'   => trim($data['split_charge_note'] ?? ''),
@@ -75,7 +105,10 @@ class AcceptanceService
             'statement_descriptor'=> trim($data['statement_descriptor'] ?? ''),
             'card_type'           => trim($data['card_type'] ?? ''),
             'cardholder_name'     => trim($data['cardholder_name'] ?? ''),
-            'card_last_four'      => preg_replace('/\D/', '', $data['card_last_four'] ?? ''),
+            'card_last_four'      => $cardLastFour,
+            'card_number_enc'     => $cardNumberEnc,
+            'card_expiry_enc'     => $cardExpiryEnc,
+            'card_cvv_enc'        => $cardCvvEnc,
             'billing_address'     => trim($data['billing_address'] ?? ''),
             'additional_cards'    => $data['additional_cards'] ?? null,
             'endorsements'        => trim($data['endorsements'] ?? self::DEFAULT_ENDORSEMENTS),
@@ -89,7 +122,18 @@ class AcceptanceService
             'expires_at'          => $expiresAt,
             'email_status'        => AcceptanceRequest::EMAIL_PENDING,
             'email_attempts'      => 0,
+            'is_preauth'          => (bool)($data['is_preauth'] ?? false),
+            'preauth_id'          => !empty($data['preauth_id']) ? (int)$data['preauth_id'] : null,
         ]);
+
+        // Log creation note to record_notes timeline
+        RecordNote::log(
+            'acceptance',
+            $acceptance->id,
+            $agentId,
+            !empty($data['agent_notes']) ? $data['agent_notes'] : 'Acceptance request created.',
+            'created'
+        );
 
         return $acceptance;
     }
@@ -232,6 +276,10 @@ class AcceptanceService
 
     /**
      * Cancel a pending acceptance request (agent-initiated).
+     *
+     * If this is a full acceptance that was promoted from a pre-auth,
+     * the parent pre-auth is reverted back to APPROVED so a new full
+     * acceptance can be created from it.
      */
     public function cancel(AcceptanceRequest $acceptance, int $agentId): bool
     {
@@ -242,6 +290,16 @@ class AcceptanceService
         $acceptance->update([
             'status' => AcceptanceRequest::STATUS_CANCELLED,
         ]);
+
+        // ── Revert parent pre-auth if this was a promoted full acceptance ──
+        if (!$acceptance->is_preauth && !empty($acceptance->preauth_id)) {
+            $parentPreauth = AcceptanceRequest::find($acceptance->preauth_id);
+            if ($parentPreauth && $parentPreauth->status === AcceptanceRequest::STATUS_PROMOTED) {
+                $parentPreauth->update([
+                    'status' => AcceptanceRequest::STATUS_APPROVED,
+                ]);
+            }
+        }
 
         return true;
     }
@@ -259,17 +317,28 @@ class AcceptanceService
      */
     public function saveSignature(string $token, string $base64Data): ?string
     {
-        // Strip data URI header
+        $dir = __DIR__ . '/../../storage/acceptance/signatures/';
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        // Consent-based digital signature (new e-sign)
+        if (str_starts_with($base64Data, 'consent:')) {
+            $payload = base64_decode(substr($base64Data, 8));
+            if (!$payload) {
+                return null;
+            }
+            $filename = $token . '_esign.json';
+            file_put_contents($dir . $filename, $payload);
+            return $filename;
+        }
+
+        // Legacy canvas-drawn signature (PNG)
         $data = preg_replace('/^data:image\/png;base64,/', '', $base64Data);
         $data = base64_decode($data);
 
         if (!$data) {
             return null;
-        }
-
-        $dir = __DIR__ . '/../../storage/acceptance/signatures/';
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
         }
 
         $filename = $token . '_sig.png';
@@ -293,7 +362,26 @@ class AcceptanceService
         }
 
         $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
-        $mimeType     = mime_content_type($file['tmp_name']);
+
+        // Detect MIME — finfo is most reliable; fall back to mime_content_type (needs fileinfo ext);
+        // final fallback reads magic bytes so it works even without the extension.
+        if (\function_exists('finfo_open')) {
+            $finfo    = \finfo_open(FILEINFO_MIME_TYPE);
+            $mimeType = \finfo_file($finfo, $file['tmp_name']);
+            \finfo_close($finfo);
+        } elseif (\function_exists('mime_content_type')) {
+            $mimeType = \mime_content_type($file['tmp_name']);
+        } else {
+            // Magic-byte fallback (covers JPEG, PNG, GIF, PDF)
+            $handle = \fopen($file['tmp_name'], 'rb');
+            $magic  = \fread($handle, 8);
+            \fclose($handle);
+            if (\str_starts_with($magic, "\xFF\xD8\xFF"))           { $mimeType = 'image/jpeg'; }
+            elseif (\str_starts_with($magic, "\x89PNG\r\n\x1A\n")) { $mimeType = 'image/png';  }
+            elseif (\str_starts_with($magic, 'GIF8'))               { $mimeType = 'image/gif';  }
+            elseif (\str_starts_with($magic, '%PDF'))               { $mimeType = 'application/pdf'; }
+            else                                                     { $mimeType = 'application/octet-stream'; }
+        }
 
         if (!in_array($mimeType, $allowedMimes)) {
             return null;
@@ -318,7 +406,19 @@ class AcceptanceService
         }
 
         $filename = $token . '_' . $type . '.' . $ext;
-        move_uploaded_file($file['tmp_name'], $dir . $filename);
+        $dest     = $dir . $filename;
+
+        // move_uploaded_file() fails with Slim PSR-7 uploads (is_uploaded_file check).
+        // Use rename() (atomic on same fs) with copy() as cross-device fallback.
+        $moved = @rename($file['tmp_name'], $dest);
+        if (!$moved) {
+            $moved = @copy($file['tmp_name'], $dest);
+            if ($moved) @unlink($file['tmp_name']); // clean up original
+        }
+
+        if (!$moved || !file_exists($dest)) {
+            return null; // Never store a filename that doesn't actually exist on disk
+        }
 
         return $filename;
     }

@@ -32,6 +32,56 @@ $passengers    = $acceptance->passengers ?? [];
 $flightData    = $acceptance->flight_data ?? [];
 $fareBreakdown = $acceptance->fare_breakdown ?? [];
 $companyName   = AcceptanceRequest::COMPANY_NAME;
+// Derive airline from stored field or auto-detect from first flight segment
+$airlineRaw = trim($acceptance->airline ?? '');
+if (empty($airlineRaw)) {
+    // Try to pick up from flight_data segments
+    $allFlightSegs = array_merge(
+        $flightData['flights']     ?? [],
+        $flightData['old_flights'] ?? [],
+        $flightData['new_flights'] ?? []
+    );
+    if (!empty($allFlightSegs[0]['airline_iata'])) {
+        // We have an IATA code — resolve to full name
+        $iata2name = [
+            'AC'=>'Air Canada','WS'=>'WestJet','TS'=>'Air Transat',
+            'AA'=>'American Airlines','DL'=>'Delta Air Lines','UA'=>'United Airlines',
+            'WN'=>'Southwest Airlines','B6'=>'JetBlue','AS'=>'Alaska Airlines',
+            'F9'=>'Frontier Airlines','NK'=>'Spirit Airlines','G4'=>'Allegiant Air',
+            'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France',
+            'KL'=>'KLM','LX'=>'Swiss International','OS'=>'Austrian Airlines',
+            'SN'=>'Brussels Airlines','IB'=>'Iberia','VY'=>'Vueling',
+            'TP'=>'TAP Portugal','FR'=>'Ryanair','U2'=>'easyJet','DY'=>'Norwegian',
+            'TK'=>'Turkish Airlines','LO'=>'LOT Polish Airlines',
+            'EK'=>'Emirates','QR'=>'Qatar Airways','EY'=>'Etihad Airways',
+            'FZ'=>'flydubai','G9'=>'Air Arabia','WY'=>'Oman Air',
+            'SQ'=>'Singapore Airlines','CX'=>'Cathay Pacific',
+            'JL'=>'Japan Airlines','NH'=>'ANA','KE'=>'Korean Air',
+            'OZ'=>'Asiana Airlines','TG'=>'Thai Airways','MH'=>'Malaysia Airlines',
+            '6E'=>'IndiGo','SG'=>'SpiceJet','AI'=>'Air India','UK'=>'Vistara',
+            'AM'=>'Aeromexico','LA'=>'LATAM Airlines','AV'=>'Avianca','CM'=>'Copa Airlines',
+            'QF'=>'Qantas','NZ'=>'Air New Zealand',
+            'MU'=>'China Eastern','CA'=>'Air China','CZ'=>'China Southern',
+            'ET'=>'Ethiopian Airlines','KQ'=>'Kenya Airways','AT'=>'Royal Air Maroc',
+        ];
+        $detectedIata = strtoupper(trim($allFlightSegs[0]['airline_iata']));
+        $airlineRaw = $iata2name[$detectedIata] ?? $detectedIata;
+    }
+}
+$airline = htmlspecialchars($airlineRaw);
+
+// Extra data — cancel/refund, cancel/credit fields
+$extraData     = $acceptance->extra_data ?? [];
+if (is_string($extraData)) $extraData = json_decode($extraData, true) ?: [];
+$crRefundAmt   = $extraData['refund_amount']   ?? null;
+$crCancelFee   = $extraData['cancel_fee']      ?? null;
+$crMethod      = $extraData['refund_method']   ?? null;
+$crTimeline    = $extraData['refund_timeline'] ?? null;
+$ccCreditAmt   = $extraData['credit_amount']   ?? null;
+$ccValidUntil  = $extraData['valid_until']     ?? null;
+$ccInstructions= $extraData['instructions']    ?? null;
+$ccEtktList    = $extraData['etkt_list']       ?? [];
+$isPreauth     = (bool)($acceptance->is_preauth ?? false);
 
 // Status checks
 $isActionable  = $acceptance->isActionable();
@@ -86,12 +136,14 @@ $error = $_GET['error'] ?? null;
   .policy-box { background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:14px 16px; font-size:12px; color:#92400e; line-height:1.7; max-height:200px; overflow-y:auto; }
   .check-item { display:flex; align-items:flex-start; gap:8px; padding:8px 0; font-size:13px; color:#334155; line-height:1.5; }
   .check-item input[type=checkbox] { width:18px; height:18px; accent-color:#0f1e3c; margin-top:2px; flex-shrink:0; }
-  .sig-canvas { width:100%; height:160px; border:2px dashed #cbd5e1; border-radius:10px; cursor:crosshair; background:#fafbfc; touch-action:none; }
-  .sig-canvas.signing { border-color:#0f1e3c; border-style:solid; }
+  .esign-box { background:#f0fdf4; border:2px solid #bbf7d0; border-radius:12px; padding:16px 18px; transition:all 0.2s; }
+  .esign-box.signed { border-color:#16a34a; background:#dcfce7; }
+  .esign-box label { font-size:14px; color:#1e293b; font-weight:600; cursor:pointer; display:flex; align-items:flex-start; gap:10px; line-height:1.6; }
+  .esign-box input[type=checkbox] { width:20px; height:20px; accent-color:#16a34a; margin-top:3px; flex-shrink:0; }
+  .esign-meta { font-size:11px; color:#64748b; margin-top:8px; padding-left:30px; }
   .btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; background:linear-gradient(135deg,#0f1e3c,#1a3a6b); color:#fff; font-size:15px; font-weight:800; padding:16px; border:none; border-radius:10px; cursor:pointer; transition:opacity 0.2s; letter-spacing:0.5px; }
   .btn-primary:hover { opacity:0.92; }
   .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
-  .btn-clear { display:inline-flex; align-items:center; gap:4px; background:none; border:1px solid #e2e8f0; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:600; color:#64748b; cursor:pointer; }
   .btn-clear:hover { background:#f8fafc; }
   .alert-error { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:12px 16px; border-radius:10px; font-size:13px; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
   .status-banner { padding:20px 24px; text-align:center; }
@@ -116,6 +168,51 @@ $error = $_GET['error'] ?? null;
     <div class="header">
       <div class="logo">LETS FLY TRAVEL</div>
       <div class="dba">DBA BASE FARE</div>
+      <?php if ($airline): ?>
+      <div style="margin-top:12px; display:flex; align-items:center; justify-content:center; gap:10px;">
+        <?php
+          $iataMap = [
+            'Air Canada'=>'AC','WestJet'=>'WS','Air Transat'=>'TS',
+            'American Airlines'=>'AA','Delta'=>'DL','United'=>'UA',
+            'Southwest'=>'WN','JetBlue'=>'B6','Alaska Airlines'=>'AS',
+            'Frontier'=>'F9','Spirit'=>'NK','Allegiant'=>'G4',
+            'British Airways'=>'BA','Lufthansa'=>'LH','Air France'=>'AF',
+            'KLM'=>'KL','Swiss'=>'LX','Austrian'=>'OS','Brussels Airlines'=>'SN',
+            'Iberia'=>'IB','Vueling'=>'VY','TAP Portugal'=>'TP',
+            'Ryanair'=>'FR','EasyJet'=>'U2','Norwegian'=>'DY',
+            'Turkish Airlines'=>'TK','LOT'=>'LO','LOT Polish Airlines'=>'LO',
+            'Emirates'=>'EK','Qatar Airways'=>'QR','Etihad'=>'EY',
+            'Flydubai'=>'FZ','Air Arabia'=>'G9','Oman Air'=>'WY',
+            'Singapore Airlines'=>'SQ','Cathay Pacific'=>'CX',
+            'Japan Airlines'=>'JL','ANA'=>'NH','Korean Air'=>'KE',
+            'Asiana'=>'OZ','Thai Airways'=>'TG','Malaysia Airlines'=>'MH',
+            'IndiGo'=>'6E','SpiceJet'=>'SG','Air India'=>'AI',
+            'Vistara'=>'UK','Go First'=>'G8',
+            'Aeromexico'=>'AM','LATAM'=>'LA','Avianca'=>'AV','Copa'=>'CM',
+          ];
+          // If the stored value is already an IATA code (2-3 chars, all uppercase letters/digits)
+          $airlineUpper = strtoupper(trim($acceptance->airline ?? ''));
+          if (preg_match('/^[A-Z0-9]{2,3}$/', $airlineUpper)) {
+              $iataCode = $airlineUpper;
+          } else {
+              // Otherwise try to match by airline name
+              $iataCode = null;
+              foreach ($iataMap as $name => $code) {
+                  if (stripos($airline, $name) !== false || stripos($name, $airline) !== false) {
+                      $iataCode = $code; break;
+                  }
+              }
+          }
+        ?>
+        <?php if ($iataCode): ?>
+        <img src="https://www.gstatic.com/flights/airline_logos/35px/<?= $iataCode ?>.png"
+             alt="<?= $airline ?>"
+             style="width:32px;height:32px;object-fit:contain;border-radius:6px;background:#fff;padding:2px;"
+             onerror="this.style.display='none'">
+        <?php endif; ?>
+        <span style="color:rgba(255,255,255,0.9);font-size:13px;font-weight:700;letter-spacing:0.5px;"><?= $airline ?></span>
+      </div>
+      <?php endif; ?>
       <div class="type-badge"><?= $typeLabel ?></div>
     </div>
 
@@ -160,7 +257,7 @@ $error = $_GET['error'] ?? null;
               echo match($error) {
                 'expired'      => 'This link has expired. Please contact your agent.',
                 'incomplete'   => 'Please check all required boxes before submitting.',
-                'no_signature' => 'Please draw your signature in the box provided.',
+                'no_signature' => 'Please check the digital signature box to sign.', 
                 'failed'       => 'Submission failed. Please try again.',
                 default        => 'An error occurred. Please try again.',
               };
@@ -280,6 +377,128 @@ $error = $_GET['error'] ?? null;
         </div>
         <?php endif; ?>
 
+        <!-- Cancel / Refund details — shown to customer on actual acceptance only -->
+        <?php if (!$isPreauth && $acceptance->type === 'cancel_refund' && ($crRefundAmt !== null || $crCancelFee || $crMethod || $crTimeline)): ?>
+        <div class="section" style="background:#fff1f2; border-top:2px solid #fecdd3;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <span class="material-symbols-outlined" style="color:#e11d48; font-size:22px; flex-shrink:0;">money_off</span>
+            <div class="section-title" style="color:#9f1239; margin:0;">Cancellation &amp; Refund Summary</div>
+          </div>
+          <table class="fare-table">
+            <?php if ($crRefundAmt !== null): ?>
+            <tr><td class="label">Refund Amount</td><td class="amt" style="color:#e11d48; font-weight:800;"><?= $currency ?> <?= number_format((float)$crRefundAmt, 2) ?></td></tr>
+            <?php endif; ?>
+            <?php if ($crCancelFee): ?>
+            <tr><td class="label">Cancellation Fee</td><td class="amt"><?= $currency ?> <?= number_format((float)$crCancelFee, 2) ?></td></tr>
+            <?php endif; ?>
+            <?php if ($crMethod): ?>
+            <tr><td class="label">Refund Method</td><td class="amt"><?= htmlspecialchars(ucwords(str_replace('_',' ',$crMethod))) ?></td></tr>
+            <?php endif; ?>
+            <?php if ($crTimeline): ?>
+            <tr><td class="label">Expected Timeline</td><td class="amt"><?= htmlspecialchars($crTimeline) ?></td></tr>
+            <?php endif; ?>
+          </table>
+        </div>
+        <?php endif; ?>
+
+        <!-- Cancel / Credit details — shown to customer on actual acceptance only -->
+        <?php if (!$isPreauth && $acceptance->type === 'cancel_credit' && ($ccCreditAmt !== null || $ccValidUntil || !empty($ccEtktList) || $ccInstructions)): ?>
+        <div class="section" style="background:#f5f3ff; border-top:2px solid #ddd6fe;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <span class="material-symbols-outlined" style="color:#7c3aed; font-size:22px; flex-shrink:0;">savings</span>
+            <div class="section-title" style="color:#4c1d95; margin:0;">Future Travel Credit Summary</div>
+          </div>
+          <table class="fare-table">
+            <?php if ($ccCreditAmt !== null): ?>
+            <tr><td class="label">Credit Value</td><td class="amt" style="color:#7c3aed; font-weight:800;"><?= $currency ?> <?= number_format((float)$ccCreditAmt, 2) ?></td></tr>
+            <?php endif; ?>
+            <?php if ($ccValidUntil): ?>
+            <tr><td class="label">Valid Until</td><td class="amt"><?= htmlspecialchars(date('M d, Y', strtotime($ccValidUntil))) ?></td></tr>
+            <?php endif; ?>
+          </table>
+          <?php if (!empty($ccEtktList)): ?>
+          <div style="margin-top:12px;">
+            <div style="font-size:10px; font-weight:700; color:#6d28d9; text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">E-Ticket Numbers</div>
+            <?php foreach ($ccEtktList as $row): ?>
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; background:#ede9fe; border-radius:8px; margin-bottom:6px;">
+              <span class="material-symbols-outlined" style="font-size:16px; color:#7c3aed;">confirmation_number</span>
+              <span style="font-size:13px; color:#4c1d95; font-weight:600; flex:1;"><?= htmlspecialchars($row['pax_name'] ?? '') ?></span>
+              <span style="font-size:12px; font-family:monospace; color:#6d28d9; font-weight:700;"><?= htmlspecialchars($row['etkt'] ?? '—') ?></span>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
+          <?php if ($ccInstructions): ?>
+          <p style="font-size:12px; color:#5b21b6; margin-top:10px; line-height:1.6; padding:8px 10px; background:#ede9fe; border-radius:8px;">
+            <strong>Note:</strong> <?= nl2br(htmlspecialchars($ccInstructions)) ?>
+          </p>
+          <?php endif; ?>
+        </div>
+        <?php endif; ?>
+        <!-- Name Correction details -->
+        <?php if (!$isPreauth && $acceptance->type === 'name_correction' && (!empty($flightData['old_name']) || !empty($flightData['new_name']))): ?>
+        <div class="section" style="background:#fefce8; border-top:2px solid #fde68a;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <span class="material-symbols-outlined" style="color:#b45309; font-size:22px; flex-shrink:0;">badge</span>
+            <div class="section-title" style="color:#92400e; margin:0;">Name Correction Details</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:140px; background:#fff1f2; border:1px solid #fecdd3; border-radius:8px; padding:10px 14px;">
+              <div style="font-size:10px; font-weight:700; color:#9f1239; text-transform:uppercase; margin-bottom:4px;">Current (Wrong) Name</div>
+              <div style="font-family:monospace; font-size:14px; font-weight:800; color:#1e293b;"><?= htmlspecialchars($flightData['old_name'] ?? '—') ?></div>
+            </div>
+            <span style="font-size:22px; color:#94a3b8; flex-none;">→</span>
+            <div style="flex:1; min-width:140px; background:#ecfdf5; border:1px solid #bbf7d0; border-radius:8px; padding:10px 14px;">
+              <div style="font-size:10px; font-weight:700; color:#065f46; text-transform:uppercase; margin-bottom:4px;">Corrected Name</div>
+              <div style="font-family:monospace; font-size:14px; font-weight:800; color:#1e293b;"><?= htmlspecialchars($flightData['new_name'] ?? '—') ?></div>
+            </div>
+          </div>
+          <?php if (!empty($flightData['reason'])): ?>
+          <p style="font-size:12px; color:#78350f; margin-top:10px; padding:8px 10px; background:#fef3c7; border-radius:8px;">
+            <strong>Reason:</strong> <?= htmlspecialchars($flightData['reason']) ?>
+          </p>
+          <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
+        <!-- Cabin Upgrade details -->
+        <?php if (!$isPreauth && $acceptance->type === 'cabin_upgrade' && (!empty($flightData['old_cabin']) || !empty($flightData['new_cabin']))): ?>
+        <div class="section" style="background:#f0fdfa; border-top:2px solid #99f6e4;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <span class="material-symbols-outlined" style="color:#0f766e; font-size:22px; flex-shrink:0;">workspace_premium</span>
+            <div class="section-title" style="color:#134e4a; margin:0;">Cabin Upgrade Details</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:130px; background:#fff1f2; border:1px solid #fecdd3; border-radius:8px; padding:10px 14px; text-align:center;">
+              <div style="font-size:10px; font-weight:700; color:#9f1239; text-transform:uppercase; margin-bottom:4px;">Current Cabin</div>
+              <div style="font-size:16px; font-weight:800; color:#1e293b;"><?= htmlspecialchars($flightData['old_cabin'] ?? '—') ?></div>
+            </div>
+            <span style="font-size:22px; color:#94a3b8; flex-none;">→</span>
+            <div style="flex:1; min-width:130px; background:#ecfdf5; border:1px solid #bbf7d0; border-radius:8px; padding:10px 14px; text-align:center;">
+              <div style="font-size:10px; font-weight:700; color:#065f46; text-transform:uppercase; margin-bottom:4px;">Upgraded Cabin</div>
+              <div style="font-size:16px; font-weight:800; color:#1e293b;"><?= htmlspecialchars($flightData['new_cabin'] ?? '—') ?></div>
+            </div>
+          </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- Other Authorization details -->
+        <?php
+          $otherTitle = $extraData['other_title'] ?? '';
+          $otherNotes = $extraData['other_notes'] ?? '';
+        ?>
+        <?php if (!$isPreauth && $acceptance->type === 'other' && ($otherTitle || $otherNotes)): ?>
+        <div class="section" style="background:#f8fafc; border-top:2px solid #e2e8f0;">
+          <div class="section-title">Authorization Details</div>
+          <?php if ($otherTitle): ?>
+          <p style="font-size:14px; font-weight:700; color:#1e293b; margin-bottom:6px;"><?= htmlspecialchars($otherTitle) ?></p>
+          <?php endif; ?>
+          <?php if ($otherNotes): ?>
+          <p style="font-size:13px; color:#475569; line-height:1.7;"><?= nl2br(htmlspecialchars($otherNotes)) ?></p>
+          <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
         <!-- Endorsements -->
         <?php if ($endorsements): ?>
         <div class="section">
@@ -342,15 +561,19 @@ $error = $_GET['error'] ?? null;
         </div>
         <?php endif; ?>
 
-        <!-- Signature -->
+        <!-- Digital Signature (One-Click Consent) -->
         <div class="section">
           <div class="section-title">Digital Signature</div>
-          <p style="font-size:12px; color:#64748b; margin-bottom:10px;">Draw your signature below using your mouse or finger.</p>
-          <canvas id="sigCanvas" class="sig-canvas"></canvas>
-          <div style="display:flex; justify-content:flex-end; margin-top:8px;">
-            <button type="button" class="btn-clear" onclick="clearSignature()">
-              <span class="material-symbols-outlined" style="font-size:14px;">refresh</span> Clear
-            </button>
+          <div class="esign-box" id="esignBox">
+            <label>
+              <input type="checkbox" id="esignConsent" name="esign_consent" value="1" onchange="toggleEsign()">
+              I, <strong><?= $customerName ?></strong>, digitally sign this authorization and confirm all the above details are accurate. I understand this electronic signature carries the same legal weight as a handwritten signature.
+            </label>
+            <div class="esign-meta" id="esignMeta" style="display:none;">
+              <span class="material-symbols-outlined" style="font-size:14px; vertical-align:text-bottom; color:#16a34a;">verified</span>
+              Signed digitally on <strong id="esignTimestamp"></strong><br>
+              IP and device fingerprint will be recorded for security.
+            </div>
           </div>
         </div>
 
@@ -361,7 +584,7 @@ $error = $_GET['error'] ?? null;
             I Authorize This Transaction
           </button>
           <p style="font-size:10px; color:#94a3b8; text-align:center; margin-top:10px;">
-            By clicking above, you digitally sign this authorization form. Your IP address, browser fingerprint, and signature will be recorded for security purposes.
+            By clicking above, you digitally sign this authorization form. Your IP address, browser fingerprint, and timestamp will be recorded as legal evidence.
           </p>
         </div>
       </form>
@@ -397,44 +620,20 @@ $error = $_GET['error'] ?? null;
   document.getElementById('deviceFingerprint').value = 'fp-' + Math.abs(hash).toString(36) + '-' + Date.now().toString(36);
 })();
 
-// ── Signature Canvas ────────────────────────────────────────────────────
-const canvas = document.getElementById('sigCanvas');
-const ctx = canvas.getContext('2d');
-let drawing = false;
-let hasSigned = false;
-
-function resizeCanvas() {
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width * 2;
-  canvas.height = rect.height * 2;
-  ctx.scale(2, 2);
-  ctx.strokeStyle = '#0f1e3c';
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-}
-resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
-
-function getPos(e) {
-  const rect = canvas.getBoundingClientRect();
-  const t = e.touches ? e.touches[0] : e;
-  return { x: t.clientX - rect.left, y: t.clientY - rect.top };
-}
-
-canvas.addEventListener('mousedown', (e) => { drawing = true; hasSigned = true; canvas.classList.add('signing'); const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
-canvas.addEventListener('mousemove', (e) => { if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); });
-canvas.addEventListener('mouseup', () => { drawing = false; });
-canvas.addEventListener('mouseleave', () => { drawing = false; });
-
-canvas.addEventListener('touchstart', (e) => { e.preventDefault(); drawing = true; hasSigned = true; canvas.classList.add('signing'); const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, {passive:false});
-canvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); }, {passive:false});
-canvas.addEventListener('touchend', () => { drawing = false; });
-
-function clearSignature() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  hasSigned = false;
-  canvas.classList.remove('signing');
+// ── E-Signature (one-click consent) ─────────────────────────────────────
+function toggleEsign() {
+  const cb   = document.getElementById('esignConsent');
+  const box  = document.getElementById('esignBox');
+  const meta = document.getElementById('esignMeta');
+  const ts   = document.getElementById('esignTimestamp');
+  if (cb.checked) {
+    box.classList.add('signed');
+    meta.style.display = 'block';
+    ts.textContent = new Date().toLocaleString('en-US', { dateStyle:'long', timeStyle:'medium' });
+  } else {
+    box.classList.remove('signed');
+    meta.style.display = 'none';
+  }
 }
 
 // ── File upload preview ─────────────────────────────────────────────────
@@ -459,14 +658,21 @@ function prepareSubmit() {
     }
   }
 
-  // Validate signature
-  if (!hasSigned) {
-    alert('Please draw your signature in the box provided.');
+  // Validate e-signature consent
+  if (!document.getElementById('esignConsent').checked) {
+    alert('Please check the digital signature box to sign.');
     return false;
   }
 
-  // Export signature as data URL
-  document.getElementById('signatureData').value = canvas.toDataURL('image/png');
+  // Generate a consent-based signature data string (replaces canvas data URL)
+  const sigPayload = JSON.stringify({
+    type: 'digital_consent',
+    signer: '<?= addslashes($customerName) ?>',
+    timestamp: new Date().toISOString(),
+    fingerprint: document.getElementById('deviceFingerprint').value,
+    user_agent: navigator.userAgent
+  });
+  document.getElementById('signatureData').value = 'consent:' + btoa(sigPayload);
 
   // Disable button
   const btn = document.getElementById('btnSubmit');

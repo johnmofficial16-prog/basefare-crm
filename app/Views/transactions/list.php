@@ -70,11 +70,22 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       </h1>
       <p class="text-sm text-on-surface-variant mt-0.5"><?= number_format($total) ?> total transactions</p>
     </div>
-    <a href="/transactions/create"
-      class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary-container shadow-lg shadow-primary/20 transition-all text-sm">
-      <span class="material-symbols-outlined text-base">add_card</span> Record Transaction
-    </a>
+    <div class="flex items-center gap-3">
+      <?php if ($isAdmin): ?>
+      <a id="btn-csv-transactions"
+         href="/transactions/export?<?= http_build_query(array_filter($filters)) ?>"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 transition-all text-sm"
+         title="Download current filter results as CSV">
+        <span class="material-symbols-outlined text-base">download</span> Export CSV
+      </a>
+      <?php endif; ?>
+      <a href="/transactions/create"
+        class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary-container shadow-lg shadow-primary/20 transition-all text-sm">
+        <span class="material-symbols-outlined text-base">add_card</span> Record Transaction
+      </a>
+    </div>
   </div>
+
 
   <!-- Flash Messages -->
   <?php if ($flashSuccess): ?>

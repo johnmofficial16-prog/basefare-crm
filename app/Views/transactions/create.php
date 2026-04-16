@@ -418,9 +418,27 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','Manr
               </h2>
             </div>
             <div class="p-6 space-y-4">
-              <div>
-                <label class="field-label">Description <span class="text-rose-500">*</span></label>
-                <textarea id="other-desc" rows="3" placeholder="Describe the transaction..." class="field-input resize-none"></textarea>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="field-label">Description <span class="text-rose-500">*</span></label>
+                  <textarea id="other-desc" rows="3" placeholder="Describe the service/charge being authorized..." class="field-input resize-none"></textarea>
+                </div>
+                <div>
+                  <label class="field-label">Reference / Booking Number</label>
+                  <input type="text" id="field_other_reference" placeholder="e.g. HTLXYZ1234, INV-001" class="field-input">
+                  <p class="text-[10px] text-slate-500 mt-1">Hotel confirmation, invoice #, or supplier reference.</p>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="field-label">Service Provider</label>
+                  <input type="text" id="field_other_provider" placeholder="e.g. Marriott Hotels, Enterprise, Visa Office" class="field-input">
+                </div>
+                <div>
+                  <label class="field-label">Payment Summary</label>
+                  <input type="text" id="field_other_payment_summary" placeholder="e.g. 2 nights × $200 = $400" class="field-input">
+                  <p class="text-[10px] text-slate-500 mt-1">Brief itemized breakdown of the charge.</p>
+                </div>
               </div>
 
               <!-- Optional Flight Panel for Other -->

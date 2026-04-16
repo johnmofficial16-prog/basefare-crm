@@ -7,16 +7,20 @@
  */
 $activePage = $activePage ?? '';
 
+$actorRole = $_SESSION['role'] ?? 'agent';
+
 $navItems = [
-    ['href' => '/dashboard',               'icon' => 'dashboard',      'label' => 'Dashboard',        'key' => 'dashboard'],
-    ['href' => '/attendance/admin',         'icon' => 'groups',         'label' => 'Live Board',       'key' => 'attendance'],
-    ['href' => '/attendance/admin/history', 'icon' => 'history',        'label' => 'History',          'key' => 'history'],
-        ['href' => '/shifts/week',             'icon' => 'calendar_month', 'label' => 'Shift Schedule',   'key' => 'shifts'],
-    ['href' => '/acceptance',              'icon' => 'verified',       'label' => 'Acceptance',       'key' => 'acceptance'],
-    ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',     'key' => 'transactions'],
-    ['href' => '/users',                   'icon' => 'manage_accounts','label' => 'Users',            'key' => 'users'],
-    ['href' => '#',                        'icon' => 'receipt_long',   'label' => 'Payroll',          'key' => 'payroll',      'disabled' => true],
-    ['href' => '/admin/settings',          'icon' => 'settings',       'label' => 'Settings',         'key' => 'settings'],
+    ['href' => '/dashboard',               'icon' => 'dashboard',      'label' => 'Dashboard',        'key' => 'dashboard',     'roles' => ['admin', 'manager', 'supervisor']],
+    ['href' => '/attendance/admin',         'icon' => 'groups',         'label' => 'Live Board',       'key' => 'attendance',    'roles' => ['admin', 'manager', 'supervisor']],
+    ['href' => '/attendance/admin/history', 'icon' => 'history',        'label' => 'History',          'key' => 'history',       'roles' => ['admin', 'manager', 'supervisor']],
+    ['href' => '/shifts/week',             'icon' => 'calendar_month', 'label' => 'Shift Schedule',   'key' => 'shifts',        'roles' => ['admin', 'manager', 'supervisor']],
+    ['href' => '/acceptance',              'icon' => 'verified',       'label' => 'Acceptance',       'key' => 'acceptance',    'roles' => ['admin', 'manager', 'supervisor']],
+    ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',     'key' => 'transactions',  'roles' => ['admin', 'manager', 'supervisor']],
+    ['href' => '/users',                   'icon' => 'manage_accounts','label' => 'Users',            'key' => 'users',         'roles' => ['admin', 'manager']],
+    ['href' => '#',                        'icon' => 'receipt_long',   'label' => 'Payroll',          'key' => 'payroll',       'roles' => ['admin', 'manager', 'supervisor'], 'disabled' => true],
+    ['href' => '/admin/settings',          'icon' => 'settings',       'label' => 'Settings',         'key' => 'settings',      'roles' => ['admin']],
+    ['href' => '/admin/activity-log',      'icon' => 'history_edu',    'label' => 'Activity Log',     'key' => 'activity_log',  'roles' => ['admin', 'manager']],
+    ['href' => '/admin/error-console',     'icon' => 'bug_report',     'label' => 'Error Console',    'key' => 'error_console', 'roles' => ['admin', 'manager']],
 ];
 ?>
 <aside class="fixed left-0 top-0 h-full w-60 bg-white border-r border-gray-100 flex flex-col z-30 shadow-sm">
@@ -26,13 +30,14 @@ $navItems = [
       <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
         <span class="material-symbols-outlined text-white text-sm">flight_takeoff</span>
       </div>
-      <span class="font-headline font-extrabold text-primary text-sm leading-tight">Base Fare<br><span class="text-on-surface-variant font-medium text-xs">CRM Admin</span></span>
+      <span class="font-headline font-extrabold text-primary text-sm leading-tight">Base Fare<br><span class="text-on-surface-variant font-medium text-xs">CRM <?= ucfirst(htmlspecialchars($actorRole)) ?></span></span>
     </a>
   </div>
 
   <!-- Navigation -->
   <nav class="flex-1 py-4 overflow-y-auto">
     <?php foreach ($navItems as $item): ?>
+    <?php if (!in_array($actorRole, $item['roles'])) continue; ?>
     <?php $isDisabled = !empty($item['disabled']); ?>
     <a href="<?= $item['href'] ?>"
        class="flex items-center gap-3 px-5 py-3 text-sm font-semibold transition-all

@@ -299,9 +299,9 @@ tailwind.config = {
 
     <!-- ── Notes ─────────────────────────────────────────────────────────── -->
     <div class="section">
-      <div class="section-head"><h2><span class="msym">sticky_note_2</span> Agent Notes</h2></div>
+      <div class="section-head"><h2><span class="msym">sticky_note_2</span> Agent Notes *</h2></div>
       <div class="section-body">
-        <textarea name="agent_notes" rows="3" class="fi" style="resize:vertical;"><?= htmlspecialchars($prefill['agent_notes'] ?? '') ?></textarea>
+        <textarea name="agent_notes" rows="3" class="fi" required style="resize:vertical;"><?= htmlspecialchars($prefill['agent_notes'] ?? '') ?></textarea>
       </div>
     </div>
 

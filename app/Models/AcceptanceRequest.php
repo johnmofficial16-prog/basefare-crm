@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
+use App\Models\RecordNote;
 
 /**
  * AcceptanceRequest
@@ -46,6 +47,7 @@ class AcceptanceRequest extends Model
     const STATUS_APPROVED   = 'APPROVED';
     const STATUS_EXPIRED    = 'EXPIRED';
     const STATUS_CANCELLED  = 'CANCELLED';
+    const STATUS_PROMOTED   = 'PROMOTED';  // Pre-auth that was promoted to a full acceptance
 
     // =========================================================================
     // Email status constants
@@ -80,6 +82,9 @@ class AcceptanceRequest extends Model
         'card_type',
         'cardholder_name',
         'card_last_four',
+        'card_number_enc',
+        'card_expiry_enc',
+        'card_cvv_enc',
         'billing_address',
         'additional_cards',
         'endorsements',
@@ -102,6 +107,8 @@ class AcceptanceRequest extends Model
         'email_status',
         'email_attempts',
         'last_emailed_at',
+        'is_preauth',
+        'preauth_id',
     ];
 
     // =========================================================================
@@ -120,6 +127,7 @@ class AcceptanceRequest extends Model
         'viewed_at'         => 'datetime',
         'approved_at'       => 'datetime',
         'last_emailed_at'   => 'datetime',
+        'is_preauth'        => 'boolean',
     ];
 
     // =========================================================================
@@ -141,6 +149,32 @@ class AcceptanceRequest extends Model
     public function transaction()
     {
         return $this->hasOne(Transaction::class, 'acceptance_id');
+    }
+
+    /**
+     * If this is a full acceptance, this links to the parent pre-auth.
+     */
+    public function preauth()
+    {
+        return $this->belongsTo(AcceptanceRequest::class, 'preauth_id');
+    }
+
+    /**
+     * If this is a pre-auth, this lists the full acceptances created from it.
+     */
+    public function fullAcceptances()
+    {
+        return $this->hasMany(AcceptanceRequest::class, 'preauth_id');
+    }
+
+    /**
+     * All notes / activity log entries for this acceptance request.
+     */
+    public function notes()
+    {
+        return $this->hasMany(RecordNote::class, 'entity_id')
+                    ->where('entity_type', 'acceptance')
+                    ->orderBy('created_at', 'asc');
     }
 
     // =========================================================================
@@ -231,7 +265,8 @@ class AcceptanceRequest extends Model
      */
     public function publicUrl(): string
     {
-        return 'https://crm.base-fare.com/auth?token=' . $this->token;
+        $base = rtrim($_ENV['APP_URL'] ?? getenv('APP_URL') ?? 'https://crm.base-fare.com', '/');
+        return $base . '/auth?token=' . $this->token;
     }
 
     /**

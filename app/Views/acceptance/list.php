@@ -30,6 +30,7 @@ function acceptanceStatusBadge(string $status): string {
         'APPROVED'  => 'bg-emerald-100 text-emerald-800 border border-emerald-200',
         'EXPIRED'   => 'bg-slate-100 text-slate-600 border border-slate-200',
         'CANCELLED' => 'bg-rose-100 text-rose-700 border border-rose-200',
+        'PROMOTED'  => 'bg-indigo-100 text-indigo-700 border border-indigo-200',
         default     => 'bg-slate-100 text-slate-600 border border-slate-200',
     };
 }
@@ -98,12 +99,30 @@ tailwind.config = {
         <h1 class="text-2xl font-bold text-slate-900">Authorization Requests</h1>
         <p class="text-slate-500 text-sm mt-1"><?= number_format($total) ?> total record<?= $total !== 1 ? 's' : '' ?></p>
       </div>
-      <a href="/acceptance/create"
-         class="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-500 text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm">
-        <span class="material-symbols-outlined text-base">add_circle</span>
-        New Acceptance Request
-      </a>
+      <div class="flex items-center gap-2">
+        <?php if ($isAdmin): ?>
+        <a id="btn-csv-acceptance"
+           href="/acceptance/export?<?= http_build_query(array_filter($filters)) ?>"
+           class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-colors shadow-sm"
+           title="Download current filter results as CSV">
+          <span class="material-symbols-outlined text-base">download</span>
+          Export CSV
+        </a>
+        <?php endif; ?>
+        <a href="/acceptance/create?mode=preauth"
+           class="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-colors shadow-sm"
+           title="Quick Pre-Authorization — no fare breakdown, just total amount">
+          <span class="material-symbols-outlined text-base">bolt</span>
+          Quick Pre-Auth
+        </a>
+        <a href="/acceptance/create"
+           class="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-500 text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm">
+          <span class="material-symbols-outlined text-base">add_circle</span>
+          Full Acceptance
+        </a>
+      </div>
     </div>
+
 
     <?php if ($flashSuccess): ?>
     <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
@@ -131,6 +150,7 @@ tailwind.config = {
             <option value="APPROVED"  <?= ($filters['status'] ?? '') === 'APPROVED'  ? 'selected' : '' ?>>Approved</option>
             <option value="EXPIRED"   <?= ($filters['status'] ?? '') === 'EXPIRED'   ? 'selected' : '' ?>>Expired</option>
             <option value="CANCELLED" <?= ($filters['status'] ?? '') === 'CANCELLED' ? 'selected' : '' ?>>Cancelled</option>
+            <option value="PROMOTED"  <?= ($filters['status'] ?? '') === 'PROMOTED'  ? 'selected' : '' ?>>Converted (Pre-Auth)</option>
           </select>
         </div>
 
@@ -234,7 +254,8 @@ tailwind.config = {
                 default  => ['icon' => 'schedule',       'color' => 'text-slate-400'],
               };
             ?>
-            <tr class="hover:bg-slate-50/50 transition-colors">
+            <?php $isPromoted = ($row->status === 'PROMOTED'); ?>
+            <tr class="hover:bg-slate-50/50 transition-colors <?= $isPromoted ? 'opacity-50 italic' : '' ?>">
               <td class="px-5 py-3.5 text-slate-400 text-xs font-mono">#<?= $row->id ?></td>
               <td class="px-5 py-3.5 text-xs text-slate-500 whitespace-nowrap"><?= $created ?></td>
               <td class="px-5 py-3.5">
@@ -246,7 +267,14 @@ tailwind.config = {
                   <?= htmlspecialchars($row->pnr) ?>
                 </span>
               </td>
-              <td class="px-5 py-3.5"><?= $typeBadge ?></td>
+              <td class="px-5 py-3.5">
+                <?= $typeBadge ?>
+                <?php if (!empty($row->is_preauth)): ?>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 mt-1">
+                  <span class="material-symbols-outlined text-[10px] mr-0.5">bolt</span>PRE-AUTH
+                </span>
+                <?php endif; ?>
+              </td>
               <td class="px-5 py-3.5">
                 <span class="font-semibold text-slate-700"><?= htmlspecialchars($row->currency) ?></span>
                 <span class="font-mono text-slate-900 ml-0.5"><?= number_format($row->total_amount, 2) ?></span>
@@ -272,6 +300,22 @@ tailwind.config = {
               <?php endif; ?>
               <td class="px-5 py-3.5">
                 <div class="flex items-center gap-1.5 justify-end">
+                  <?php if ($isPromoted): ?>
+                  <?php
+                    // Find the full acceptance that was created from this pre-auth
+                    $fullAcc = \App\Models\AcceptanceRequest::where('preauth_id', $row->id)->where('is_preauth', 0)->first();
+                  ?>
+                  <span class="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 border border-indigo-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs">
+                    <span class="material-symbols-outlined text-sm">upgrade</span> Converted
+                  </span>
+                  <?php if ($fullAcc): ?>
+                  <a href="/acceptance/<?= $fullAcc->id ?>"
+                     class="inline-flex items-center gap-1 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors"
+                     title="View full acceptance">
+                    <span class="material-symbols-outlined text-sm">open_in_new</span> Full Acc
+                  </a>
+                  <?php endif; ?>
+                  <?php else: ?>
                   <?php if ($row->status === 'APPROVED'): ?>
                   <a href="/acceptance/<?= $row->id ?>/receipt" target="_blank"
                      class="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors">
@@ -290,8 +334,18 @@ tailwind.config = {
                     <span class="material-symbols-outlined text-sm">send</span> Resend
                   </button>
                   <?php endif; ?>
+
+                  <?php if (!empty($row->is_preauth) && $row->status === 'APPROVED'): ?>
+                  <a href="/acceptance/create?from_preauth=<?= $row->id ?>"
+                     class="inline-flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold py-1.5 px-2.5 rounded-lg text-xs transition-colors"
+                     title="Create Full Acceptance from this pre-auth">
+                    <span class="material-symbols-outlined text-sm">upgrade</span> Full Accept
+                  </a>
+                  <?php endif; ?>
+                  <?php endif; // end !isPromoted ?>
                 </div>
               </td>
+
             </tr>
             <?php endforeach; ?>
             <?php endif; ?>
@@ -349,7 +403,7 @@ async function resendAcceptance(id) {
   btn.textContent = 'Sending...';
 
   try {
-    const res  = await fetch(`/acceptance/${id}/resend`, { method: 'POST' });
+    const res  = await fetch(`/acceptance/${id}/resend`, { method: 'POST', headers: { 'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>' } });
     const data = await res.json();
 
     if (data.success) {

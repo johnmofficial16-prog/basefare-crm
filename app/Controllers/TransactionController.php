@@ -10,19 +10,6 @@ use App\Services\TransactionService;
 
 /**
  * TransactionController — Handles all transaction recorder HTTP endpoints.
- *
- * Routes:
- *   GET  /transactions              → index  (list)
- *   GET  /transactions/create       → createForm
- *   POST /transactions/create       → store
- *   GET  /transactions/{id}         → view
- *   GET  /transactions/{id}/edit    → editForm
- *   POST /transactions/{id}/edit    → update
- *   POST /transactions/{id}/approve → approve
- *   POST /transactions/{id}/void   → void
- *   POST /transactions/reveal-card  → revealCard (AJAX)
- *   GET  /transactions/acceptance-data/{id} → acceptanceData (AJAX)
- *   GET  /transactions/autofill-options     → autofillOptions (AJAX)
  */
 class TransactionController
 {
@@ -54,17 +41,25 @@ class TransactionController
             'date_to'        => $params['date_to'] ?? '',
         ];
 
-        $isAdmin = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
+        $isElevated   = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
+        $isSupervisor = ($userRole === User::ROLE_SUPERVISOR);
 
-        // Agents with a universal search bypass the agentFilter — they can search all records
-        // (read-only; edit/approve routes enforce ownership separately).
-        // Without a search query, agents only see their own transactions.
+        $agentIds = null;
         $agentFilter = null;
-        if (!$isAdmin) {
+
+        if ($isElevated) {
+            // unrestricted
+        } elseif ($isSupervisor) {
+            $actor = \App\Models\User::find($userId);
+            $teamIds = $actor ? $actor->getTeamAgentIds() : [];
+            if (empty($filters['search'])) {
+                $agentIds = count($teamIds) ? $teamIds : [-1];
+            }
+        } else {
             $agentFilter = !empty($filters['search']) ? null : $userId;
         }
 
-        $data = $this->service->list($page, 25, $filters, $agentFilter);
+        $data = $this->service->list($page, 25, $filters, $agentFilter, $agentIds);
 
         ob_start();
         require __DIR__ . '/../Views/transactions/list.php';
@@ -83,18 +78,15 @@ class TransactionController
         $userId = $_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
 
-        // Pre-fill from acceptance if autofill/acceptance_id provided
         $prefill = null;
         $autofillId = $params['autofill'] ?? $params['acceptance_id'] ?? null;
         if (!empty($autofillId)) {
             $prefill = $this->service->getAcceptanceAutofill((int)$autofillId);
         }
 
-        // Autofill options for the import dropdown
         $isAdmin = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
         $autofillOptions = $this->service->getAutofillOptions($isAdmin ? null : $userId);
 
-        // Flash messages
         $flashError   = $_SESSION['flash_error'] ?? null;
         $flashSuccess = $_SESSION['flash_success'] ?? null;
         unset($_SESSION['flash_error'], $_SESSION['flash_success']);
@@ -115,7 +107,6 @@ class TransactionController
         $agentId = $_SESSION['user_id'];
         $body    = $request->getParsedBody();
 
-        // ── Validate required fields ───────────────────────────────────
         $required = ['type', 'customer_name', 'customer_email', 'pnr', 'total_amount'];
         foreach ($required as $field) {
             if (empty($body[$field])) {
@@ -124,26 +115,28 @@ class TransactionController
             }
         }
 
-        // ── Validate email ─────────────────────────────────────────────
         if (!filter_var($body['customer_email'], FILTER_VALIDATE_EMAIL)) {
             $_SESSION['flash_error'] = 'Invalid customer email address.';
             return $response->withHeader('Location', '/transactions/create')->withStatus(302);
         }
 
-        // ── Parse passengers JSON ──────────────────────────────────────
+        // Mandatory notes for audit
+        if (empty(trim($body['agent_notes'] ?? ''))) {
+            $_SESSION['flash_error'] = 'Agent notes are required. Please describe what you did.';
+            return $response->withHeader('Location', '/transactions/create')->withStatus(302);
+        }
+
         $passengers = json_decode($body['passengers_json'] ?? '[]', true);
         if (empty($passengers)) {
             $_SESSION['flash_error'] = 'At least one passenger is required.';
             return $response->withHeader('Location', '/transactions/create')->withStatus(302);
         }
 
-        // ── Parse type-specific data JSON ──────────────────────────────
         $typeData = null;
         if (!empty($body['type_specific_data_json'])) {
             $typeData = json_decode($body['type_specific_data_json'], true);
         }
 
-        // ── Build data array for service ───────────────────────────────
         $data = array_merge($body, [
             'passengers'         => $passengers,
             'type_specific_data' => $typeData,
@@ -169,9 +162,9 @@ class TransactionController
         $id       = (int)$args['id'];
         $userId   = $_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
-        $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
+        $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR]);
 
-        $txn = Transaction::with(['agent', 'passengers', 'cards', 'acceptance', 'voidOf', 'reversal', 'voidedByUser'])
+        $txn = Transaction::with(['agent', 'passengers', 'cards', 'acceptance', 'voidOf', 'reversal', 'voidedByUser', 'notes.user'])
             ->find($id);
 
         if (!$txn) {
@@ -179,7 +172,6 @@ class TransactionController
             return $response->withHeader('Location', '/transactions')->withStatus(302);
         }
 
-        // Agents can only view their own
         if (!$isAdmin && $txn->agent_id !== $userId) {
             $_SESSION['flash_error'] = 'Access denied.';
             return $response->withHeader('Location', '/transactions')->withStatus(302);
@@ -203,12 +195,10 @@ class TransactionController
     public function editForm(Request $request, Response $response, array $args): Response
     {
         $id       = (int)$args['id'];
-        $userId   = $_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
         $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
 
         $txn = Transaction::with(['passengers', 'cards'])->find($id);
-
         if (!$txn) {
             $_SESSION['flash_error'] = 'Transaction not found.';
             return $response->withHeader('Location', '/transactions')->withStatus(302);
@@ -238,7 +228,6 @@ class TransactionController
         $id   = (int)$args['id'];
         $body = $request->getParsedBody();
 
-        // Parse passengers + type data
         $passengers = json_decode($body['passengers_json'] ?? '[]', true);
         $typeData   = !empty($body['type_specific_data_json'])
             ? json_decode($body['type_specific_data_json'], true)
@@ -252,6 +241,12 @@ class TransactionController
         $userRole = $_SESSION['role'] ?? 'agent';
         $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
 
+        // Mandatory notes for audit on edit
+        if (empty(trim($body['agent_notes'] ?? ''))) {
+            $_SESSION['flash_error'] = 'Agent notes are required for auditing. Please describe what you changed.';
+            return $response->withHeader('Location', '/transactions/' . $id . '/edit')->withStatus(302);
+        }
+
         try {
             $txn = $this->service->update($id, $data, $isAdmin);
         } catch (\RuntimeException $e) {
@@ -262,7 +257,6 @@ class TransactionController
         $_SESSION['flash_success'] = 'Transaction #' . $id . ' updated.';
         return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
     }
-
 
     // =========================================================================
     // REVEAL CARD  —  POST /transactions/reveal-card  (AJAX)
@@ -279,22 +273,17 @@ class TransactionController
         $payload = ['success' => false];
 
         if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
-            $payload['error'] = 'Admin access required.';
-            $response->getBody()->write(json_encode($payload));
-            return $response->withHeader('Content-Type', 'application/json')->withStatus(403);
+            return $this->jsonResponse($response, ['error' => 'Admin access required.'], 403);
         }
 
         try {
             $cardData = $this->service->revealCard($cardId, $adminId, $password);
             $payload  = ['success' => true, 'data' => $cardData];
         } catch (\RuntimeException $e) {
-            $payload['error'] = $e->getMessage();
-            $response->getBody()->write(json_encode($payload));
-            return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
+            return $this->jsonResponse($response, ['error' => $e->getMessage()], 400);
         }
 
-        $response->getBody()->write(json_encode($payload));
-        return $response->withHeader('Content-Type', 'application/json');
+        return $this->jsonResponse($response, $payload);
     }
 
     // =========================================================================
@@ -304,14 +293,78 @@ class TransactionController
     public function acceptanceData(Request $request, Response $response, array $args): Response
     {
         $acceptanceId = (int)$args['id'];
-        $data = $this->service->getAcceptanceAutofill($acceptanceId);
+
+        try {
+            $data = $this->service->getAcceptanceAutofill($acceptanceId);
+        } catch (\RuntimeException $e) {
+            if ($e->getMessage() === 'pre_auth') {
+                return $this->jsonResponse($response, [
+                    'success' => false,
+                    'error'   => 'This is a pre-authorization hold. Import is only allowed after the full signed acceptance has been received and approved.',
+                ], 422);
+            }
+            return $this->jsonResponse($response, ['success' => false, 'error' => $e->getMessage()], 400);
+        }
 
         $payload = $data
             ? ['success' => true, 'data' => $data]
-            : ['success' => false, 'error' => 'Acceptance not found or not approved.'];
+            : ['success' => false, 'error' => 'Acceptance not found or not yet approved by the customer.'];
 
-        $response->getBody()->write(json_encode($payload));
-        return $response->withHeader('Content-Type', 'application/json');
+        return $this->jsonResponse($response, $payload);
+    }
+
+    // =========================================================================
+    // APPROVE  —  POST /transactions/{id}/approve
+    // =========================================================================
+
+    public function approve(Request $request, Response $response, array $args): Response
+    {
+        $userId    = (int)$_SESSION['user_id'];
+        $userRole  = $_SESSION['role'] ?? 'agent';
+
+        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])) {
+            $_SESSION['flash_error'] = 'You do not have permission to approve transactions.';
+            return $response->withHeader('Location', '/transactions')->withStatus(302);
+        }
+
+        $txnId = (int)($args['id'] ?? 0);
+
+        try {
+            $this->service->approve($txnId, $userId, $userRole);
+            $_SESSION['flash_success'] = 'Transaction #' . $txnId . ' has been approved.';
+        } catch (\RuntimeException $e) {
+            $_SESSION['flash_error'] = $e->getMessage();
+        }
+
+        return $response->withHeader('Location', '/transactions/' . $txnId)->withStatus(302);
+    }
+
+    // =========================================================================
+    // VOID  —  POST /transactions/{id}/void
+    // =========================================================================
+
+    public function void(Request $request, Response $response, array $args): Response
+    {
+        $userId   = (int)$_SESSION['user_id'];
+        $userRole = $_SESSION['role'] ?? 'agent';
+
+        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            $_SESSION['flash_error'] = 'Only managers and admins can void transactions.';
+            return $response->withHeader('Location', '/transactions')->withStatus(302);
+        }
+
+        $txnId  = (int)($args['id'] ?? 0);
+        $body   = (array)$request->getParsedBody();
+        $reason = trim($body['void_reason'] ?? '');
+
+        try {
+            $reversal = $this->service->void($txnId, $reason, $userId);
+            $_SESSION['flash_success'] = 'Transaction #' . $txnId . ' voided. Reversal #' . $reversal->id . ' created.';
+        } catch (\RuntimeException $e) {
+            $_SESSION['flash_error'] = $e->getMessage();
+        }
+
+        return $response->withHeader('Location', '/transactions/' . $txnId)->withStatus(302);
     }
 
     // =========================================================================
@@ -326,7 +379,130 @@ class TransactionController
 
         $options = $this->service->getAutofillOptions($isAdmin ? null : $userId);
 
-        $response->getBody()->write(json_encode(['success' => true, 'options' => $options]));
-        return $response->withHeader('Content-Type', 'application/json');
+        return $this->jsonResponse($response, ['success' => true, 'options' => $options]);
+    }
+
+    // =========================================================================
+    // ADD NOTE  —  POST /transactions/{id}/note  (AJAX)
+    // =========================================================================
+
+    public function addNote(Request $request, Response $response, array $args): Response
+    {
+        $id     = (int)($args['id'] ?? 0);
+        $userId = $_SESSION['user_id'];
+        $body   = $request->getParsedBody();
+        $note   = trim($body['note'] ?? '');
+        $action = trim($body['action'] ?? 'note');
+
+        if (empty($note)) {
+            return $this->jsonResponse($response, ['error' => 'Note cannot be empty.'], 422);
+        }
+
+        $txn = Transaction::find($id);
+        if (!$txn) {
+            return $this->jsonResponse($response, ['error' => 'Transaction not found.'], 404);
+        }
+
+        $userRole = $_SESSION['role'] ?? 'agent';
+        if ($userRole === User::ROLE_AGENT && $txn->agent_id !== $userId) {
+            return $this->jsonResponse($response, ['error' => 'Access denied.'], 403);
+        }
+
+        $rn = \App\Models\RecordNote::log('transaction', $id, $userId, $note, $action);
+        $rn->load('user');
+
+        return $this->jsonResponse($response, [
+            'success'    => true,
+            'id'         => $rn->id,
+            'user_name'  => $rn->user->name ?? 'Unknown',
+            'user_role'  => $rn->user->role ?? '',
+            'action'     => $rn->action,
+            'note'       => $rn->note,
+            'created_at' => $rn->created_at->format('M d, Y g:i A'),
+        ]);
+    }
+
+    // =========================================================================
+    // CSV EXPORT  —  GET /transactions/export  (admin/manager only)
+    // =========================================================================
+
+    public function exportCsv(Request $request, Response $response): Response
+    {
+        $userRole = $_SESSION['role'] ?? 'agent';
+        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            $response->getBody()->write('Access denied.');
+            return $response->withStatus(403);
+        }
+
+        $params  = $request->getQueryParams();
+        $filters = [
+            'search'         => trim($params['search'] ?? ''),
+            'type'           => $params['type'] ?? '',
+            'status'         => $params['status'] ?? '',
+            'pnr'            => $params['pnr'] ?? '',
+            'payment_status' => $params['payment_status'] ?? '',
+            'date_from'      => $params['date_from'] ?? '',
+            'date_to'        => $params['date_to'] ?? '',
+        ];
+
+        // All records matching filters, no pagination cap
+        $all   = $this->service->list(1, 99999, $filters, null, null);
+        $items = $all['items'];
+
+        $headers = [
+            'ID', 'Date', 'Type', 'Customer Name', 'Phone', 'Email',
+            'PNR', 'Amount', 'Currency', 'Cost', 'Profit/MCO',
+            'Payment Method', 'Payment Status', 'Status', 'Agent',
+        ];
+
+        $rows = $items->map(fn($t) => [
+            $t->id,
+            $t->created_at,
+            $t->type,
+            $t->customer_name,
+            $t->customer_phone,
+            $t->customer_email,
+            $t->pnr,
+            $t->total_amount,
+            $t->currency,
+            $t->cost_amount,
+            $t->profit_mco,
+            $t->payment_method,
+            $t->payment_status,
+            $t->status,
+            $t->agent?->name ?? '—',
+        ]);
+
+        $filename = 'transactions_' . date('Y-m-d') . '.csv';
+        return $this->csvResponse($response, $headers, $rows, $filename);
+    }
+
+    // =========================================================================
+    // HELPER
+    // =========================================================================
+
+    private function jsonResponse(Response $response, mixed $data, int $status = 200): Response
+    {
+        $response->getBody()->write(json_encode($data));
+        return $response->withHeader('Content-Type', 'application/json')->withStatus($status);
+    }
+
+    private function csvResponse(Response $response, array $headers, iterable $rows, string $filename): Response
+    {
+        $tmp = fopen('php://temp', 'r+');
+        fputcsv($tmp, $headers);
+        foreach ($rows as $row) {
+            fputcsv($tmp, array_values((array)$row));
+        }
+        rewind($tmp);
+        $csv = stream_get_contents($tmp);
+        fclose($tmp);
+
+        $response->getBody()->write("\xEF\xBB\xBF" . $csv); // UTF-8 BOM for Excel
+        return $response
+            ->withHeader('Content-Type', 'text/csv; charset=UTF-8')
+            ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
+            ->withHeader('Cache-Control', 'no-cache, no-store')
+            ->withHeader('Pragma', 'no-cache');
     }
 }

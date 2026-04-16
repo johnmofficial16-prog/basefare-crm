@@ -11,6 +11,14 @@ use App\Models\AcceptanceRequest;
 
 $prefill = $prefill ?? [];
 $flashError = $flashError ?? null;
+$preauthRecord = $preauthRecord ?? null;
+
+// Determine mode: preauth vs full
+// Priority: from_preauth param (promote flow) forces full mode; ?mode=preauth forces preauth mode
+$isPromoting   = ($preauthRecord !== null);  // coming from an approved pre-auth
+$initMode      = $isPromoting ? 'full' : (($_GET['mode'] ?? '') === 'preauth' ? 'preauth' : 'full');
+$initIsPreauth = ($initMode === 'preauth');
+$initPreauthId = $isPromoting ? $preauthRecord->id : 0;
 
 // Pre-fill helpers (safe defaults)
 $pre = [
@@ -18,7 +26,18 @@ $pre = [
     'pnr'            => htmlspecialchars(strtoupper($prefill['pnr'] ?? '')),
     'customer_name'  => htmlspecialchars($prefill['customer_name'] ?? ''),
     'customer_email' => htmlspecialchars($prefill['customer_email'] ?? ''),
+    'customer_phone' => htmlspecialchars($prefill['customer_phone'] ?? ''),
     'transaction_id' => (int)($prefill['transaction_id'] ?? 0),
+    'total_amount'   => htmlspecialchars($prefill['total_amount'] ?? ''),
+    'currency'       => htmlspecialchars($prefill['currency'] ?? 'USD'),
+    'agent_notes'    => htmlspecialchars($prefill['agent_notes'] ?? ''),
+];
+
+// Pre-fill JSON — always use json_encode() because Eloquent casts these to PHP arrays
+$preJson = [
+    'passengers'     => json_encode($prefill['passengers']  ?? []),
+    'flight_data'    => json_encode($prefill['flight_data'] ?? null),
+    'fare_breakdown' => json_encode($prefill['fare_breakdown'] ?? []),
 ];
 
 // Type definitions for Step 1 cards
@@ -118,6 +137,40 @@ tailwind.config = {
     </a>
   </div>
 
+  <!-- ═══ MODE TOGGLE PILL ═══ -->
+  <?php if ($isPromoting): ?>
+  <div class="bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-3.5 flex items-center gap-3">
+    <span class="material-symbols-outlined text-indigo-600 text-lg">upgrade</span>
+    <div class="flex-1">
+      <p class="text-indigo-900 font-bold text-sm">Creating Full Acceptance from Pre-Auth #<?= $preauthRecord->id ?> &mdash; <?= htmlspecialchars($preauthRecord->customer_name) ?></p>
+      <p class="text-indigo-600 text-xs mt-0.5">Customer info, PNR &amp; flights are pre-filled. Add fare breakdown, endorsements and split charges to complete.</p>
+    </div>
+    <a href="/acceptance/<?= $preauthRecord->id ?>" class="text-xs text-indigo-500 hover:underline flex-none">View pre-auth →</a>
+  </div>
+  <?php else: ?>
+  <div class="bg-white border border-slate-200 rounded-xl px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
+    <div class="flex-1">
+      <p class="text-xs font-semibold" id="modeBannerText" style="color:<?= $initIsPreauth ? '#b45309' : '#1a3a6b' ?>">
+        <?= $initIsPreauth
+          ? '⚡ Quick Pre-Auth — sends total amount only to the customer. Send a Full Acceptance after ticketing with full breakdown.'
+          : '📋 Full Acceptance — complete fare breakdown, split charges, endorsements and signed receipt.' ?>
+      </p>
+    </div>
+    <div class="flex rounded-xl overflow-hidden border border-slate-200 flex-none text-sm font-bold shadow-sm">
+      <button type="button" id="modeBtn-preauth" onclick="setMode('preauth')"
+        class="px-4 py-2.5 flex items-center gap-1.5 transition-colors <?= $initIsPreauth ? 'bg-amber-500 text-white' : 'bg-white text-slate-600 hover:bg-amber-50' ?>">
+        <span class="material-symbols-outlined text-base">bolt</span>
+        Quick Pre-Auth
+      </button>
+      <button type="button" id="modeBtn-full" onclick="setMode('full')"
+        class="px-4 py-2.5 flex items-center gap-1.5 border-l border-slate-200 transition-colors <?= !$initIsPreauth ? 'bg-primary-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50' ?>">
+        <span class="material-symbols-outlined text-base">receipt_long</span>
+        Full Acceptance
+      </button>
+    </div>
+  </div>
+  <?php endif; ?>
+
   <!-- Step Indicator -->
   <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
     <div class="flex items-center">
@@ -150,6 +203,10 @@ tailwind.config = {
   <?php if ($pre['transaction_id']): ?>
   <input type="hidden" name="transaction_id" value="<?= $pre['transaction_id'] ?>">
   <?php endif; ?>
+
+  <!-- Hidden: pre-auth flags -->
+  <input type="hidden" name="is_preauth" id="hidIsPreauth" value="<?= $initIsPreauth ? '1' : '0' ?>">
+  <input type="hidden" name="preauth_id"  id="hidPreauthId"  value="<?= $initPreauthId ?>">
 
   <!-- JSON Hidden Inputs (populated by JS before submit) -->
   <input type="hidden" name="passengers_json"       id="hidPassengers"      value="[]">
@@ -201,15 +258,36 @@ tailwind.config = {
             </h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label class="block text-[10px] font-bold text-amber-900 uppercase mb-1">Charge Title *</label>
-                <input type="text" id="field_other_title" placeholder="e.g. Airport transfer fee..."
-                       class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 bg-white">
-                <p class="text-[10px] text-amber-700 mt-1">A short title describing the charge.</p>
+                <label class="block text-[10px] font-bold text-amber-900 uppercase mb-1">Charge Title <span class="text-rose-500">*</span></label>
+                <input type="text" id="field_other_title" placeholder="e.g. Airport transfer fee, Hotel booking..."
+                       class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 bg-white"
+                       oninput="syncExtraData && syncExtraData()">
+                <p class="text-[10px] text-amber-700 mt-1">A short title describing what is being charged.</p>
               </div>
               <div>
-                <label class="block text-[10px] font-bold text-amber-900 uppercase mb-1">Additional Notes</label>
-                <textarea id="field_other_notes" rows="2" class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 bg-white resize-none"></textarea>
+                <label class="block text-[10px] font-bold text-amber-900 uppercase mb-1">Reference / Booking Number</label>
+                <input type="text" id="field_other_reference" placeholder="e.g. HTLXYZ1234, INV-001"
+                       class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 bg-white">
+                <p class="text-[10px] text-amber-700 mt-1">Hotel confirmation, invoice #, or supplier ref.</p>
               </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+              <div>
+                <label class="block text-[10px] font-bold text-amber-900 uppercase mb-1">Service Provider</label>
+                <input type="text" id="field_other_provider" placeholder="e.g. Marriott Hotels, Enterprise, Visa Office"
+                       class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 bg-white">
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-amber-900 uppercase mb-1">Payment Summary</label>
+                <input type="text" id="field_other_payment_summary" placeholder="e.g. 2 nights × $200 = $400"
+                       class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 bg-white">
+                <p class="text-[10px] text-amber-700 mt-1">Brief breakdown of how the charge is composed.</p>
+              </div>
+            </div>
+            <div class="mt-3">
+              <label class="block text-[10px] font-bold text-amber-900 uppercase mb-1">Additional Notes</label>
+              <textarea id="field_other_notes" rows="2" placeholder="Any other context, instructions, or authorizations..."
+                        class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 bg-white resize-none"></textarea>
             </div>
           </div>
         </div>
@@ -279,7 +357,7 @@ tailwind.config = {
                 Customer Phone
               </label>
               <input type="tel" name="customer_phone" id="field_customer_phone" maxlength="20"
-                     placeholder="+1 416-555-0100"
+                     value="<?= $pre['customer_phone'] ?>" placeholder="+1 416-555-0100"
                      class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent">
             </div>
             <div>
@@ -546,8 +624,8 @@ tailwind.config = {
       <!-- ═══════════════════════════════════════════════════════════════ -->
       <div id="step-4" class="step-panel space-y-5">
 
-        <!-- Fare Breakdown -->
-        <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <!-- Fare Breakdown (full acceptance only) -->
+        <div id="sec-fare-breakdown" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
             <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">Fare Breakdown</h2>
             <p class="text-xs text-slate-500 mt-0.5">Add line items — total is calculated automatically.</p>
@@ -563,18 +641,125 @@ tailwind.config = {
               <div class="flex items-center gap-2">
                 <select name="currency" id="field_currency"
                   class="border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
-                  <option value="CAD">CAD</option><option value="USD">USD</option>
-                  <option value="GBP">GBP</option><option value="EUR">EUR</option>
-                  <option value="INR">INR</option><option value="AED">AED</option>
-                  <option value="SGD">SGD</option>
+                  <option value="USD" <?= $pre['currency'] === 'USD' ? 'selected' : '' ?>>USD</option>
+                  <option value="CAD" <?= $pre['currency'] === 'CAD' ? 'selected' : '' ?>>CAD</option>
+                  <option value="GBP" <?= $pre['currency'] === 'GBP' ? 'selected' : '' ?>>GBP</option>
+                  <option value="EUR" <?= $pre['currency'] === 'EUR' ? 'selected' : '' ?>>EUR</option>
+                  <option value="INR" <?= $pre['currency'] === 'INR' ? 'selected' : '' ?>>INR</option>
+                  <option value="AED" <?= $pre['currency'] === 'AED' ? 'selected' : '' ?>>AED</option>
+                  <option value="SGD" <?= $pre['currency'] === 'SGD' ? 'selected' : '' ?>>SGD</option>
                 </select>
                 <input type="number" name="total_amount" id="field_total_amount" step="0.01" min="0" required
-                  placeholder="0.00" oninput="syncSummary()"
+                  value="<?= $pre['total_amount'] ?>" placeholder="0.00" oninput="syncSummary()"
                   class="w-32 border border-slate-200 rounded-lg px-3 py-1.5 text-lg font-bold text-emerald-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500">
               </div>
             </div>
             <div id="step4-amount-error" class="hidden text-rose-600 text-xs font-medium flex items-center gap-1">
               <span class="material-symbols-outlined text-sm">error</span> Total amount is required.
+            </div>
+          </div>
+        </div>
+
+        <!-- Pre-Auth: simple total only (shown only in preauth mode) -->
+        <div id="sec-preauth-total" style="display:none;" class="bg-amber-50 border-2 border-amber-300 rounded-xl shadow-sm p-5">
+          <p class="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3">⚡ Pre-Auth — Total Amount Only</p>
+          <p class="text-xs text-amber-700 mb-4">No fare breakdown needed. The customer will see only the total. You'll send a Full Acceptance with the complete breakdown after ticketing.</p>
+          <div class="flex items-center gap-3">
+            <select id="preauth_currency" onchange="document.getElementById('field_currency').value=this.value"
+              class="border border-amber-300 rounded-lg px-2 py-2 text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+              <option value="USD" selected>USD</option><option value="CAD">CAD</option><option value="GBP">GBP</option><option value="EUR">EUR</option><option value="INR">INR</option><option value="AED">AED</option>
+            </select>
+            <input type="number" step="0.01" min="0" id="preauth_total"
+              placeholder="Total amount e.g. 1250.00"
+              oninput="document.getElementById('field_total_amount').value=this.value; syncSummary();"
+              class="flex-1 border border-amber-300 rounded-lg px-3 py-2 text-lg font-black text-amber-900 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+        </div>
+
+
+        <!-- sec-cancel-refund: shown when type = cancel_refund -->
+        <div id="sec-cancel-refund" class="hidden bg-white border-2 border-rose-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-rose-100 bg-rose-50/50 flex items-center gap-2">
+            <span class="material-symbols-outlined text-rose-500">money_off</span>
+            <div>
+              <h2 class="font-bold text-rose-900" style="font-family:Manrope,sans-serif;">Cancellation &amp; Refund Details</h2>
+              <p class="text-xs text-rose-600 mt-0.5">Required for cancel refund type. Shown to customer in authorization form.</p>
+            </div>
+          </div>
+          <div class="p-6 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[10px] font-bold text-rose-700 uppercase tracking-wider mb-1.5">Refund Amount <span class="text-rose-500">*</span></label>
+                <input type="number" name="cr_refund_amount" id="field_cr_refund_amount" step="0.01" min="0" placeholder="0.00"
+                  class="w-full border border-rose-200 rounded-lg px-3 py-2 text-sm font-mono font-bold text-rose-700 bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                <p class="text-[10px] text-rose-500 mt-1">Amount to be refunded to customer (same currency as total).</p>
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-rose-700 uppercase tracking-wider mb-1.5">Cancellation Fee</label>
+                <input type="number" name="cr_cancel_fee" id="field_cr_cancel_fee" step="0.01" min="0" placeholder="0.00"
+                  class="w-full border border-rose-200 rounded-lg px-3 py-2 text-sm font-mono bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                <p class="text-[10px] text-rose-500 mt-1">Airline/supplier cancellation penalty (if any).</p>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[10px] font-bold text-rose-700 uppercase tracking-wider mb-1.5">Refund Method</label>
+                <select name="cr_refund_method" id="field_cr_refund_method"
+                  class="w-full border border-rose-200 rounded-lg px-3 py-2 text-sm bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                  <option value="">-- Select --</option>
+                  <option value="original_card">Original Card</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-rose-700 uppercase tracking-wider mb-1.5">Refund Timeline</label>
+                <input type="text" name="cr_refund_timeline" id="field_cr_refund_timeline" placeholder="e.g. 7-10 business days"
+                  class="w-full border border-rose-200 rounded-lg px-3 py-2 text-sm bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-400">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- sec-cancel-credit: shown when type = cancel_credit -->
+        <div id="sec-cancel-credit" class="hidden bg-white border-2 border-violet-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-violet-100 bg-violet-50/50 flex items-center gap-2">
+            <span class="material-symbols-outlined text-violet-500">savings</span>
+            <div>
+              <h2 class="font-bold text-violet-900" style="font-family:Manrope,sans-serif;">Future Credit Details</h2>
+              <p class="text-xs text-violet-600 mt-0.5">Required for cancel credit type. Shown to customer in authorization form.</p>
+            </div>
+          </div>
+          <div class="p-6 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[10px] font-bold text-violet-700 uppercase tracking-wider mb-1.5">Future Credit Amount <span class="text-rose-500">*</span></label>
+                <input type="number" name="cc_credit_amount" id="field_cc_credit_amount" step="0.01" min="0" placeholder="0.00"
+                  class="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm font-mono font-bold text-violet-700 bg-violet-50 focus:outline-none focus:ring-2 focus:ring-violet-400">
+                <p class="text-[10px] text-violet-500 mt-1">Credit held with the airline for future re-booking.</p>
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-violet-700 uppercase tracking-wider mb-1.5">Credit Valid Until <span class="text-rose-500">*</span></label>
+                <input type="date" name="cc_valid_until" id="field_cc_valid_until"
+                  class="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm bg-violet-50 focus:outline-none focus:ring-2 focus:ring-violet-400">
+                <p class="text-[10px] text-violet-500 mt-1">Expiry date of the future travel credit.</p>
+              </div>
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-violet-700 uppercase tracking-wider mb-1.5">E-Ticket Numbers (one per passenger)</label>
+              <p class="text-[10px] text-violet-500 mb-2">Enter the original e-ticket number for each passenger being cancelled and converted to credit.</p>
+              <div id="credit-etkt-rows" class="space-y-2"></div>
+              <button type="button" onclick="creditEtktMgr.addRow()"
+                class="mt-2 inline-flex items-center gap-1 text-xs text-violet-600 font-semibold hover:text-violet-800 transition-colors">
+                <span class="material-symbols-outlined text-sm">add_circle</span> Add Passenger Row
+              </button>
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-violet-700 uppercase tracking-wider mb-1.5">Credit Instructions</label>
+              <textarea name="cc_instructions" id="field_cc_instructions" rows="2"
+                placeholder="e.g. Credit valid for re-booking on same airline. Subject to fare difference at time of re-booking."
+                class="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm bg-violet-50 resize-none focus:outline-none focus:ring-2 focus:ring-violet-400"></textarea>
             </div>
           </div>
         </div>
@@ -585,7 +770,8 @@ tailwind.config = {
             <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">Payment Details</h2>
           </div>
           <div class="p-6 space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <!-- Row 1: Card type + Cardholder -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Card Type <span class="text-rose-500">*</span></label>
                 <select name="card_type" id="field_card_type" required
@@ -599,12 +785,32 @@ tailwind.config = {
                 <input type="text" name="cardholder_name" id="field_cardholder_name" required placeholder="As it appears on card"
                   class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
               </div>
+            </div>
+            <!-- Row 2: Full Card Number + Expiry + CVV -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div class="sm:col-span-1">
+                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Card Number <span class="text-rose-500">*</span></label>
+                <input type="text" name="card_number" id="field_card_number" required
+                  maxlength="19" placeholder="•••• •••• •••• ••••"
+                  oninput="this.value=this.value.replace(/[^\d\s]/g,'').replace(/(\d{4})(?=\d)/g,'$1 ').trim().slice(0,19); syncSummary();"
+                  class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono font-bold tracking-widest bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
+              </div>
               <div>
-                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Last 4 Digits <span class="text-rose-500">*</span></label>
-                <input type="text" name="card_last_four" id="field_card_last_four" required maxlength="4" pattern="[0-9]{4}" placeholder="••••"
+                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Expiry <span class="text-rose-500">*</span></label>
+                <input type="text" name="card_expiry" id="field_card_expiry" required
+                  maxlength="5" placeholder="MM/YY"
+                  oninput="let v=this.value.replace(/\D/g,''); if(v.length>=3) v=v.slice(0,2)+'/'+v.slice(2,4); this.value=v;"
+                  class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono font-bold tracking-widest bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">CVV <span class="text-rose-500">*</span></label>
+                <input type="password" name="card_cvv" id="field_card_cvv" required
+                  maxlength="4" placeholder="•••"
+                  autocomplete="off"
                   class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono font-bold tracking-widest bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
               </div>
             </div>
+            <p class="text-[10px] text-slate-400 flex items-center gap-1"><span class="material-symbols-outlined text-sm text-emerald-600">lock</span> Full CC details are AES-256 encrypted at rest. Only last 4 digits are shown to the customer.</p>
             <div>
               <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Billing Address <span class="text-rose-500">*</span></label>
               <textarea name="billing_address" id="field_billing_address" required rows="2"
@@ -616,7 +822,7 @@ tailwind.config = {
               <input type="text" name="statement_descriptor" placeholder="e.g. Lufthansa Airlines / Date Change Fee"
                 class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
             </div>
-            <div>
+            <div id="sec-split-charge">
               <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Split Charge Note</label>
               <input type="text" name="split_charge_note" placeholder="e.g. Card 1: $500, Card 2: $320"
                 class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
@@ -636,8 +842,8 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Endorsements, Baggage & Fare Rules -->
-        <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <!-- Endorsements, Baggage & Fare Rules (full acceptance only) -->
+        <div id="sec-ticket-conditions" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
             <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">Ticket Conditions</h2>
           </div>
@@ -645,7 +851,7 @@ tailwind.config = {
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Endorsements</label>
-                <input type="text" name="endorsements" placeholder="e.g. NON END/NON REF/NON RRT"
+                <input type="text" name="endorsements" value="NON END/NON REF/NON RRT" placeholder="e.g. NON END/NON REF/NON RRT"
                   class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
               </div>
               <div>
@@ -697,7 +903,7 @@ tailwind.config = {
             <div>
               <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Agent Notes (Internal Only)</label>
               <textarea name="agent_notes" rows="2" placeholder="Internal notes not visible to customer..."
-                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 resize-none focus:outline-none focus:ring-2 focus:ring-primary-600"></textarea>
+                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 resize-none focus:outline-none focus:ring-2 focus:ring-primary-600"><?= $pre['agent_notes'] ?></textarea>
             </div>
           </div>
         </div>
@@ -791,6 +997,52 @@ tailwind.config = {
                 <div>
                   <p id="prev-card-holder" class="text-sm font-semibold text-slate-900">—</p>
                   <p id="prev-card-num" class="text-xs font-mono text-slate-500">—</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Future Credit Details (cancel_credit only) -->
+            <div id="prev-credit-section" class="hidden">
+              <p class="text-[10px] font-bold text-violet-500 uppercase tracking-wider mb-2">Future Travel Credit Summary</p>
+              <div class="bg-violet-50 rounded-lg border border-violet-200 p-4 space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <p class="text-[9px] font-bold text-violet-400 uppercase tracking-wider">Credit Value</p>
+                    <p id="prev-credit-amount" class="text-base font-black text-violet-700 mt-1 font-mono">—</p>
+                  </div>
+                  <div>
+                    <p class="text-[9px] font-bold text-violet-400 uppercase tracking-wider">Valid Until</p>
+                    <p id="prev-credit-valid" class="text-sm font-semibold text-violet-700 mt-1">—</p>
+                  </div>
+                </div>
+                <div id="prev-credit-etkt-wrap" class="hidden">
+                  <p class="text-[9px] font-bold text-violet-400 uppercase tracking-wider mb-1">E-Ticket Numbers</p>
+                  <div id="prev-credit-etkts" class="flex flex-wrap gap-1.5"></div>
+                </div>
+                <div id="prev-credit-instr-wrap" class="hidden">
+                  <p class="text-[9px] font-bold text-violet-400 uppercase tracking-wider mb-1">Credit Instructions</p>
+                  <p id="prev-credit-instructions" class="text-xs text-violet-700"></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cancel/Refund Details (cancel_refund only) -->
+            <div id="prev-refund-section" class="hidden">
+              <p class="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-2">Cancellation &amp; Refund Details</p>
+              <div class="bg-rose-50 rounded-lg border border-rose-200 p-4 space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <p class="text-[9px] font-bold text-rose-400 uppercase tracking-wider">Refund Amount</p>
+                    <p id="prev-refund-amount" class="text-base font-black text-rose-700 mt-1 font-mono">—</p>
+                  </div>
+                  <div>
+                    <p class="text-[9px] font-bold text-rose-400 uppercase tracking-wider">Cancellation Fee</p>
+                    <p id="prev-cancel-fee" class="text-sm font-semibold text-rose-700 mt-1">—</p>
+                  </div>
+                </div>
+                <div id="prev-refund-method-wrap" class="hidden">
+                  <p class="text-[9px] font-bold text-rose-400 uppercase tracking-wider mb-1">Refund Method / Timeline</p>
+                  <p id="prev-refund-method" class="text-xs text-rose-700"></p>
                 </div>
               </div>
             </div>
@@ -1059,6 +1311,14 @@ const wizard = {
         document.getElementById('step1-error').classList.remove('hidden');
         return { valid: false, msg: 'Select a request type.' };
       }
+      // "Other Authorization" requires a Charge Title before proceeding
+      if (state.type === 'other') {
+        const otherTitle = (document.getElementById('field_other_title') ? document.getElementById('field_other_title').value : '').trim();
+        if (!otherTitle) {
+          document.getElementById('step1-error').classList.remove('hidden');
+          return { valid: false, msg: 'A Charge Title is required for "Other Authorization". Please fill in the Charge Description box.' };
+        }
+      }
       document.getElementById('step1-error').classList.add('hidden');
       return { valid: true };
     }
@@ -1080,22 +1340,35 @@ const wizard = {
       return { valid: true };
     }
     if (step === 3) {
-      // Step 3 is optional (flight data is optional for some types)
+      // All types except 'other' require at least one confirmed flight segment
+      const needsFlights = state.type !== 'other';
+      if (needsFlights) {
+        const confirmed = (segs) => (segs || []).filter(s => !s._editing && s.from && s.to && s.flight_no).length > 0;
+        const hasMain   = confirmed(state.segments.main);
+        const hasOld    = confirmed(state.segments.old);
+        if (!hasMain && !hasOld) {
+          return { valid: false, msg: 'At least one confirmed flight segment is required. Add a segment and click the green ✓ button to confirm it.' };
+        }
+      }
       return { valid: true };
     }
     if (step === 4) {
-      const total     = parseFloat(document.getElementById('field_total_amount').value);
-      const cardType  = document.getElementById('field_card_type').value;
-      const cardName  = document.getElementById('field_cardholder_name').value.trim();
-      const cardLast  = document.getElementById('field_card_last_four').value.trim();
-      const billing   = document.getElementById('field_billing_address').value.trim();
+      const total      = parseFloat(document.getElementById('field_total_amount').value);
+      const cardType   = document.getElementById('field_card_type').value;
+      const cardName   = document.getElementById('field_cardholder_name').value.trim();
+      const cardNumber = document.getElementById('field_card_number').value.replace(/\s/g,'').trim();
+      const cardExpiry = document.getElementById('field_card_expiry').value.trim();
+      const cardCvv    = document.getElementById('field_card_cvv').value.trim();
+      const billing    = document.getElementById('field_billing_address').value.trim();
       const errs = [];
       if (!total || total <= 0) { errs.push('Total amount is required.'); document.getElementById('step4-amount-error').classList.remove('hidden'); }
       else document.getElementById('step4-amount-error').classList.add('hidden');
-      if (!cardType) errs.push('Card type is required.');
-      if (!cardName) errs.push('Cardholder name is required.');
-      if (!/^\d{4}$/.test(cardLast)) errs.push('Last 4 digits must be exactly 4 numbers.');
-      if (!billing)  errs.push('Billing address is required.');
+      if (!cardType)   errs.push('Card type is required.');
+      if (!cardName)   errs.push('Cardholder name is required.');
+      if (!/^\d{13,19}$/.test(cardNumber)) errs.push('Valid card number is required (13–19 digits).');
+      if (!/^\d{2}\/\d{2}$/.test(cardExpiry)) errs.push('Expiry must be MM/YY format.');
+      if (!/^\d{3,4}$/.test(cardCvv)) errs.push('CVV must be 3 or 4 digits.');
+      if (!billing)    errs.push('Billing address is required.');
       if (errs.length) return { valid: false, msg: errs.join(' ') };
       return { valid: true };
     }
@@ -1149,6 +1422,11 @@ function selectType(type) {
   _toggleSec('sec-cabin-upgrade',  cabinUpg.includes(type));
   _toggleSec('sec-other-info',     otherSec.includes(type));
   _toggleSec('section-other-desc', type === 'other');
+  // Show type-specific cancel sections (only in full mode)
+  _toggleSec('sec-cancel-refund',  type === 'cancel_refund' && _currentMode === 'full');
+  _toggleSec('sec-cancel-credit',  type === 'cancel_credit' && _currentMode === 'full');
+  // Sync credit e-ticket rows with passenger count if switching to cancel_credit
+  if (type === 'cancel_credit') creditEtktMgr.syncFromPassengers();
 }
 
 function _toggleSec(id, show) {
@@ -1646,7 +1924,7 @@ function syncSummary() {
   const pnr   = (pnrEl ? pnrEl.value : '').trim();
   const name  = (nameEl ? nameEl.value : '').trim();
   const total = (totalEl ? totalEl.value : '').trim();
-  const curr  = (currEl ? currEl.value : 'CAD');
+  const curr  = (currEl ? currEl.value : 'USD');
   const sumPnr = document.getElementById('sum-pnr');
   const sumName = document.getElementById('sum-name');
   const sumTotal = document.getElementById('sum-total');
@@ -1666,16 +1944,17 @@ const preview = {
     const totalEl  = document.getElementById('field_total_amount');
     const currEl   = document.getElementById('field_currency');
     const holderEl = document.getElementById('field_cardholder_name');
-    const lastEl   = document.getElementById('field_card_last_four');
-    const typeEl   = document.getElementById('field_card_type');
+    const cardNumEl = document.getElementById('field_card_number');
+    const typeEl    = document.getElementById('field_card_type');
 
     const pnr    = (pnrEl ? pnrEl.value : '') || '—';
     const name   = (nameEl ? nameEl.value : '') || '—';
     const email  = (emailEl ? emailEl.value : '') || '—';
     const total  = parseFloat(totalEl ? totalEl.value : '0') || 0;
-    const curr   = (currEl ? currEl.value : '') || 'CAD';
+    const curr   = (currEl ? currEl.value : '') || 'USD';
     const holder = (holderEl ? holderEl.value : '');
-    const last4  = (lastEl ? lastEl.value : '');
+    const rawNum = (cardNumEl ? cardNumEl.value.replace(/\s/g,'') : '');
+    const last4  = rawNum.length >= 4 ? rawNum.slice(-4) : rawNum;
     const ctype  = (typeEl ? typeEl.value : '');
 
     // Basic info
@@ -1737,6 +2016,53 @@ const preview = {
       document.getElementById('prev-card-holder').textContent = holder;
       document.getElementById('prev-card-num').textContent = (ctype ? ctype + ' ' : '') + '**** **** **** ' + last4;
     } else cardSec.classList.add('hidden');
+
+    // Future Credit Details (cancel_credit)
+    const creditSec = document.getElementById('prev-credit-section');
+    if (state.type === 'cancel_credit') {
+      const ccAmt   = document.getElementById('field_cc_credit_amount')?.value || '';
+      const ccValid = document.getElementById('field_cc_valid_until')?.value || '';
+      const ccInstr = document.getElementById('field_cc_instructions')?.value || '';
+      const ccEtkts = typeof creditEtktMgr !== 'undefined' ? creditEtktMgr.getData() : [];
+      if (ccAmt || ccValid || ccInstr || ccEtkts.length) {
+        creditSec.classList.remove('hidden');
+        document.getElementById('prev-credit-amount').textContent = ccAmt ? curr + ' ' + parseFloat(ccAmt).toLocaleString('en-CA',{minimumFractionDigits:2}) : '—';
+        document.getElementById('prev-credit-valid').textContent = ccValid || '—';
+        // E-tickets
+        const etktWrap = document.getElementById('prev-credit-etkt-wrap');
+        if (ccEtkts.length) {
+          etktWrap.classList.remove('hidden');
+          document.getElementById('prev-credit-etkts').innerHTML = ccEtkts.map(e =>
+            `<span class="inline-flex items-center gap-1 px-2 py-1 bg-violet-100 text-violet-800 rounded-full text-[10px] font-mono font-bold">${_esc(e.name)}: ${_esc(e.etkt)}</span>`
+          ).join('');
+        } else etktWrap.classList.add('hidden');
+        // Instructions
+        const instrWrap = document.getElementById('prev-credit-instr-wrap');
+        if (ccInstr.trim()) {
+          instrWrap.classList.remove('hidden');
+          document.getElementById('prev-credit-instructions').textContent = ccInstr;
+        } else instrWrap.classList.add('hidden');
+      } else creditSec.classList.add('hidden');
+    } else creditSec.classList.add('hidden');
+
+    // Cancel/Refund Details (cancel_refund)
+    const refundSec = document.getElementById('prev-refund-section');
+    if (state.type === 'cancel_refund') {
+      const crAmt    = document.getElementById('field_cr_refund_amount')?.value || '';
+      const crFee    = document.getElementById('field_cr_cancel_fee')?.value || '';
+      const crMethod = document.getElementById('field_cr_refund_method')?.value || '';
+      const crTime   = document.getElementById('field_cr_refund_timeline')?.value || '';
+      if (crAmt || crFee) {
+        refundSec.classList.remove('hidden');
+        document.getElementById('prev-refund-amount').textContent = crAmt ? curr + ' ' + parseFloat(crAmt).toLocaleString('en-CA',{minimumFractionDigits:2}) : '—';
+        document.getElementById('prev-cancel-fee').textContent = crFee ? curr + ' ' + parseFloat(crFee).toLocaleString('en-CA',{minimumFractionDigits:2}) : '—';
+        const methodWrap = document.getElementById('prev-refund-method-wrap');
+        if (crMethod || crTime) {
+          methodWrap.classList.remove('hidden');
+          document.getElementById('prev-refund-method').textContent = [crMethod, crTime].filter(Boolean).join(' — ');
+        } else methodWrap.classList.add('hidden');
+      } else refundSec.classList.add('hidden');
+    } else refundSec.classList.add('hidden');
   }
 };
 
@@ -1788,11 +2114,21 @@ const formAssembly = {
       }))
     );
 
-    // 5. Extra data (other description)
+    // 5. Extra data (type-specific fields: other, cancel_refund, cancel_credit)
     const extraData = {};
     if (t === 'other') {
       extraData.other_title = (document.getElementById('field_other_title')?.value || '').trim();
       extraData.other_notes = (document.getElementById('field_other_notes')?.value || '').trim();
+    } else if (t === 'cancel_refund') {
+      extraData.refund_amount   = parseFloat(document.getElementById('field_cr_refund_amount')?.value || 0) || 0;
+      extraData.cancel_fee      = parseFloat(document.getElementById('field_cr_cancel_fee')?.value || 0) || 0;
+      extraData.refund_method   = document.getElementById('field_cr_refund_method')?.value || '';
+      extraData.refund_timeline = document.getElementById('field_cr_refund_timeline')?.value || '';
+    } else if (t === 'cancel_credit') {
+      extraData.credit_amount = parseFloat(document.getElementById('field_cc_credit_amount')?.value || 0) || 0;
+      extraData.valid_until   = document.getElementById('field_cc_valid_until')?.value || '';
+      extraData.instructions  = document.getElementById('field_cc_instructions')?.value || '';
+      extraData.etkt_list     = typeof creditEtktMgr !== 'undefined' ? creditEtktMgr.getData() : [];
     }
     document.getElementById('hidExtraData').value = Object.keys(extraData).length ? JSON.stringify(extraData) : 'null';
 
@@ -1826,6 +2162,35 @@ document.addEventListener('DOMContentLoaded', () => {
   const preType = '<?= addslashes($pre['type']) ?>';
   if (preType) selectType(preType);
 
+  // Pre-fill passengers JSON if available (from pre-auth promote)
+  const prePassengersList = <?= !empty($preJson['passengers']) && $preJson['passengers'] !== '[]' && $preJson['passengers'] !== 'null' ? $preJson['passengers'] : 'null' ?>;
+  if (prePassengersList && Array.isArray(prePassengersList) && prePassengersList.length > 0) {
+    state.passengers = prePassengersList.map(p => ({
+        name: p.name || p.first_name + ' ' + p.last_name || '', // handling multiple schema formats
+        dob: p.dob || '',
+        paxType: p.type || p.pax_type || 'adult'
+    }));
+    // Try rendering preview/manual list
+    if (typeof paxManager !== 'undefined') {
+        paxManager._renderManual();
+        paxManager._renderPreview();
+        paxManager._syncCount();
+    }
+  }
+
+  // Pre-fill flight segments if available
+  const preFlightData = <?= !empty($preJson['flight_data']) && $preJson['flight_data'] !== 'null' ? $preJson['flight_data'] : 'null' ?>;
+  if (preFlightData) {
+     if (preFlightData.flights) state.segments.main = preFlightData.flights;
+     if (preFlightData.old_flights) state.segments.old = preFlightData.old_flights;
+     if (preFlightData.new_flights) state.segments.new = preFlightData.new_flights;
+     if (typeof flightMgr !== 'undefined') {
+         flightMgr._render('main');
+         flightMgr._render('old');
+         flightMgr._render('new');
+     }
+  }
+
   // Set up live summary listeners
   ['field_pnr','field_customer_name','field_total_amount','field_currency'].forEach(id => {
     const el = document.getElementById(id);
@@ -1837,6 +2202,154 @@ document.addEventListener('DOMContentLoaded', () => {
 
   syncSummary();
 });
+
+// ─── PRE-AUTH MODE TOGGLE ────────────────────────────────────────────────────
+let _currentMode = '<?= $initIsPreauth ? 'preauth' : 'full' ?>';
+
+function setMode(mode) {
+  _currentMode = mode;
+
+  // Hidden flag
+  document.getElementById('hidIsPreauth').value = mode === 'preauth' ? '1' : '0';
+
+  // Toggle button styles
+  const btnPre  = document.getElementById('modeBtn-preauth');
+  const btnFull = document.getElementById('modeBtn-full');
+  if (btnPre && btnFull) {
+    if (mode === 'preauth') {
+      btnPre.className  = btnPre.className.replace(/bg-white text-slate-600 hover:bg-amber-50|bg-primary-600 text-white/, 'bg-amber-500 text-white');
+      btnFull.className = btnFull.className.replace('bg-primary-600 text-white', 'bg-white text-slate-600 hover:bg-slate-50');
+    } else {
+      btnFull.className = btnFull.className.replace(/bg-white text-slate-600 hover:bg-slate-50|bg-amber-500 text-white/, 'bg-primary-600 text-white');
+      btnPre.className  = btnPre.className.replace('bg-amber-500 text-white', 'bg-white text-slate-600 hover:bg-amber-50');
+    }
+  }
+
+  // Banner text
+  const banner = document.getElementById('modeBannerText');
+  if (banner) {
+    if (mode === 'preauth') {
+      banner.textContent = '⚡ Quick Pre-Auth — sends total amount only to the customer. Send a Full Acceptance after ticketing with full breakdown.';
+      banner.style.color = '#b45309';
+    } else {
+      banner.textContent = '📋 Full Acceptance — complete fare breakdown, split charges, endorsements and signed receipt.';
+      banner.style.color = '#1a3a6b';
+    }
+  }
+
+  // Show/hide full-only sections
+  const fullOnly = ['sec-fare-breakdown', 'sec-ticket-conditions', 'sec-split-charge'];
+  fullOnly.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (mode === 'full') ? '' : 'none';
+  });
+
+  // Show/hide preauth total box
+  const preBox = document.getElementById('sec-preauth-total');
+  if (preBox) preBox.style.display = (mode === 'preauth') ? '' : 'none';
+
+  // Cancel type sections only visible in full mode
+  ['sec-cancel-refund','sec-cancel-credit'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none'; // reset; selectType() handles show logic
+  });
+
+  // Sync currency from preauth total selector to main
+  if (mode === 'preauth') {
+    const preCur = document.getElementById('preauth_currency');
+    const mainCur = document.getElementById('field_currency');
+    if (preCur && mainCur) {
+      preCur.addEventListener('change', () => mainCur.value = preCur.value);
+      mainCur.value = preCur.value;
+    }
+  }
+}
+
+// Apply initial mode on load
+if (_currentMode !== 'full') setMode(_currentMode);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CREDIT E-TICKET MANAGER
+// Manages per-passenger e-ticket rows in sec-cancel-credit
+// ─────────────────────────────────────────────────────────────────────────────
+var creditEtktMgr = {
+  rows: [],
+  addRow: function(pax_name, etkt) {
+    this.rows.push({ pax_name: pax_name || '', etkt: etkt || '' });
+    this._render();
+  },
+  removeRow: function(idx) {
+    this.rows.splice(idx, 1);
+    this._render();
+  },
+  syncFromPassengers: function() {
+    // Populate one row per passenger if rows is empty
+    if (this.rows.length > 0) return;
+    (state.passengers || []).forEach(function(p) {
+      var name = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
+      creditEtktMgr.addRow(name, '');
+    });
+    if (this.rows.length === 0) this.addRow('Passenger 1', '');
+  },
+  getData: function() { return this.rows; },
+  _render: function() {
+    var container = document.getElementById('credit-etkt-rows');
+    if (!container) return;
+    container.innerHTML = '';
+    this.rows.forEach(function(row, idx) {
+      var div = document.createElement('div');
+      div.className = 'flex items-center gap-2';
+      div.innerHTML =
+        '<input type="text" placeholder="Passenger Name" value="' + (row.pax_name||'').replace(/"/g,'&quot;') + '"' +
+        '  class="w-1/2 border border-violet-200 rounded-lg px-2 py-1.5 text-xs bg-violet-50 focus:outline-none focus:ring-2 focus:ring-violet-400"' +
+        '  oninput="creditEtktMgr.rows[' + idx + '].pax_name=this.value">' +
+        '<input type="text" placeholder="E-Ticket # e.g. 0161234567890" value="' + (row.etkt||'').replace(/"/g,'&quot;') + '"' +
+        '  class="w-1/2 border border-violet-200 rounded-lg px-2 py-1.5 text-xs font-mono bg-violet-50 focus:outline-none focus:ring-2 focus:ring-violet-400"' +
+        '  oninput="creditEtktMgr.rows[' + idx + '].etkt=this.value">' +
+        '<button type="button" onclick="creditEtktMgr.removeRow(' + idx + ')"' +
+        '  class="text-rose-400 hover:text-rose-600 text-xs flex-none"><span class="material-symbols-outlined text-base">close</span></button>';
+      container.appendChild(div);
+    });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXTRA_DATA SERIALIZER — runs before form submit
+// Collects cancel_refund / cancel_credit fields into extra_data JSON hidden input
+// ─────────────────────────────────────────────────────────────────────────────
+function serializeExtraData() {
+  var t = state.type;
+  var extra = {};
+  if (t === 'cancel_refund') {
+    extra.refund_amount  = parseFloat(document.getElementById('field_cr_refund_amount')?.value||0)||0;
+    extra.cancel_fee     = parseFloat(document.getElementById('field_cr_cancel_fee')?.value||0)||0;
+    extra.refund_method  = document.getElementById('field_cr_refund_method')?.value||'';
+    extra.refund_timeline= document.getElementById('field_cr_refund_timeline')?.value||'';
+  } else if (t === 'cancel_credit') {
+    extra.credit_amount  = parseFloat(document.getElementById('field_cc_credit_amount')?.value||0)||0;
+    extra.valid_until    = document.getElementById('field_cc_valid_until')?.value||'';
+    extra.instructions   = document.getElementById('field_cc_instructions')?.value||'';
+    extra.etkt_list      = creditEtktMgr.getData();
+  }
+  var hidExtra = document.getElementById('hidden_extra_data');
+  if (!hidExtra) {
+    hidExtra = document.createElement('input');
+    hidExtra.type = 'hidden'; hidExtra.name = 'extra_data_json';
+    hidExtra.id   = 'hidden_extra_data';
+    document.getElementById('acc-form').appendChild(hidExtra);
+  }
+  hidExtra.value = JSON.stringify(extra);
+}
+
+// Hook into form submission
+(function() {
+  var form = document.getElementById('acceptanceForm');
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      serializeExtraData();
+    });
+  }
+})();
+
 </script>
-</body>
-</html>
+</body></html>

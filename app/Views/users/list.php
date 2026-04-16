@@ -77,11 +77,20 @@ tailwind.config = {
         <h1 class="text-2xl font-bold text-slate-900" style="font-family:Manrope">User Management</h1>
         <p class="text-slate-500 text-sm mt-1"><?= number_format($total) ?> user<?= $total !== 1 ? 's' : '' ?> total</p>
       </div>
-      <a href="/users/create"
-         class="inline-flex items-center gap-2 bg-primary text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm hover:bg-primary/90">
-        <span class="material-symbols-outlined text-base">person_add</span>
-        Add User
-      </a>
+      <div class="flex items-center gap-2">
+        <a id="btn-csv-users"
+           href="/users/export?<?= http_build_query(array_filter($filters)) ?>"
+           class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-colors shadow-sm"
+           title="Download user list as CSV">
+          <span class="material-symbols-outlined text-base">download</span>
+          Export CSV
+        </a>
+        <a href="/users/create"
+           class="inline-flex items-center gap-2 bg-primary text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm hover:bg-primary/90">
+          <span class="material-symbols-outlined text-base">person_add</span>
+          Add User
+        </a>
+      </div>
     </div>
 
     <!-- Flash Messages -->
@@ -113,8 +122,11 @@ tailwind.config = {
           <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Role</label>
           <select name="role" class="w-full text-sm border-slate-200 rounded-lg focus:ring-primary focus:border-primary">
             <option value="">All Roles</option>
+            <?php if ($actorRole === 'admin'): ?>
             <option value="admin"   <?= ($filters['role'] ?? '') === 'admin'   ? 'selected' : '' ?>>Admin</option>
+            <?php endif; ?>
             <option value="manager" <?= ($filters['role'] ?? '') === 'manager' ? 'selected' : '' ?>>Manager</option>
+            <option value="supervisor" <?= ($filters['role'] ?? '') === 'supervisor' ? 'selected' : '' ?>>Supervisor</option>
             <option value="agent"   <?= ($filters['role'] ?? '') === 'agent'   ? 'selected' : '' ?>>Agent</option>
           </select>
         </div>
@@ -151,6 +163,7 @@ tailwind.config = {
               <th class="px-5 py-3">Name</th>
               <th class="px-5 py-3">Email</th>
               <th class="px-5 py-3">Role</th>
+              <th class="px-5 py-3">Reports To</th>
               <th class="px-5 py-3">Status</th>
               <th class="px-5 py-3">Grace Period</th>
               <th class="px-5 py-3">Created</th>
@@ -160,7 +173,7 @@ tailwind.config = {
           <tbody class="divide-y divide-slate-100">
             <?php if ($records->isEmpty()): ?>
             <tr>
-              <td colspan="8" class="py-20 text-center">
+              <td colspan="9" class="py-20 text-center">
                 <div class="flex flex-col items-center gap-3 text-slate-400">
                   <span class="material-symbols-outlined text-5xl opacity-30">group</span>
                   <p class="font-semibold text-slate-500">No users found.</p>
@@ -193,19 +206,31 @@ tailwind.config = {
               </td>
               <td class="px-5 py-3.5 text-slate-500 text-xs"><?= htmlspecialchars($u->email) ?></td>
               <td class="px-5 py-3.5"><?= userRoleBadge($u->role) ?></td>
+              <td class="px-5 py-3.5 text-xs text-slate-600 font-medium">
+                <?php if ($u->reportsTo): ?>
+                  <div class="flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[14px] text-slate-400">account_tree</span>
+                    <?= htmlspecialchars($u->reportsTo->name) ?>
+                  </div>
+                <?php else: ?>
+                  <span class="text-slate-400">—</span>
+                <?php endif; ?>
+              </td>
               <td class="px-5 py-3.5"><?= userStatusBadge($u->status) ?></td>
               <td class="px-5 py-3.5 text-xs text-slate-500"><?= $u->grace_period_mins ?> min</td>
               <td class="px-5 py-3.5 text-xs text-slate-400 whitespace-nowrap"><?= $createdAt ?></td>
               <td class="px-5 py-3.5">
                 <div class="flex items-center gap-1.5 justify-end">
-                  <!-- Edit -->
+                  <!-- Edit — hidden for managers viewing admin/manager rows -->
+                  <?php if (!($actorRole === 'manager' && in_array($u->role, ['admin', 'manager']))): ?>
                   <a href="/users/<?= $u->id ?>/edit"
                      class="inline-flex items-center gap-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors">
                     <span class="material-symbols-outlined text-sm">edit</span> Edit
                   </a>
+                  <?php endif; ?>
 
-                  <!-- Reset Password -->
-                  <?php if (!$isSelf): ?>
+                  <!-- Reset Password + Suspend/Reactivate — hidden for managers on admin/manager rows -->
+                  <?php if (!($isSelf) && !($actorRole === 'manager' && in_array($u->role, ['admin', 'manager']))): ?>
                   <button onclick="openResetModal(<?= $u->id ?>, '<?= htmlspecialchars(addslashes($u->name)) ?>')"
                           class="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors">
                     <span class="material-symbols-outlined text-sm">lock_reset</span> Reset

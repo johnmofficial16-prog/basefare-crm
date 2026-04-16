@@ -6,6 +6,7 @@ use App\Models\Transaction;
 use App\Models\TransactionPassenger;
 use App\Models\PaymentCard;
 use App\Models\AcceptanceRequest;
+use App\Models\RecordNote;
 use App\Services\EncryptionService;
 use Illuminate\Database\Capsule\Manager as DB;
 
@@ -89,6 +90,15 @@ class TransactionService
             // ── Payment cards (encrypted) ────────────────────────────────
             $this->saveCards($txn->id, $data);
 
+            // ── Log creation note ────────────────────────────────────────
+            RecordNote::log(
+                'transaction',
+                $txn->id,
+                $agentId,
+                !empty($data['agent_notes']) ? $data['agent_notes'] : 'Transaction recorded.',
+                'created'
+            );
+
             return $txn;
         });
     }
@@ -164,6 +174,15 @@ class TransactionService
                 $this->saveCards($txn->id, $data);
             }
 
+            // Log the edit
+            RecordNote::log(
+                'transaction',
+                $txn->id,
+                $_SESSION['user_id'] ?? 0,
+                $data['agent_notes'] ?? 'Transaction updated.',
+                'edited'
+            );
+
             return $txn->fresh();
         });
     }
@@ -174,12 +193,15 @@ class TransactionService
 
     /**
      * Approve a transaction. Once approved, it becomes immutable.
+     * Supervisors can only approve transactions for agents in their team.
      *
-     * @param  int $id
+     * @param  int    $id         Transaction ID
+     * @param  int    $actorId    User performing the approval
+     * @param  string $actorRole  'admin' | 'manager' | 'supervisor'
      * @return Transaction
-     * @throws \RuntimeException if not pending_review
+     * @throws \RuntimeException if not pending_review or team check fails
      */
-    public function approve(int $id): Transaction
+    public function approve(int $id, int $actorId = 0, string $actorRole = 'admin'): Transaction
     {
         $txn = Transaction::findOrFail($id);
 
@@ -189,7 +211,24 @@ class TransactionService
             );
         }
 
+        // Supervisors may only approve transactions belonging to their team
+        if ($actorRole === \App\Models\User::ROLE_SUPERVISOR && $actorId > 0) {
+            $actor = \App\Models\User::find($actorId);
+            if (!$actor || !$actor->isInMyTeam($txn->agent_id)) {
+                throw new \RuntimeException('You can only approve transactions for agents in your team.');
+            }
+        }
+
         $txn->update(['status' => Transaction::STATUS_APPROVED]);
+
+        // Log approval note
+        RecordNote::log(
+            'transaction',
+            $txn->id,
+            $actorId,
+            'Transaction approved.',
+            'approved'
+        );
 
         return $txn;
     }
@@ -254,6 +293,10 @@ class TransactionService
                 'agent_notes'            => 'Auto-generated reversal for void of #' . $txn->id,
             ]);
 
+            // Log void notes on both records
+            RecordNote::log('transaction', $txn->id,      $adminId, 'Voided: ' . $reason, 'voided');
+            RecordNote::log('transaction', $reversal->id, $adminId, 'Auto-reversal created for void of Transaction #' . $txn->id, 'voided');
+
             return $reversal;
         });
     }
@@ -267,21 +310,25 @@ class TransactionService
      *
      * @param  int        $page
      * @param  int        $perPage
-     * @param  array      $filters  [type, status, pnr, date_from, date_to, payment_status]
-     * @param  int|null   $agentId  Restrict to this agent (null = all)
+     * @param  array      $filters     [type, status, pnr, date_from, date_to, payment_status, search]
+     * @param  int|null   $agentId     Restrict to this single agent (null = all)
+     * @param  array|null $agentIds    Restrict to a set of agent IDs (for team scoping)
      * @return array      ['items' => Collection, 'total' => int, 'pages' => int, 'page' => int]
      */
     public function list(
         int $page = 1,
         int $perPage = 25,
         array $filters = [],
-        ?int $agentId = null
+        ?int $agentId = null,
+        ?array $agentIds = null
     ): array {
         $query = Transaction::with(['agent', 'primaryCard'])
             ->orderBy('created_at', 'desc');
 
         if ($agentId !== null) {
             $query->forAgent($agentId);
+        } elseif ($agentIds !== null) {
+            $query->whereIn('agent_id', $agentIds);
         }
 
         if (!empty($filters['type'])) {
@@ -338,7 +385,18 @@ class TransactionService
     public function getAcceptanceAutofill(int $acceptanceId): ?array
     {
         $acc = AcceptanceRequest::find($acceptanceId);
-        if (!$acc || $acc->status !== 'APPROVED') {
+
+        if (!$acc) {
+            return null;
+        }
+
+        // Pre-auth acceptances are payment holds only — the full signed acceptance
+        // must be received before a transaction can be recorded against it.
+        if ($acc->is_preauth) {
+            throw new \RuntimeException('pre_auth');
+        }
+
+        if ($acc->status !== 'APPROVED') {
             return null;
         }
 
@@ -375,28 +433,64 @@ class TransactionService
             ? $acc->additional_cards
             : (json_decode((string)$acc->additional_cards, true) ?: []);
 
+        // ── Derive travel dates from flight_data ──────────────────────────
+        $travelDate    = null;
+        $departureTime = null;
+        $returnDate    = null;
+
+        // Try main flights first (new_booking, seat_purchase, etc.)
+        $firstFlight = $flightData['flights'][0] ?? null;
+        $lastFlight  = null;
+        if (!empty($flightData['flights'])) {
+            $lastFlight = end($flightData['flights']);
+        }
+        // For exchanges/cancels, fall back to old_flights
+        if (!$firstFlight && !empty($flightData['old_flights'])) {
+            $firstFlight = $flightData['old_flights'][0] ?? null;
+            if (!empty($flightData['old_flights'])) {
+                $lastFlight = end($flightData['old_flights']);
+            }
+        }
+        if ($firstFlight) {
+            $travelDate    = $firstFlight['date']    ?? ($firstFlight['dep_date'] ?? null);
+            $departureTime = $firstFlight['dep_time'] ?? ($firstFlight['time'] ?? null);
+        }
+        if ($lastFlight && $lastFlight !== $firstFlight) {
+            $returnDate = $lastFlight['date'] ?? ($lastFlight['arr_date'] ?? null);
+        }
+
         return [
-            'acceptance_id'   => $acc->id,
-            'type'            => $acc->type,
-            'customer_name'   => $acc->customer_name,
-            'customer_email'  => $acc->customer_email,
-            'customer_phone'  => $acc->customer_phone ?? '',
-            'pnr'             => $acc->pnr,
-            'airline'         => $acc->airline ?? '',
-            'order_id'        => $acc->order_id ?? '',
-            'total_amount'    => $acc->total_amount,
-            'currency'        => $acc->currency ?? 'USD',
-            'passengers'      => $passengers,
-            'flight_data'     => $flightData,
-            'fare_breakdown'  => $fareBreakdown,
+            'acceptance_id'        => $acc->id,
+            'type'                 => $acc->type,
+            'customer_name'        => $acc->customer_name,
+            'customer_email'       => $acc->customer_email,
+            'customer_phone'       => $acc->customer_phone ?? '',
+            'pnr'                  => $acc->pnr,
+            'airline'              => $acc->airline ?? '',
+            'order_id'             => $acc->order_id ?? '',
+            'total_amount'         => $acc->total_amount,
+            'currency'             => $acc->currency ?? 'USD',
+            // Derived travel dates
+            'travel_date'          => $travelDate,
+            'departure_time'       => $departureTime,
+            'return_date'          => $returnDate,
+            // Passengers
+            'passengers'           => $passengers,
+            'flight_data'          => $flightData,
+            'fare_breakdown'       => $fareBreakdown,
             // Card info — partial only (last 4, type, holder)
-            'card_type'       => $acc->card_type ?? '',
-            'card_last_4'     => $acc->card_last_four ?? '',
-            'cardholder_name' => $acc->cardholder_name ?? '',
-            'billing_address' => $acc->billing_address ?? '',
-            'additional_cards' => $additionalCards,
-            // Statement descriptor carried over
+            'card_type'            => $acc->card_type ?? '',
+            'card_last_4'          => $acc->card_last_four ?? '',
+            'cardholder_name'      => $acc->cardholder_name ?? '',
+            'billing_address'      => $acc->billing_address ?? '',
+            'additional_cards'     => $additionalCards,
+            // Payment extra fields
             'statement_descriptor' => $acc->statement_descriptor ?? '',
+            'split_charge_note'    => $acc->split_charge_note ?? '',
+            // Ticket conditions
+            'endorsements'         => $acc->endorsements ?? '',
+            'baggage_info'         => $acc->baggage_info ?? '',
+            'fare_rules'           => $acc->fare_rules ?? '',
         ];
     }
 
@@ -449,10 +543,12 @@ class TransactionService
      */
     public function revealCard(int $cardId, int $adminId, string $password): array
     {
-        // Re-validate admin password
-        $admin = \App\Models\User::findOrFail($adminId);
-        if (!password_verify($password, $admin->password_hash)) {
-            throw new \RuntimeException('Invalid password. Card reveal denied.');
+        // Re-validate admin password (skip password check for session-based reveal)
+        if ($password !== '__session__') {
+            $admin = \App\Models\User::findOrFail($adminId);
+            if (!password_verify($password, $admin->password_hash)) {
+                throw new \RuntimeException('Invalid password. Card reveal denied.');
+            }
         }
 
         $card = PaymentCard::findOrFail($cardId);

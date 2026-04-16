@@ -13,6 +13,11 @@ class ShiftSchedule extends Model
 
     protected $table = 'shift_schedules';
 
+    // Publish status constants
+    const PUBLISH_DRAFT            = 'draft';
+    const PUBLISH_PENDING_APPROVAL = 'pending_approval';
+    const PUBLISH_PUBLISHED        = 'published';
+
     protected $fillable = [
         'agent_id',
         'shift_date',
@@ -21,6 +26,9 @@ class ShiftSchedule extends Model
         'template_id',
         'schedule_week',
         'created_by',
+        'publish_status',
+        'approved_by',
+        'approved_at',
     ];
 
     protected $casts = [
@@ -50,6 +58,14 @@ class ShiftSchedule extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * The manager/admin who approved this shift (for supervisor-submitted shifts)
+     */
+    public function approver()
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     /**

@@ -111,7 +111,13 @@ class AdminController
 
     public function activityLog(Request $request, Response $response): Response
     {
-        $this->requireAdmin($response);
+        // managers and admins can view
+        $role = $_SESSION['role'] ?? '';
+        if (!in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            $_SESSION['flash_error'] = 'Access denied.';
+            $response->getBody()->write('');
+            return $response->withHeader('Location', '/dashboard')->withStatus(302);
+        }
 
         $params  = $request->getQueryParams();
         $page    = max(1, (int) ($params['page'] ?? 1));
@@ -154,13 +160,10 @@ class AdminController
         $records    = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
         $totalPages = max(1, (int) ceil($total / $perPage));
 
-        // For filter dropdowns: list of users and entity types
-        $allUsers       = DB::table('users')->select('id', 'name')->whereNull('deleted_at')->orderBy('name')->get();
-        $entityTypes    = DB::table('activity_log')->select('entity_type')->distinct()->orderBy('entity_type')->pluck('entity_type');
+        $allUsers    = DB::table('users')->select('id', 'name')->whereNull('deleted_at')->orderBy('name')->get();
+        $entityTypes = DB::table('activity_log')->select('entity_type')->distinct()->orderBy('entity_type')->pluck('entity_type');
 
-        $data = compact('records', 'total', 'page', 'perPage', 'totalPages');
-
-        $activePage = 'settings';
+        $activePage = 'activity_log';
 
         ob_start();
         require __DIR__ . '/../Views/admin/activity_log.php';
@@ -181,5 +184,71 @@ class AdminController
             header('Location: /dashboard');
             exit;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Error Console (Phase 8)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function errorConsole(Request $request, Response $response): Response
+    {
+        $role = $_SESSION['role'] ?? '';
+        if (!in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            $_SESSION['flash_error'] = 'Access denied.';
+            $response->getBody()->write('');
+            return $response->withHeader('Location', '/dashboard')->withStatus(302);
+        }
+
+        $params  = $request->getQueryParams();
+        $page    = max(1, (int) ($params['page'] ?? 1));
+        $perPage = 25;
+
+        $filters = [
+            'severity'  => trim($params['severity'] ?? ''),
+            'search'    => trim($params['search'] ?? ''),
+            'date_from' => $params['date_from'] ?? '',
+            'date_to'   => $params['date_to'] ?? '',
+        ];
+
+        $query = DB::table('error_log')->orderByDesc('created_at');
+
+        if ($filters['severity']) {
+            $query->where('severity', $filters['severity']);
+        }
+        if ($filters['search']) {
+            $query->where('message', 'like', '%' . $filters['search'] . '%');
+        }
+        if ($filters['date_from']) {
+            $query->where('created_at', '>=', $filters['date_from'] . ' 00:00:00');
+        }
+        if ($filters['date_to']) {
+            $query->where('created_at', '<=', $filters['date_to'] . ' 23:59:59');
+        }
+
+        $total      = $query->count();
+        $errors     = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
+        $totalPages = max(1, (int) ceil($total / $perPage));
+
+        $activePage = 'error_console';
+
+        ob_start();
+        require __DIR__ . '/../Views/admin/error_console.php';
+        $html = ob_get_clean();
+
+        $response->getBody()->write($html);
+        return $response;
+    }
+
+    public function clearErrorLog(Request $request, Response $response): Response
+    {
+        // Only admins can clear errors
+        if (($_SESSION['role'] ?? '') !== User::ROLE_ADMIN) {
+            $_SESSION['flash_error'] = 'Only admins can clear the error log.';
+            return $response->withHeader('Location', '/admin/error-console')->withStatus(302);
+        }
+
+        DB::table('error_log')->truncate();
+        $_SESSION['flash_success'] = 'Error log cleared successfully.';
+        return $response->withHeader('Location', '/admin/error-console')->withStatus(302);
     }
 }

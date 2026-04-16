@@ -441,9 +441,9 @@ class AttendanceService
      */
     public function approveOverride(int $adminId, int $agentId, string $date, string $reason): array
     {
-        // Validate admin role
+        // Validate: admin, manager, or supervisor
         $admin = User::find($adminId);
-        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])) {
             return ['success' => false, 'message' => 'Unauthorized.'];
         }
 
@@ -492,7 +492,7 @@ class AttendanceService
     public function denyOverride(int $adminId, int $agentId, string $date, string $reason): array
     {
         $admin = User::find($adminId);
-        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])) {
             return ['success' => false, 'message' => 'Unauthorized.'];
         }
 
@@ -756,22 +756,26 @@ class AttendanceService
     // =========================================================================
 
     /**
-     * Get live attendance status for all agents (admin panel view).
+     * Get live attendance status for agents (admin/manager: all, supervisor: scoped by agentIds).
      *
+     * @param  array|null $agentIds  Optional list of user IDs to restrict to (for supervisor scoping)
      * @return array ['in' => [], 'on_break' => [], 'absent' => [], 'pending_override' => []]
      */
-    public function getLiveBoardData(): array
+    public function getLiveBoardData(?array $agentIds = null): array
     {
         $today = date('Y-m-d');
 
-        // All active agents/managers
-        $allAgents = User::whereIn('role', [User::ROLE_AGENT, User::ROLE_MANAGER])
+        // Build agent query: all active non-deleted agents (optionally scoped to team)
+        $agentQuery = User::whereIn('role', [User::ROLE_AGENT, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])
             ->where('status', User::STATUS_ACTIVE)
             ->whereNull('deleted_at')
-            ->orderBy('name')
-            ->get();
+            ->orderBy('name');
 
-        // B3 FIX: Get ALL sessions for today, then pick the most relevant per user.
+        if ($agentIds !== null) {
+            $agentQuery->whereIn('id', $agentIds);
+        }
+
+        $allAgents = $agentQuery->get();
         // keyBy would silently drop the active session if a completed one had a lower index.
         // Instead: group by user_id, then prioritise: active > completed > auto_closed.
         // Fetch sessions for today OR any session that is currently still active (e.g. forgot to checkout yesterday)

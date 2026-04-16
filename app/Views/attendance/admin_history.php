@@ -29,7 +29,15 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
 <main class="ml-60 pt-8 pb-20 px-10">
 
-  <h1 class="text-3xl font-headline font-extrabold text-primary tracking-tight mb-6">Attendance History</h1>
+  <h1 class="text-3xl font-headline font-extrabold text-primary tracking-tight mb-6 flex items-center justify-between">
+    Attendance History
+    <a id="btn-csv-attendance"
+       href="/attendance/admin/export?date=<?= htmlspecialchars($date) ?>&agent_id=<?= $agentId ?? '' ?>"
+       class="inline-flex items-center gap-2 text-sm font-bold bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20"
+       title="Download this day's attendance as CSV">
+      <span class="material-symbols-outlined text-base">download</span> Export CSV
+    </a>
+  </h1>
 
   <!-- Filters -->
   <form method="GET" action="/attendance/admin/history" class="flex items-center gap-4 mb-8">

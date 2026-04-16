@@ -141,14 +141,14 @@ $_aw_clockIn = $stateInfo['session']->clock_in ?? null;
   }
 
   window.awStartBreak = async function(type) {
-    const r = await fetch('/break/start', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type})});
+    const r = await fetch('/break/start', {method:'POST', headers:{'Content-Type':'application/json', 'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>'}, body: JSON.stringify({type})});
     const d = await r.json();
     if (!d.success) alert(d.message);
     pollStatus();
   };
 
   window.awEndBreak = async function() {
-    const r = await fetch('/break/end', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const r = await fetch('/break/end', {method:'POST', headers:{'Content-Type':'application/json', 'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>'}, body:'{}'});
     const d = await r.json();
     if (d.flagged) alert('⚠️ Your break usage has been flagged for review.');
     pollStatus();
@@ -156,7 +156,7 @@ $_aw_clockIn = $stateInfo['session']->clock_in ?? null;
 
   window.awClockOut = async function() {
     if (!confirm('Are you sure you want to clock out? This cannot be undone.')) return;
-    const r = await fetch('/clock-out', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const r = await fetch('/clock-out', {method:'POST', headers:{'Content-Type':'application/json', 'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>'}, body:'{}'});
     const d = await r.json();
     if (d.success) {
       window.location.href = '/clock-in';

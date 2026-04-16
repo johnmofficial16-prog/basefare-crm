@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS `acceptance_requests` (
                  'PENDING',
                  'APPROVED',
                  'EXPIRED',
-                 'CANCELLED'
+                 'CANCELLED',
+                 'PROMOTED'
              ) NOT NULL DEFAULT 'PENDING',
 
     -- -------------------------------------------------------------------------

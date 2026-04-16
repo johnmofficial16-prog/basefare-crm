@@ -107,10 +107,14 @@ tailwind.config = {
             <div>
               <label class="field-label" for="role">Role <span class="text-rose-500">*</span></label>
               <select class="field-input" id="role" name="role" required
-                <?= $user->id === (int)($_SESSION['user_id'] ?? 0) ? 'disabled title="You cannot change your own role."' : '' ?>>
-                <option value="agent"   <?= ($old['role'] ?? $user->role) === 'agent'   ? 'selected' : '' ?>>Agent</option>
-                <option value="manager" <?= ($old['role'] ?? $user->role) === 'manager' ? 'selected' : '' ?>>Manager</option>
-                <option value="admin"   <?= ($old['role'] ?? $user->role) === 'admin'   ? 'selected' : '' ?>>Admin</option>
+                <?= $user->id === (int)($_SESSION['user_id'] ?? 0) ? 'disabled title="You cannot change your own role."' : '' ?>
+                onchange="handleRoleChange(this.value)">
+                <option value="agent"      <?= ($old['role'] ?? $user->role) === 'agent'      ? 'selected' : '' ?>>Agent</option>
+                <option value="supervisor" <?= ($old['role'] ?? $user->role) === 'supervisor' ? 'selected' : '' ?>>Supervisor</option>
+                <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
+                <option value="manager"    <?= ($old['role'] ?? $user->role) === 'manager'    ? 'selected' : '' ?>>Manager</option>
+                <option value="admin"      <?= ($old['role'] ?? $user->role) === 'admin'      ? 'selected' : '' ?>>Admin</option>
+                <?php endif; ?>
               </select>
               <?php if ($user->id === (int)($_SESSION['user_id'] ?? 0)): ?>
               <input type="hidden" name="role" value="<?= htmlspecialchars($user->role) ?>">
@@ -123,6 +127,20 @@ tailwind.config = {
                      value="<?= (int) ($old['grace_period_mins'] ?? $user->grace_period_mins) ?>"
                      min="0" max="120">
             </div>
+          </div>
+
+          <!-- Reports To (hidden for admin/manager roles) -->
+          <div id="reports-to-wrap" class="<?= in_array($old['role'] ?? $user->role, ['admin','manager']) ? 'hidden' : '' ?>">
+            <label class="field-label" for="reports_to_id">Reports To <span class="text-rose-500">*</span></label>
+            <select class="field-input" id="reports_to_id" name="reports_to_id">
+              <option value="">— Select manager or supervisor —</option>
+              <?php foreach ($superiors as $sup): ?>
+              <option value="<?= $sup->id ?>" <?= (int)($old['reports_to_id'] ?? $user->reports_to_id) === $sup->id ? 'selected' : '' ?>>
+                <?= htmlspecialchars($sup->name) ?> (<?= ucfirst($sup->role) ?>)
+              </option>
+              <?php endforeach; ?>
+            </select>
+            <p class="text-[10px] text-slate-400 mt-1">Agents and supervisors must report to a manager or supervisor. Managers/admins do not report to anyone.</p>
           </div>
 
         </div>
@@ -181,6 +199,16 @@ document.getElementById('editUserForm').addEventListener('submit', function() {
   btn.disabled = true;
   btn.innerHTML = '<span class="material-symbols-outlined text-base animate-spin">progress_activity</span> Saving…';
 });
+
+function handleRoleChange(role) {
+  var wrap = document.getElementById('reports-to-wrap');
+  if (!wrap) return;
+  if (role === 'admin' || role === 'manager') {
+    wrap.classList.add('hidden');
+  } else {
+    wrap.classList.remove('hidden');
+  }
+}
 </script>
 
 </body>

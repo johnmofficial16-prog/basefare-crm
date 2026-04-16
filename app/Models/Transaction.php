@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\RecordNote;
 
 /**
  * Transaction — Core transaction record.
@@ -180,6 +181,16 @@ class Transaction extends Model
     public function voidedByUser()
     {
         return $this->belongsTo(User::class, 'voided_by');
+    }
+
+    /**
+     * All notes / activity log entries for this transaction.
+     */
+    public function notes()
+    {
+        return $this->hasMany(RecordNote::class, 'entity_id')
+                    ->where('entity_type', 'transaction')
+                    ->orderBy('created_at', 'asc');
     }
 
     // =========================================================================

@@ -10,14 +10,17 @@ CREATE TABLE IF NOT EXISTS `users` (
   `name` varchar(255) NOT NULL,
   `email` varchar(255) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
-  `role` enum('admin','manager','agent') NOT NULL DEFAULT 'agent',
+  `role` enum('admin','manager','supervisor','agent') NOT NULL DEFAULT 'agent',
+  `reports_to_id` int DEFAULT NULL,
   `grace_period_mins` int NOT NULL DEFAULT 30,
   `status` enum('active','inactive','suspended') NOT NULL DEFAULT 'active',
   `deleted_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `email` (`email`)
+  UNIQUE KEY `email` (`email`),
+  KEY `fk_user_reports_to` (`reports_to_id`),
+  CONSTRAINT `fk_user_reports_to` FOREIGN KEY (`reports_to_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `login_attempts` (
@@ -95,6 +98,9 @@ CREATE TABLE IF NOT EXISTS `shift_schedules` (
   `template_id` int DEFAULT NULL,
   `schedule_week` date NOT NULL COMMENT 'Monday of the ISO week for fast week-level queries',
   `created_by` int DEFAULT NULL,
+  `publish_status` enum('draft','pending_approval','published') NOT NULL DEFAULT 'published',
+  `approved_by` int DEFAULT NULL,
+  `approved_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -103,9 +109,11 @@ CREATE TABLE IF NOT EXISTS `shift_schedules` (
   KEY `idx_agent_date` (`agent_id`, `shift_date`),
   KEY `fk_sched_template` (`template_id`),
   KEY `fk_sched_created_by` (`created_by`),
+  KEY `fk_sched_approved_by` (`approved_by`),
   CONSTRAINT `fk_sched_agent` FOREIGN KEY (`agent_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_sched_template` FOREIGN KEY (`template_id`) REFERENCES `shift_templates` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_sched_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  CONSTRAINT `fk_sched_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_sched_approved_by` FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------

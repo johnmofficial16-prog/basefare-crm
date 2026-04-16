@@ -21,6 +21,20 @@ $fareBreakdown   = $acceptance->fare_breakdown   ?? [];
 $passengers      = $acceptance->passengers       ?? [];
 $flightData      = $acceptance->flight_data      ?? [];
 $additionalCards = $acceptance->additional_cards ?? [];
+$extraData       = $acceptance->extra_data       ?? [];
+if (is_string($extraData)) $extraData = json_decode($extraData, true) ?: [];
+
+// Type-specific extra_data fields
+$crRefundAmt  = $extraData['refund_amount']   ?? null;
+$crCancelFee  = $extraData['cancel_fee']      ?? null;
+$crMethod     = $extraData['refund_method']   ?? null;
+$crTimeline   = $extraData['refund_timeline'] ?? null;
+$ccCreditAmt  = $extraData['credit_amount']   ?? null;
+$ccValidUntil = $extraData['valid_until']     ?? null;
+$ccEtktList   = $extraData['etkt_list']       ?? [];
+$ccInstructions = $extraData['instructions']  ?? null;
+$otherTitle   = $extraData['other_title']     ?? '';
+$otherNotes   = $extraData['other_notes']     ?? '';
 
 // Collect all segment groups
 $segGroups = [];
@@ -487,16 +501,21 @@ body {
     <div class="section">
       <div class="section-title">Name Correction</div>
       <div style="display:flex;align-items:center;gap:12px;">
-        <div class="info-cell" style="background:#fff1f2;border-color:#fecdd3;">
+        <div class="info-cell" style="background:#fff1f2;border-color:#fecdd3;flex:1;">
           <div class="info-label" style="color:#9f1239;">Original Name</div>
           <div class="info-value mono"><?= rh($flightData['old_name']) ?></div>
         </div>
         <div style="font-size:20px;color:#94a3b8;">→</div>
-        <div class="info-cell" style="background:#ecfdf5;border-color:#bbf7d0;">
+        <div class="info-cell" style="background:#ecfdf5;border-color:#bbf7d0;flex:1;">
           <div class="info-label" style="color:#065f46;">Corrected Name</div>
           <div class="info-value mono"><?= rh($flightData['new_name'] ?? '') ?></div>
         </div>
       </div>
+      <?php if (!empty($flightData['reason'])): ?>
+      <div style="margin-top:8px;font-size:12px;color:#78350f;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;">
+        <strong>Reason:</strong> <?= rh($flightData['reason']) ?>
+      </div>
+      <?php endif; ?>
     </div>
     <?php endif; ?>
 
@@ -505,12 +524,12 @@ body {
     <div class="section">
       <div class="section-title">Cabin Upgrade</div>
       <div style="display:flex;align-items:center;gap:12px;">
-        <div class="info-cell" style="background:#fff1f2;border-color:#fecdd3;">
+        <div class="info-cell" style="background:#fff1f2;border-color:#fecdd3;flex:1;text-align:center;">
           <div class="info-label" style="color:#9f1239;">From Class</div>
           <div class="info-value"><?= rh($flightData['old_cabin']) ?></div>
         </div>
         <div style="font-size:20px;color:#94a3b8;">→</div>
-        <div class="info-cell" style="background:#ecfdf5;border-color:#bbf7d0;">
+        <div class="info-cell" style="background:#ecfdf5;border-color:#bbf7d0;flex:1;text-align:center;">
           <div class="info-label" style="color:#065f46;">To Class</div>
           <div class="info-value"><?= rh($flightData['new_cabin'] ?? '') ?></div>
         </div>
@@ -519,10 +538,85 @@ body {
     <?php endif; ?>
 
     <!-- Other description -->
-    <?php if ($acceptance->type === 'other' && !empty($acceptance->extra_data['description'])): ?>
+    <?php if ($acceptance->type === 'other' && ($otherTitle || $otherNotes)): ?>
     <div class="section">
       <div class="section-title">Authorization Details</div>
-      <div class="policy-text" style="background:#f8fafc;border-color:#e2e8f0;"><?= rh($acceptance->extra_data['description']) ?></div>
+      <?php if ($otherTitle): ?>
+      <div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:6px;"><?= rh($otherTitle) ?></div>
+      <?php endif; ?>
+      <?php if ($otherNotes): ?>
+      <div class="policy-text" style="background:#f8fafc;border-color:#e2e8f0;"><?= rh($otherNotes) ?></div>
+      <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <!-- Cancel / Refund details -->
+    <?php if ($acceptance->type === 'cancel_refund' && ($crRefundAmt !== null || $crCancelFee || $crMethod || $crTimeline)): ?>
+    <div class="section">
+      <div class="section-title" style="color:#9f1239;">Cancellation &amp; Refund Summary</div>
+      <div class="info-grid info-grid-2">
+        <?php if ($crRefundAmt !== null): ?>
+        <div class="info-cell" style="background:#fff1f2;border-color:#fecdd3;">
+          <div class="info-label" style="color:#9f1239;">Refund Amount</div>
+          <div class="info-value" style="color:#dc2626;"><?= rh($acceptance->currency) ?> <?= number_format((float)$crRefundAmt, 2) ?></div>
+        </div>
+        <?php endif; ?>
+        <?php if ($crCancelFee): ?>
+        <div class="info-cell">
+          <div class="info-label">Cancellation Fee</div>
+          <div class="info-value"><?= rh($acceptance->currency) ?> <?= number_format((float)$crCancelFee, 2) ?></div>
+        </div>
+        <?php endif; ?>
+        <?php if ($crMethod): ?>
+        <div class="info-cell">
+          <div class="info-label">Refund Method</div>
+          <div class="info-value"><?= rh(ucwords(str_replace('_', ' ', $crMethod))) ?></div>
+        </div>
+        <?php endif; ?>
+        <?php if ($crTimeline): ?>
+        <div class="info-cell">
+          <div class="info-label">Expected Timeline</div>
+          <div class="info-value"><?= rh($crTimeline) ?></div>
+        </div>
+        <?php endif; ?>
+      </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- Cancel / Credit details -->
+    <?php if ($acceptance->type === 'cancel_credit' && ($ccCreditAmt !== null || $ccValidUntil || !empty($ccEtktList) || $ccInstructions)): ?>
+    <div class="section">
+      <div class="section-title" style="color:#4c1d95;">Future Travel Credit Summary</div>
+      <div class="info-grid info-grid-2">
+        <?php if ($ccCreditAmt !== null): ?>
+        <div class="info-cell" style="background:#f5f3ff;border-color:#ddd6fe;">
+          <div class="info-label" style="color:#4c1d95;">Credit Value</div>
+          <div class="info-value" style="color:#7c3aed;"><?= rh($acceptance->currency) ?> <?= number_format((float)$ccCreditAmt, 2) ?></div>
+        </div>
+        <?php endif; ?>
+        <?php if ($ccValidUntil): ?>
+        <div class="info-cell">
+          <div class="info-label">Valid Until</div>
+          <div class="info-value"><?= rh(date('M d, Y', strtotime($ccValidUntil))) ?></div>
+        </div>
+        <?php endif; ?>
+      </div>
+      <?php if (!empty($ccEtktList)): ?>
+      <div style="margin-top:10px;">
+        <div class="section-title" style="color:#6d28d9;">E-Ticket Numbers</div>
+        <?php foreach ($ccEtktList as $row): ?>
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#ede9fe;border-radius:8px;margin-bottom:6px;">
+          <span style="font-size:13px;color:#4c1d95;font-weight:600;flex:1;"><?= rh($row['pax_name'] ?? '') ?></span>
+          <span style="font-size:12px;font-family:monospace;color:#6d28d9;font-weight:700;"><?= rh($row['etkt'] ?? '—') ?></span>
+        </div>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
+      <?php if ($ccInstructions): ?>
+      <p style="font-size:12px;color:#5b21b6;margin-top:10px;line-height:1.6;padding:8px 10px;background:#ede9fe;border-radius:8px;">
+        <strong>Note:</strong> <?= nl2br(rh($ccInstructions)) ?>
+      </p>
+      <?php endif; ?>
     </div>
     <?php endif; ?>
 
@@ -549,13 +643,16 @@ body {
 
     <!-- Cards -->
     <div class="section" style="margin-top:14px;">
-      <div class="section-title">Payment Card(s)</div>
+      <div class="section-title">Payment Card(s) &amp; Billing</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
         <div class="card-pill">
           <span style="font-size:18px;">💳</span>
           <div>
             <div class="card-label"><?= rh($acceptance->cardholder_name) ?></div>
             <div class="card-mask"><?= rh($acceptance->card_type) ?> &middot; **** **** **** <?= rh($acceptance->card_last_four ?? '****') ?></div>
+            <?php if ($acceptance->billing_address): ?>
+            <div style="font-size:10px;color:#64748b;margin-top:3px;"><?= rh($acceptance->billing_address) ?></div>
+            <?php endif; ?>
           </div>
         </div>
         <?php foreach ($additionalCards as $c): ?>
@@ -633,21 +730,43 @@ body {
         </div>
         <?php endif; ?>
         <?php if ($acceptance->digital_signature): ?>
-        <div style="padding:0 16px 12px; border-top:1px solid #bbf7d0; margin-top:0; padding-top:10px; display:flex; align-items:center; gap:12px;">
-          <div>
-            <div class="f-label" style="color:#047857;font-size:9px;margin-bottom:4px;">Digital Signature</div>
-            <?php
-            $sigFile = __DIR__ . '/../../../storage/acceptance/signatures/' . $acceptance->digital_signature;
-            if (file_exists($sigFile)):
-              // Embed as base64 so it prints correctly even offline
-              $sigData = base64_encode(file_get_contents($sigFile));
-            ?>
-            <img src="data:image/png;base64,<?= $sigData ?>"
-              alt="Customer Signature" style="max-height:50px;max-width:200px;border:1px solid #bbf7d0;background:#fff;border-radius:6px;padding:4px;">
-            <?php else: ?>
-            <div class="f-value" style="color:#6ee7b7;">Signature on file: <?= rh($acceptance->digital_signature) ?></div>
-            <?php endif; ?>
+        <div style="padding:0 16px 12px; border-top:1px solid #bbf7d0; margin-top:0; padding-top:10px;">
+          <div class="f-label" style="color:#047857;font-size:9px;margin-bottom:6px;">Digital Signature</div>
+          <?php
+          $sigFilename = $acceptance->digital_signature;
+          $sigFile     = __DIR__ . '/../../../storage/acceptance/signatures/' . $sigFilename;
+          $isJson      = str_ends_with($sigFilename, '_esign.json');
+          $isPng       = str_ends_with($sigFilename, '_sig.png');
+
+          if ($isJson && file_exists($sigFile)):
+            // New e-sign consent system — decode and show verified badge
+            $sigPayload = @json_decode(file_get_contents($sigFile), true);
+            $sigSigner  = $sigPayload['signer']    ?? $acceptance->customer_name;
+            $sigTs      = $sigPayload['timestamp'] ?? null;
+            $sigTsFmt   = $sigTs ? date('M j, Y g:i A', strtotime($sigTs)) . ' UTC' : '—';
+          ?>
+          <div style="display:inline-flex;align-items:center;gap:10px;background:#f0fdf4;border:2px solid #6ee7b7;border-radius:8px;padding:10px 14px;">
+            <span style="font-size:22px;">✅</span>
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#065f46;">Digitally Signed — Legally Verified</div>
+              <div style="font-size:11px;color:#047857;margin-top:2px;">Signer: <strong><?= rh($sigSigner) ?></strong></div>
+              <div style="font-size:10px;color:#047857;margin-top:1px;font-family:monospace;">Signed at: <?= rh($sigTsFmt) ?></div>
+            </div>
           </div>
+          <div style="font-size:9px;color:#6ee7b7;margin-top:5px;font-family:monospace;">ref: <?= rh($sigFilename) ?></div>
+
+          <?php elseif ($isPng && file_exists($sigFile)):
+            // Legacy canvas PNG signature
+            $sigData = base64_encode(file_get_contents($sigFile));
+          ?>
+          <img src="data:image/png;base64,<?= $sigData ?>"
+            alt="Customer Signature" style="max-height:60px;max-width:220px;border:1px solid #bbf7d0;background:#fff;border-radius:6px;padding:4px;display:block;">
+
+          <?php else: ?>
+          <div class="f-value" style="color:#6ee7b7;">
+            ✅ Signature on file — <?= rh($sigFilename) ?>
+          </div>
+          <?php endif; ?>
         </div>
         <?php endif; ?>
       </div>
@@ -661,13 +780,14 @@ body {
     </div>
     <?php endif; ?>
 
-    <!-- ── AGENT / INTERNAL ── -->
-    <?php if ($acceptance->agent_notes || $acceptance->endorsements): ?>
+    <!-- ── AGENT / INTERNAL NOTES (Chargeback Defense) ── -->
+    <?php if ($acceptance->agent_notes): ?>
     <div class="section">
-      <div class="section-title">Internal Notes</div>
-      <?php if ($acceptance->agent_notes): ?>
-      <div class="info-cell"><div class="info-label">Agent Notes</div><div style="font-size:12px;color:#475569;margin-top:4px;"><?= rh($acceptance->agent_notes) ?></div></div>
-      <?php endif; ?>
+      <div class="section-title" style="color:#92400e;border-color:#fde68a;">⚠ Internal Transaction Notes (Chargeback Defense Record)</div>
+      <div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:8px;padding:14px 16px;">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#92400e;margin-bottom:6px;">Agent Notes — NOT shared with customer</div>
+        <div style="font-size:12px;color:#1e293b;line-height:1.7;white-space:pre-wrap;"><?= rh($acceptance->agent_notes) ?></div>
+      </div>
     </div>
     <?php endif; ?>
 

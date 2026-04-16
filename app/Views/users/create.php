@@ -93,12 +93,15 @@ tailwind.config = {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="field-label" for="role">Role <span class="text-rose-500">*</span></label>
-              <select class="field-input" id="role" name="role" required>
-                <option value="agent"   <?= ($old['role'] ?? 'agent') === 'agent'   ? 'selected' : '' ?>>Agent</option>
-                <option value="manager" <?= ($old['role'] ?? '') === 'manager' ? 'selected' : '' ?>>Manager</option>
-                <option value="admin"   <?= ($old['role'] ?? '') === 'admin'   ? 'selected' : '' ?>>Admin</option>
+              <select class="field-input" id="role" name="role" required onchange="handleRoleChange(this.value)">
+                <option value="agent"      <?= ($old['role'] ?? 'agent') === 'agent'      ? 'selected' : '' ?>>Agent</option>
+                <option value="supervisor" <?= ($old['role'] ?? '') === 'supervisor' ? 'selected' : '' ?>>Supervisor</option>
+                <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
+                <option value="manager"    <?= ($old['role'] ?? '') === 'manager' ? 'selected' : '' ?>>Manager</option>
+                <option value="admin"      <?= ($old['role'] ?? '') === 'admin'   ? 'selected' : '' ?>>Admin</option>
+                <?php endif; ?>
               </select>
-              <p class="text-[10px] text-slate-400 mt-1">Agents record transactions. Managers see team data. Admins have full access.</p>
+              <p class="text-[10px] text-slate-400 mt-1">Agents record transactions. Supervisors oversee a team. Managers see all team data. Admins have full access.</p>
             </div>
             <div>
               <label class="field-label" for="grace_period_mins">Late Login Grace Period (minutes)</label>
@@ -107,6 +110,20 @@ tailwind.config = {
                      min="0" max="120" placeholder="30">
               <p class="text-[10px] text-slate-400 mt-1">How many minutes late before clock-in is blocked. Default: 30.</p>
             </div>
+          </div>
+
+          <!-- Reports To (required for agent/supervisor) -->
+          <div id="reports-to-wrap" class="<?= in_array($old['role'] ?? 'agent', ['admin','manager']) ? 'hidden' : '' ?>">
+            <label class="field-label" for="reports_to_id">Reports To <span class="text-rose-500">*</span></label>
+            <select class="field-input" id="reports_to_id" name="reports_to_id">
+              <option value="">— Select manager or supervisor —</option>
+              <?php foreach ($superiors as $sup): ?>
+              <option value="<?= $sup->id ?>" <?= (int)($old['reports_to_id'] ?? 0) === $sup->id ? 'selected' : '' ?>>
+                <?= htmlspecialchars($sup->name) ?> (<?= ucfirst($sup->role) ?>)
+              </option>
+              <?php endforeach; ?>
+            </select>
+            <p class="text-[10px] text-slate-400 mt-1">Agents and supervisors must report to a manager or supervisor.</p>
           </div>
 
         </div>
@@ -161,12 +178,9 @@ tailwind.config = {
             <span class="material-symbols-outlined text-sm">error</span> Passwords do not match.
           </p>
 
-          <div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-800 flex gap-2">
-            <span class="material-symbols-outlined text-base flex-shrink-0 mt-0.5">info</span>
-            <span>Share these credentials with the user securely. They should change their password after first login.</span>
-          </div>
-        </div>
-      </div>
+        </div><!-- /p-6 -->
+      </div><!-- /Login Credentials card -->
+
 
       <!-- Submit -->
       <div class="flex items-center justify-end gap-3">
@@ -192,6 +206,16 @@ function togglePw(fieldId, btn) {
   } else {
     field.type = 'password';
     icon.textContent = 'visibility';
+  }
+}
+
+function handleRoleChange(role) {
+  var wrap = document.getElementById('reports-to-wrap');
+  if (!wrap) return;
+  if (role === 'admin' || role === 'manager') {
+    wrap.classList.add('hidden');
+  } else {
+    wrap.classList.remove('hidden');
   }
 }
 

@@ -76,7 +76,7 @@ class ShiftService
      * @param  int    $adminId  The ID of the admin publishing the week
      * @return array  ['success' => bool, 'message' => string, 'errors' => array]
      */
-    public function publishWeek(array $entries, int $adminId): array
+    public function publishWeek(array $entries, int $adminId, string $actorRole = 'admin'): array
     {
         // Pre-validate ALL entries before touching the database
         $allErrors = [];
@@ -89,6 +89,26 @@ class ShiftService
 
         if (!empty($allErrors)) {
             return ['success' => false, 'message' => 'Validation failed. No changes were saved.', 'errors' => $allErrors];
+        }
+
+        // Determine publish status based on actor role
+        $isSupervisor  = $actorRole === User::ROLE_SUPERVISOR;
+        $publishStatus = $isSupervisor
+            ? ShiftSchedule::PUBLISH_PENDING_APPROVAL
+            : ShiftSchedule::PUBLISH_PUBLISHED;
+
+        // If supervisor, verify they only touch their own team agents
+        if ($isSupervisor) {
+            $actor     = User::find($adminId);
+            $teamIds   = $actor ? $actor->getTeamAgentIds() : [];
+            foreach ($entries as $index => $entry) {
+                if (!in_array((int)$entry['agent_id'], $teamIds)) {
+                    $allErrors["entry_{$index}"]['agent_id'] = 'You can only schedule agents in your team.';
+                }
+            }
+            if (!empty($allErrors)) {
+                return ['success' => false, 'message' => 'Some entries are outside your team.', 'errors' => $allErrors];
+            }
         }
 
         // All entries valid — wrap in a single DB transaction
@@ -104,21 +124,28 @@ class ShiftService
                         'shift_date' => $entry['shift_date'],
                     ],
                     [
-                        'shift_start'   => $entry['shift_start'],
-                        'shift_end'     => $entry['shift_end'],
-                        'template_id'   => $entry['template_id'] ?? null,
-                        'schedule_week' => $monday,
-                        'created_by'    => $adminId,
+                        'shift_start'    => $entry['shift_start'],
+                        'shift_end'      => $entry['shift_end'],
+                        'template_id'    => $entry['template_id'] ?? null,
+                        'schedule_week'  => $monday,
+                        'created_by'     => $adminId,
+                        'publish_status' => $publishStatus,
+                        'approved_by'    => null,
+                        'approved_at'    => null,
                     ]
                 );
             }
 
             Capsule::connection()->commit();
-            return ['success' => true, 'message' => count($entries) . ' shift(s) published successfully.', 'errors' => []];
+
+            $message = $isSupervisor
+                ? count($entries) . ' shift(s) submitted for manager approval.'
+                : count($entries) . ' shift(s) published successfully.';
+
+            return ['success' => true, 'message' => $message, 'pending_approval' => $isSupervisor, 'errors' => []];
 
         } catch (\Throwable $e) {
             Capsule::connection()->rollBack();
-            // Log the real error for developers, return safe message for users
             error_log('[ShiftService::publishWeek] DB Error: ' . $e->getMessage());
             return [
                 'success' => false,
@@ -203,7 +230,7 @@ class ShiftService
      * @param  int    $adminId
      * @return array  ['success' => bool, 'message' => string]
      */
-    public function updateCell(int $agentId, string $date, array $data, int $adminId): array
+    public function updateCell(int $agentId, string $date, array $data, int $adminId, string $actorRole = 'admin'): array
     {
         // Validate the entry
         $result = $this->validateEntry(array_merge(['agent_id' => $agentId, 'shift_date' => $date], $data));
@@ -211,23 +238,43 @@ class ShiftService
             return ['success' => false, 'message' => 'Validation failed.', 'errors' => $result['errors']];
         }
 
+        // Supervisors can only edit cells for their own team
+        if ($actorRole === User::ROLE_SUPERVISOR) {
+            $actor = User::find($adminId);
+            if (!$actor || !$actor->isInMyTeam($agentId)) {
+                return ['success' => false, 'message' => 'You can only edit shifts for agents in your team.'];
+            }
+        }
+
+        // Determine publish status based on actor role
+        $publishStatus = ($actorRole === User::ROLE_SUPERVISOR)
+            ? ShiftSchedule::PUBLISH_PENDING_APPROVAL
+            : ShiftSchedule::PUBLISH_PUBLISHED;
+
         try {
             $monday = ShiftSchedule::getMondayOfWeek($date);
             ShiftSchedule::updateOrCreate(
                 ['agent_id' => $agentId, 'shift_date' => $date],
                 [
-                    'shift_start'   => $data['shift_start'],
-                    'shift_end'     => $data['shift_end'],
-                    'template_id'   => $data['template_id'] ?? null,
-                    'schedule_week' => $monday,
-                    'created_by'    => $adminId,
+                    'shift_start'    => $data['shift_start'],
+                    'shift_end'      => $data['shift_end'],
+                    'template_id'    => $data['template_id'] ?? null,
+                    'schedule_week'  => $monday,
+                    'created_by'     => $adminId,
+                    'publish_status' => $publishStatus,
+                    'approved_by'    => null,
+                    'approved_at'    => null,
                 ]
             );
 
             // Bust the attendance gate cache for this agent/date
             unset($_SESSION["shift_cache_{$agentId}_{$date}"], $_SESSION["shift_cache_{$agentId}_{$date}_ts"]);
 
-            return ['success' => true, 'message' => 'Shift updated successfully.'];
+            $message = ($actorRole === User::ROLE_SUPERVISOR)
+                ? 'Shift submitted for manager approval.'
+                : 'Shift updated successfully.';
+
+            return ['success' => true, 'message' => $message];
         } catch (\Throwable $e) {
             error_log('[ShiftService::updateCell] Error: ' . $e->getMessage());
             return [
@@ -245,8 +292,16 @@ class ShiftService
      * @param  string $date
      * @return array
      */
-    public function deleteCell(int $agentId, string $date): array
+    public function deleteCell(int $agentId, string $date, int $actorId = 0, string $actorRole = 'admin'): array
     {
+        // Supervisors can only delete cells for their own team
+        if ($actorRole === User::ROLE_SUPERVISOR) {
+            $actor = User::find($actorId);
+            if (!$actor || !$actor->isInMyTeam($agentId)) {
+                return ['success' => false, 'message' => 'You can only remove shifts for agents in your team.'];
+            }
+        }
+
         try {
             $deleted = ShiftSchedule::where('agent_id', $agentId)->where('shift_date', $date)->delete();
             if (!$deleted) {
@@ -265,14 +320,78 @@ class ShiftService
 
     /**
      * Get all active agents for the weekly grid.
-     * Returns only users with the 'agent' or 'manager' role who are active.
+     * Returns users with the 'agent', 'supervisor', or 'manager' role who are active.
+     * If $supervisorId provided, returns only that supervisor's direct team.
      */
-    public function getActiveAgents(): \Illuminate\Support\Collection
+    public function getActiveAgents(?int $supervisorId = null): \Illuminate\Support\Collection
     {
-        return User::whereIn('role', [User::ROLE_AGENT, User::ROLE_MANAGER])
-                   ->where('status', User::STATUS_ACTIVE)
-                   ->whereNull('deleted_at')
-                   ->orderBy('name')
-                   ->get(['id', 'name', 'role']);
+        $query = User::whereIn('role', [User::ROLE_AGENT, User::ROLE_SUPERVISOR, User::ROLE_MANAGER])
+                     ->where('status', User::STATUS_ACTIVE)
+                     ->whereNull('deleted_at')
+                     ->orderBy('name');
+
+        if ($supervisorId !== null) {
+            $query->where('reports_to_id', $supervisorId);
+        }
+
+        return $query->get(['id', 'name', 'role', 'reports_to_id']);
+    }
+
+    /**
+     * Get weeks that have shifts in 'pending_approval' status.
+     * Used by managers to see what supervisors have submitted.
+     * Returns an array of unique week_start values with counts.
+     */
+    public function getPendingApprovals(): array
+    {
+        $rows = ShiftSchedule::where('publish_status', ShiftSchedule::PUBLISH_PENDING_APPROVAL)
+            ->select('schedule_week', Capsule::raw('COUNT(*) as count'), 'created_by')
+            ->groupBy('schedule_week', 'created_by')
+            ->with('creator')
+            ->orderBy('schedule_week')
+            ->get();
+
+        return $rows->map(fn($r) => [
+            'week_start'    => is_string($r->schedule_week) ? $r->schedule_week : $r->schedule_week->format('Y-m-d'),
+            'count'         => $r->count,
+            'submitted_by'  => $r->creator?->name ?? 'Unknown',
+            'submitted_by_id' => $r->created_by,
+        ])->toArray();
+    }
+
+    /**
+     * Approve all pending_approval shifts for a given week (and optionally supervisor).
+     * Sets publish_status = 'published', approved_by, approved_at.
+     *
+     * @param  string $weekStart  YYYY-MM-DD (Monday)
+     * @param  int    $approverId The manager/admin approving
+     * @param  int|null $supervisorId  Scope to a specific supervisor's submissions (optional)
+     * @return array  ['success' => bool, 'message' => string, 'count' => int]
+     */
+    public function approveShiftPublish(string $weekStart, int $approverId, ?int $supervisorId = null): array
+    {
+        try {
+            $query = ShiftSchedule::where('schedule_week', $weekStart)
+                ->where('publish_status', ShiftSchedule::PUBLISH_PENDING_APPROVAL);
+
+            if ($supervisorId !== null) {
+                $query->where('created_by', $supervisorId);
+            }
+
+            $count = $query->update([
+                'publish_status' => ShiftSchedule::PUBLISH_PUBLISHED,
+                'approved_by'    => $approverId,
+                'approved_at'    => date('Y-m-d H:i:s'),
+            ]);
+
+            return [
+                'success' => true,
+                'message' => "{$count} shift(s) approved and published.",
+                'count'   => $count,
+            ];
+        } catch (\Throwable $e) {
+            error_log('[ShiftService::approveShiftPublish] Error: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'A database error occurred.'];
+        }
     }
 }

@@ -22,14 +22,15 @@
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label class="field-label">Currency</label>
+                  <?php $cur = $pre['currency'] ?: 'USD'; ?>
                   <select name="currency" id="field_currency" class="field-input" onchange="syncSummary()">
-                    <option value="CAD" <?= $pre['currency']==='CAD'?'selected':'' ?>>CAD</option>
-                    <option value="USD" <?= $pre['currency']==='USD'?'selected':'' ?>>USD</option>
-                    <option value="GBP" <?= $pre['currency']==='GBP'?'selected':'' ?>>GBP</option>
-                    <option value="EUR" <?= $pre['currency']==='EUR'?'selected':'' ?>>EUR</option>
-                    <option value="INR" <?= $pre['currency']==='INR'?'selected':'' ?>>INR</option>
-                    <option value="AED" <?= $pre['currency']==='AED'?'selected':'' ?>>AED</option>
-                    <option value="SGD" <?= $pre['currency']==='SGD'?'selected':'' ?>>SGD</option>
+                    <option value="USD" <?= $cur==='USD'?'selected':'' ?>>USD</option>
+                    <option value="CAD" <?= $cur==='CAD'?'selected':'' ?>>CAD</option>
+                    <option value="GBP" <?= $cur==='GBP'?'selected':'' ?>>GBP</option>
+                    <option value="EUR" <?= $cur==='EUR'?'selected':'' ?>>EUR</option>
+                    <option value="INR" <?= $cur==='INR'?'selected':'' ?>>INR</option>
+                    <option value="AED" <?= $cur==='AED'?'selected':'' ?>>AED</option>
+                    <option value="SGD" <?= $cur==='SGD'?'selected':'' ?>>SGD</option>
                   </select>
                 </div>
                 <div>
@@ -129,11 +130,11 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="field-label">Statement Descriptor</label>
-                <input type="text" name="statement_descriptor" placeholder="e.g. Lufthansa / Date Change Fee" class="field-input">
+                <input type="text" name="statement_descriptor" id="field_statement_descriptor" placeholder="e.g. Lufthansa / Date Change Fee" class="field-input">
               </div>
               <div>
                 <label class="field-label">Split Charge Note</label>
-                <input type="text" name="split_charge_note" placeholder="e.g. Card 1: $500, Card 2: $320" class="field-input">
+                <input type="text" name="split_charge_note" id="field_split_charge_note" placeholder="e.g. Card 1: $500, Card 2: $320" class="field-input">
               </div>
             </div>
 
@@ -161,21 +162,38 @@
           <div class="p-6 space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
+                <label class="field-label">Class of Service</label>
+                <select name="class_of_service" id="field_class_of_service" class="field-input">
+                  <option value="economy">Economy</option>
+                  <option value="premium_economy">Premium Economy</option>
+                  <option value="business">Business</option>
+                  <option value="first">First</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label">Seat Number(s)</label>
+                <input type="text" name="seat_number" id="field_seat_number" placeholder="e.g. 14A, 14B" class="field-input">
+              </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
                 <label class="field-label">Endorsements</label>
-                <input type="text" name="endorsements" placeholder="e.g. NON END/NON REF/NON RRT" class="field-input">
+                <input type="text" name="endorsements" id="field_endorsements" value="NON END/NON REF/NON RRT" placeholder="e.g. NON END/NON REF/NON RRT" class="field-input">
               </div>
               <div>
                 <label class="field-label">Baggage Info</label>
-                <input type="text" name="baggage_info" placeholder="e.g. 2PC / 23KG" class="field-input">
+                <input type="text" name="baggage_info" id="field_baggage_info" placeholder="e.g. 2PC / 23KG" class="field-input">
               </div>
             </div>
             <div>
               <label class="field-label">Fare Rules</label>
-              <textarea name="fare_rules" rows="3" placeholder="Paste fare rules or key restrictions..." class="field-input resize-none"></textarea>
+              <textarea name="fare_rules" id="field_fare_rules" rows="3" placeholder="Paste fare rules or key restrictions..." class="field-input resize-none"></textarea>
             </div>
             <div>
-              <label class="field-label">Agent Notes</label>
-              <textarea name="agent_notes" rows="2" placeholder="Internal notes (not visible to customer)" class="field-input resize-none"></textarea>
+              <label class="field-label">Agent Notes <span class="text-rose-500">*</span></label>
+              <textarea name="agent_notes" id="field_agent_notes" rows="3" required
+                placeholder="Required: note what was done, any instructions from customer, authorizations given..." class="field-input resize-none"></textarea>
+              <p class="text-[10px] text-slate-500 mt-1">Required — your name and timestamp will be recorded regardless.</p>
             </div>
           </div>
         </div>

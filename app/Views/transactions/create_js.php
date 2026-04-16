@@ -78,6 +78,14 @@ const wizard = {
         document.getElementById('step1-error').classList.remove('hidden');
         return { valid: false, msg: 'Please select a transaction type.' };
       }
+      // "Other" type requires a Charge Title
+      if (state.type === 'other') {
+        const otherTitle = (document.getElementById('field_other_title') ? document.getElementById('field_other_title').value : '').trim();
+        if (!otherTitle) {
+          document.getElementById('step1-error').classList.remove('hidden');
+          return { valid: false, msg: 'A Charge Title is required when transaction type is "Other". Please fill in the Charge Description box.' };
+        }
+      }
       document.getElementById('step1-error').classList.add('hidden');
       return { valid: true };
     }
@@ -85,10 +93,12 @@ const wizard = {
       const pnr = document.getElementById('field_pnr').value.trim();
       const name = document.getElementById('field_customer_name').value.trim();
       const email = document.getElementById('field_customer_email').value.trim();
+      const phone = (document.getElementById('field_customer_phone') ? document.getElementById('field_customer_phone').value : '').trim();
       const errs = [];
       if (!pnr) errs.push('PNR is required.');
       if (!name) errs.push('Customer name is required.');
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.push('Valid email is required.');
+      if (!phone) errs.push('Customer phone is required.');
       const filledPax = state.passengers.filter(function(p) { return (p.first_name||'').trim() || (p.last_name||'').trim(); });
       if (filledPax.length === 0) {
         document.getElementById('step2-pax-error').classList.remove('hidden');
@@ -99,7 +109,19 @@ const wizard = {
       if (errs.length) return { valid: false, msg: errs.join(' ') };
       return { valid: true };
     }
-    if (step === 3) return { valid: true }; // flights optional
+    if (step === 3) {
+      // Flights are required for booking/exchange/seat types; optional for others
+      const needsFlights = ['new_booking', 'exchange', 'seat_purchase'].includes(state.type);
+      if (needsFlights) {
+        const confirmed = function(segs) {
+          return (segs || []).filter(function(s) { return !s._editing && s.from && s.to && s.flight_no; }).length > 0;
+        };
+        if (!confirmed(state.segments.main) && !confirmed(state.segments.old)) {
+          return { valid: false, msg: 'At least one confirmed flight segment is required. Add a segment and click the green ✓ button to confirm it.' };
+        }
+      }
+      return { valid: true };
+    }
     if (step === 4) {
       const total = parseFloat(document.getElementById('field_total_amount').value);
       if (!total || total <= 0) {
@@ -107,6 +129,10 @@ const wizard = {
         return { valid: false, msg: 'Total amount must be greater than 0.' };
       }
       document.getElementById('step4-amount-error').classList.add('hidden');
+      const notes = (document.getElementById('field_agent_notes') ? document.getElementById('field_agent_notes').value : '').trim();
+      if (!notes) {
+        return { valid: false, msg: 'Agent Notes are required. Please describe what was done.' };
+      }
       return { valid: true };
     }
     return { valid: true };
@@ -280,7 +306,19 @@ const flightMgr = {
   },
 
   addManual: function(group) {
-    state.segments[group].push({ airline_iata:'', flight_no:'', cabin_class:'Y', date:'', from:'', to:'', dep_time:'', arr_time:'', arr_next_day:false });
+    state.segments[group].push({ airline_iata:'', flight_no:'', cabin_class:'Y', date:'', from:'', to:'', dep_time:'', arr_time:'', arr_next_day:false, _editing:true });
+    this._render(group);
+  },
+
+  confirmSeg: function(group, idx) {
+    const seg = state.segments[group] && state.segments[group][idx];
+    if (!seg) return;
+    if (!seg.flight_no || !seg.from || !seg.to) {
+      alert('Please fill in at least Airline, Flight #, From, and To before confirming.');
+      return;
+    }
+    seg.dep_time = seg.dep_time || '00:00';
+    seg._editing = false; // lock into card view
     this._render(group);
   },
 
@@ -297,7 +335,7 @@ const flightMgr = {
     const segs = state.segments[group];
     if (!segs||!segs.length) { el.innerHTML=''; return; }
     el.innerHTML = segs.map(function(seg, i) {
-      const parsed = !!(seg.from && seg.to && seg.dep_time);
+      const parsed = !!(seg.from && seg.to && seg.dep_time) && !seg._editing;
       const logoUrl = seg.airline_iata ? 'https://www.gstatic.com/flights/airline_logos/35px/'+seg.airline_iata+'.png' : '';
       if (parsed) {
         return `<div class="seg-card flex items-stretch bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -313,16 +351,19 @@ const flightMgr = {
           <button type="button" onclick="flightMgr.removeSegment('${group}',${i})" class="px-2 bg-slate-50 border-l border-slate-200 hover:bg-rose-50 hover:text-rose-600 text-slate-400 flex items-center"><span class="material-symbols-outlined text-sm">close</span></button>
         </div>`;
       } else {
-        return `<div class="seg-card p-3 bg-slate-50 border border-slate-200 rounded-xl">
-          <div class="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 items-end">
-            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Airline</label><input type="text" value="${_esc(seg.airline_iata)}" maxlength="2" class="w-full border border-slate-200 rounded px-2 py-1 text-xs font-mono bg-white uppercase" oninput="flightMgr._updateSeg('${group}',${i},'airline_iata',this.value.toUpperCase())"></div>
-            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Flight#</label><input type="text" value="${_esc(seg.flight_no)}" class="w-full border border-slate-200 rounded px-2 py-1 text-xs font-mono bg-white" oninput="flightMgr._updateSeg('${group}',${i},'flight_no',this.value)"></div>
-            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Date</label><input type="text" value="${_esc(seg.date)}" placeholder="12MAR" class="w-full border border-slate-200 rounded px-2 py-1 text-xs font-mono bg-white uppercase" oninput="flightMgr._updateSeg('${group}',${i},'date',this.value.toUpperCase())"></div>
-            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">From</label><input type="text" value="${_esc(seg.from)}" maxlength="3" class="w-full border border-slate-200 rounded px-2 py-1 text-xs font-mono bg-white uppercase" oninput="flightMgr._updateSeg('${group}',${i},'from',this.value.toUpperCase())"></div>
-            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">To</label><input type="text" value="${_esc(seg.to)}" maxlength="3" class="w-full border border-slate-200 rounded px-2 py-1 text-xs font-mono bg-white uppercase" oninput="flightMgr._updateSeg('${group}',${i},'to',this.value.toUpperCase())"></div>
-            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Dep/Arr</label><input type="text" value="${_esc(seg.dep_time)}" placeholder="10:40" class="w-full border border-slate-200 rounded px-2 py-1 text-xs font-mono bg-white" oninput="flightMgr._updateSeg('${group}',${i},'dep_time',this.value)"></div>
-            <button type="button" onclick="flightMgr.removeSegment('${group}',${i})" class="p-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded transition-colors self-end"><span class="material-symbols-outlined text-sm">delete</span></button>
+        return `<div class="seg-card p-3 bg-amber-50 border border-amber-200 rounded-xl">
+          <div class="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_1fr_auto_auto] gap-2 items-end">
+            <div><label class="block text-[9px] font-bold text-amber-700 uppercase mb-1">Airline *</label><input type="text" value="${_esc(seg.airline_iata)}" maxlength="2" placeholder="AA" class="w-full border border-amber-300 rounded px-2 py-1 text-xs font-mono bg-white uppercase" oninput="flightMgr._updateSeg('${group}',${i},'airline_iata',this.value.toUpperCase())"></div>
+            <div><label class="block text-[9px] font-bold text-amber-700 uppercase mb-1">Flight # *</label><input type="text" value="${_esc(seg.flight_no)}" placeholder="AA123" class="w-full border border-amber-300 rounded px-2 py-1 text-xs font-mono bg-white" oninput="flightMgr._updateSeg('${group}',${i},'flight_no',this.value); flightMgr._updateSeg('${group}',${i},'airline_iata',this.value.substring(0,2).toUpperCase())"></div>
+            <div><label class="block text-[9px] font-bold text-amber-700 uppercase mb-1">Date</label><input type="text" value="${_esc(seg.date)}" placeholder="12MAR" class="w-full border border-amber-300 rounded px-2 py-1 text-xs font-mono bg-white uppercase" oninput="flightMgr._updateSeg('${group}',${i},'date',this.value.toUpperCase())"></div>
+            <div><label class="block text-[9px] font-bold text-amber-700 uppercase mb-1">From *</label><input type="text" value="${_esc(seg.from)}" maxlength="3" placeholder="JFK" class="w-full border border-amber-300 rounded px-2 py-1 text-xs font-mono bg-white uppercase" oninput="flightMgr._updateSeg('${group}',${i},'from',this.value.toUpperCase())"></div>
+            <div><label class="block text-[9px] font-bold text-amber-700 uppercase mb-1">To *</label><input type="text" value="${_esc(seg.to)}" maxlength="3" placeholder="MIA" class="w-full border border-amber-300 rounded px-2 py-1 text-xs font-mono bg-white uppercase" oninput="flightMgr._updateSeg('${group}',${i},'to',this.value.toUpperCase())"></div>
+            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Dep</label><input type="text" value="${_esc(seg.dep_time)}" placeholder="10:40" class="w-full border border-slate-200 rounded px-2 py-1 text-xs font-mono bg-white" oninput="flightMgr._updateSeg('${group}',${i},'dep_time',this.value)"></div>
+            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Arr</label><input type="text" value="${_esc(seg.arr_time)}" placeholder="13:25" class="w-full border border-slate-200 rounded px-2 py-1 text-xs font-mono bg-white" oninput="flightMgr._updateSeg('${group}',${i},'arr_time',this.value)"></div>
+            <button type="button" onclick="flightMgr.confirmSeg('${group}',${i})" class="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors self-end flex items-center gap-0.5" title="Confirm Segment"><span class="material-symbols-outlined text-sm">check</span></button>
+            <button type="button" onclick="flightMgr.removeSegment('${group}',${i})" class="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg transition-colors self-end"><span class="material-symbols-outlined text-sm">delete</span></button>
           </div>
+          <p class="text-[10px] text-amber-700 mt-2">Fill all required (*) fields then click <strong>✓</strong> to confirm this segment.</p>
         </div>`;
       }
     }).join('');
@@ -444,9 +485,21 @@ function importAcceptance(id) {
       if (d.order_id) document.getElementById('field_order_id').value = d.order_id;
       if (d.total_amount) document.getElementById('field_total_amount').value = d.total_amount;
       if (d.currency) document.getElementById('field_currency').value = d.currency;
+      // Travel dates
+      if (d.travel_date) { var fd = document.getElementById('field_travel_date'); if(fd) fd.value = d.travel_date; }
+      if (d.departure_time) { var ft = document.getElementById('field_departure_time'); if(ft) ft.value = d.departure_time; }
+      if (d.return_date) { var rd = document.getElementById('field_return_date'); if(rd) rd.value = d.return_date; }
+      // Card fields
       if (d.card_type) document.getElementById('field_card_type').value = d.card_type;
       if (d.cardholder_name) document.getElementById('field_cardholder_name').value = d.cardholder_name;
       if (d.billing_address) document.getElementById('field_billing_address').value = d.billing_address;
+      // Payment extras
+      if (d.statement_descriptor) { var sd = document.getElementById('field_statement_descriptor'); if(sd) sd.value = d.statement_descriptor; }
+      if (d.split_charge_note) { var scn = document.getElementById('field_split_charge_note'); if(scn) scn.value = d.split_charge_note; }
+      // Ticket conditions
+      if (d.endorsements) { var ef = document.getElementById('field_endorsements'); if(ef) ef.value = d.endorsements; }
+      if (d.baggage_info) { var bf = document.getElementById('field_baggage_info'); if(bf) bf.value = d.baggage_info; }
+      if (d.fare_rules) { var ff = document.getElementById('field_fare_rules'); if(ff) ff.value = d.fare_rules; }
       // Passengers
       if (d.passengers && d.passengers.length) {
         state.passengers = d.passengers.map(function(p) {
@@ -612,18 +665,33 @@ const formAssembly = {
       flightData.new_cabin = newCabinEl ? newCabinEl.value : '';
     }
     if (t === 'other') {
-      var othTitleEl = document.getElementById('field_other_title');
-      var othNotesEl = document.getElementById('field_other_notes');
-      flightData = { 
-          other_title: (othTitleEl ? othTitleEl.value : '').trim(),
-          other_notes: (othNotesEl ? othNotesEl.value : '').trim(),
+      var othTitleEl    = document.getElementById('field_other_title');
+      var othNotesEl    = document.getElementById('field_other_notes');
+      var othRefEl      = document.getElementById('field_other_reference');
+      var othProvEl     = document.getElementById('field_other_provider');
+      var othPayEl      = document.getElementById('field_other_payment_summary');
+      var othDescEl     = document.getElementById('other-desc');
+      flightData = {
+          other_title:          (othTitleEl    ? othTitleEl.value    : '').trim(),
+          other_notes:          (othNotesEl    ? othNotesEl.value    : '').trim(),
+          other_reference:      (othRefEl      ? othRefEl.value      : '').trim(),
+          other_provider:       (othProvEl     ? othProvEl.value     : '').trim(),
+          other_payment_summary:(othPayEl      ? othPayEl.value      : '').trim(),
+          other_desc:           (othDescEl     ? othDescEl.value     : '').trim(),
           flights: state.segments.other || []
       };
     }
     document.getElementById('hidFlightData').value = JSON.stringify(flightData);
 
-    // Type-specific data (same as flight data for now)
-    document.getElementById('hidTypeData').value = JSON.stringify(flightData);
+    // Attach class_of_service and seat_number to type-specific data
+    var extraData = flightData ? Object.assign({}, flightData) : {};
+    var cosEl = document.getElementById('field_class_of_service');
+    var seatEl = document.getElementById('field_seat_number');
+    if (cosEl && cosEl.value) extraData.class_of_service = cosEl.value;
+    if (seatEl && seatEl.value.trim()) extraData.seat_number = seatEl.value.trim();
+
+    // Type-specific data (includes class_of_service, seat_number)
+    document.getElementById('hidTypeData').value = JSON.stringify(extraData);
 
     // Fare breakdown
     document.getElementById('hidFareBreakdown').value = JSON.stringify(

@@ -455,20 +455,34 @@ SELECT * FROM notifications
 
 ---
 
-## Module 7: Activity Log
+## Module 7: Mandatory Audit Trail (Record Notes)
 
-Every state-changing action logged:
+> **Priority:** 🔴 CRITICAL — every lifecycle event must be logged and auditable.
 
-| Event | Details |
-|-------|---------|
-| Login/Logout | Timestamp, IP, device |
-| Attendance Clock In/Out/Break | Full state transition |
-| Transaction Created/Approved/Voided | Who, when, what changed |
-| Override Performed | Admin ID, reason, before/after |
-| Card Revealed | Admin ID, timestamp, which card |
-| Notification Acknowledged | Which, when |
-| Shift Schedule Changed | Who changed, old/new values |
-| Payroll Finalized/Amended | Full audit trail |
+### 7.1 Architecture: Record Note System
+Every state-changing action or record view must be accompanied by a persistent note. These are stored in the `record_notes` table and linked specifically to the entity (Acceptance or Transaction).
+
+#### Table: `record_notes`
+| Column | Type | Purpose |
+|--------|------|---------|
+| `id` | BIGINT PK | |
+| `record_type` | ENUM | `acceptance`, `transaction` |
+| `record_id` | BIGINT | FK to the respective record |
+| `user_id` | INT | Who wrote the note / performed the action |
+| `note` | TEXT | Mandatory agent/system input |
+| `action` | VARCHAR(50) | `created`, `approved`, `voided`, `edited`, `viewed` |
+| `created_at` | DATETIME | Immutable timestamp |
+
+### 7.2 Hard Modal Blocker (Audit Enforcement)
+To prevent agents from interacting with a record without logging their intent or status update:
+- **On View:** Accessing `/acceptance/{id}` or `/transactions/{id}` triggers a full-page JS modal.
+- **Persistence:** Interaction is disabled (blur + overlay) until a note is submitted via AJAX.
+- **Log:** Even "silent" views are recorded with timestamps.
+
+### 7.3 Immutability & Persistence
+- Notes cannot be edited or deleted by anyone (including admins).
+- Timeline is rendered descending (newest first) to ensure the current status is immediate.
+- Agents are forced to provide a justification for every modification (creation or edit).
 
 ---
 

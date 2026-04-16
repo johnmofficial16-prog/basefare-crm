@@ -92,31 +92,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             break;
         }
 
-        // Save passport / ID (if required)
+        // Save passport / ID (if required and this is NOT a pre-auth)
         // NOTE: UPLOAD_ERR_OK === 0 (falsy) — must use strict comparison, NOT empty()
         $passportPath = null;
         $passportUploaded = isset($_FILES['passport_file']) && $_FILES['passport_file']['error'] === UPLOAD_ERR_OK;
-        if ($acceptance->req_passport && $passportUploaded) {
+        if (!$acceptance->is_preauth && $acceptance->req_passport && $passportUploaded) {
             $passportPath = $service->saveEvidenceFile($rawToken, $_FILES['passport_file'], 'passport');
             if (!$passportPath) {
                 $submitError = 'Failed to process the uploaded Passport/ID file. Please ensure it is a valid JPG, PNG or PDF under 10MB.';
                 break;
             }
-        } elseif ($acceptance->req_passport) {
+        } elseif (!$acceptance->is_preauth && $acceptance->req_passport) {
             $submitError = 'A Passport / Government ID upload is required to proceed.';
             break;
         }
 
-        // Save CC front (if required)
+        // Save CC front (if required and this is NOT a pre-auth)
         $cardPath = null;
         $cardUploaded = isset($_FILES['card_file']) && $_FILES['card_file']['error'] === UPLOAD_ERR_OK;
-        if ($acceptance->req_cc_front && $cardUploaded) {
+        if (!$acceptance->is_preauth && $acceptance->req_cc_front && $cardUploaded) {
             $cardPath = $service->saveEvidenceFile($rawToken, $_FILES['card_file'], 'card');
             if (!$cardPath) {
                 $submitError = 'Failed to process the uploaded Credit Card image. Please ensure it is a valid JPG or PNG under 10MB.';
                 break;
             }
-        } elseif ($acceptance->req_cc_front) {
+        } elseif (!$acceptance->is_preauth && $acceptance->req_cc_front) {
             $submitError = 'A Credit Card front image upload is required to proceed.';
             break;
         }
@@ -169,6 +169,24 @@ if (!empty($flightData['flights']))     $allSegGroups[] = ['title' => 'Flight It
 if (!empty($flightData['old_flights'])) $allSegGroups[] = ['title' => 'Original Flights',             'segs' => $flightData['old_flights'], 'color' => 'rose'];
 if (!empty($flightData['new_flights'])) $allSegGroups[] = ['title' => 'New Flights (After Change)',   'segs' => $flightData['new_flights'], 'color' => 'emerald'];
 
+// Primary airline lookup — define early so it can be used for reverse lookup
+$AIRLINES_PUB = [
+    'AC'=>'Air Canada','WS'=>'WestJet','TS'=>'Air Transat',
+    'AA'=>'American Airlines','DL'=>'Delta','UA'=>'United',
+    'WN'=>'Southwest','B6'=>'JetBlue','AS'=>'Alaska Airlines',
+    'F9'=>'Frontier','NK'=>'Spirit','G4'=>'Allegiant',
+    'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France',
+    'KL'=>'KLM','EK'=>'Emirates','QR'=>'Qatar Airways',
+    'SQ'=>'Singapore Airlines','CX'=>'Cathay Pacific','JL'=>'Japan Airlines',
+    'NH'=>'ANA','TK'=>'Turkish Airlines','EY'=>'Etihad',
+    'LX'=>'Swiss','OS'=>'Austrian','TP'=>'TAP Portugal',
+    'VS'=>'Virgin Atlantic','AI'=>'Air India',
+    'KE'=>'Korean Air','QF'=>'Qantas','TG'=>'Thai Airways',
+    'MH'=>'Malaysia Airlines','SV'=>'Saudia','MS'=>'EgyptAir',
+    'ET'=>'Ethiopian','6E'=>'IndiGo','SG'=>'SpiceJet',
+    'AM'=>'Aeromexico','LA'=>'LATAM','AV'=>'Avianca','CM'=>'Copa',
+];
+
 // Primary airline iata for branding
 $primaryIata = '';
 foreach ($allSegGroups as $grp) {
@@ -177,6 +195,19 @@ foreach ($allSegGroups as $grp) {
         break;
     }
 }
+// Fallback if no flights exist (e.g. cancel_credit without segs)
+if (!$primaryIata && !empty($acceptance->airline)) {
+    $airlineUpper = strtoupper(trim($acceptance->airline));
+    if (preg_match('/^[A-Z0-9]{2,3}$/', $airlineUpper)) {
+        $primaryIata = $airlineUpper;
+    } else {
+        $foundIata = array_search(strtoupper($acceptance->airline), array_map('strtoupper', $AIRLINES_PUB));
+        if ($foundIata !== false) {
+             $primaryIata = $foundIata;
+        }
+    }
+}
+
 $headerLogoUrl = $primaryIata ? AcceptanceRequest::airlineLogoUrl($primaryIata, 70) : '';
 
 function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
@@ -295,6 +326,9 @@ tailwind.config = {
       <?php endif; ?>
       <span class="text-xs font-bold text-slate-500"><?= h(AcceptanceRequest::COMPANY_NAME) ?></span>
     </div>
+    <?php if ($primaryIata && isset($AIRLINES_PUB[$primaryIata])): ?>
+    <p class="text-2xl font-black text-slate-800 mb-1" style="font-family:Manrope,sans-serif;"><?= h($AIRLINES_PUB[$primaryIata]) ?></p>
+    <?php endif; ?>
     <h1 class="text-2xl font-black text-emerald-700 mb-2" style="font-family:Manrope,sans-serif;">Authorization Confirmed</h1>
     <p class="text-slate-600 text-sm mb-1">Thank you, <strong><?= h($acceptance->customer_name) ?></strong>.</p>
     <p class="text-slate-500 text-sm leading-relaxed mb-6">
@@ -317,7 +351,7 @@ tailwind.config = {
     <div class="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 text-left">
       <p class="font-bold mb-1">What happens next?</p>
       <p class="leading-relaxed">
-        Your travel agent will process your request and you will receive a confirmation email at
+        Your agent will process your request and you will receive a confirmation email at
         <strong><?= h($acceptance->customer_email) ?></strong>.
         Keep this page or your email for your records.
       </p>
@@ -381,20 +415,50 @@ tailwind.config = {
 <div class="portal-bg min-h-screen py-8 px-4">
 
   <!-- Header Bar -->
-  <div class="max-w-2xl mx-auto mb-6 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <?php if ($headerLogoUrl): ?>
-      <img src="<?= h($headerLogoUrl) ?>" alt="<?= h($primaryIata) ?>" class="w-10 h-10 object-contain rounded-lg bg-white/10 p-1" onerror="this.style.display='none'">
-      <?php endif; ?>
-      <div>
-        <p class="text-white font-black text-sm leading-tight" style="font-family:Manrope,sans-serif;"><?= h(AcceptanceRequest::COMPANY_NAME) ?></p>
-        <p class="text-blue-300 text-[10px] font-medium">Secure Authorization Portal</p>
+  <div class="max-w-2xl mx-auto mb-6">
+
+    <!-- Row 1: Company name (left) + SSL badge (right), vertically centered -->
+    <div class="flex items-center justify-between">
+      <p class="text-white font-black text-sm leading-tight" style="font-family:Manrope,sans-serif;">
+        <?= h(AcceptanceRequest::COMPANY_NAME) ?>
+      </p>
+      <div class="security-badge flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-full px-3 py-1.5 flex-none">
+        <span class="material-symbols-outlined text-emerald-400 text-sm">lock</span>
+        <span class="text-white text-[10px] font-bold">SSL Secured</span>
       </div>
     </div>
-    <div class="security-badge flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-full px-3 py-1.5">
-      <span class="material-symbols-outlined text-emerald-400 text-sm">lock</span>
-      <span class="text-white text-[10px] font-bold">SSL Secured</span>
+
+    <!-- Row 2: Airline logo + name — centered, text-xl to match "Authorization Request" -->
+    <?php
+      $airlineDisplayName = '';
+      if ($primaryIata) {
+          $airlineDisplayName = $AIRLINES_PUB[$primaryIata] ?? $primaryIata;
+      } elseif (!empty($acceptance->airline)) {
+          // Fallback: if no segment IATA, use the stored airline field
+          $airlineUpper = strtoupper(trim($acceptance->airline));
+          if (preg_match('/^[A-Z0-9]{2,3}$/', $airlineUpper)) {
+              $airlineDisplayName = $AIRLINES_PUB[$airlineUpper] ?? $airlineUpper;
+          } else {
+              $airlineDisplayName = $acceptance->airline;
+          }
+      }
+    ?>
+    <?php if ($airlineDisplayName): ?>
+    <div class="flex items-center justify-center gap-2 mt-3">
+      <?php if ($headerLogoUrl): ?>
+      <img src="<?= h($headerLogoUrl) ?>" alt="<?= h($primaryIata) ?>"
+           class="w-8 h-8 object-contain rounded-lg bg-white/10 p-1"
+           onerror="this.style.display='none'">
+      <?php endif; ?>
+      <p class="text-xl font-black text-white" style="font-family:Manrope,sans-serif;">
+        <?= h($airlineDisplayName) ?>
+      </p>
     </div>
+    <?php endif; ?>
+
+    <!-- Row 3: Secure Authorization Portal — centered -->
+    <p class="text-blue-300 text-[10px] font-medium text-center mt-1">Secure Authorization Portal</p>
+
   </div>
 
   <!-- Main Card -->
@@ -421,6 +485,14 @@ tailwind.config = {
       </div>
 
       <!-- Timer -->
+      <?php if (!empty($acceptance->is_preauth)): ?>
+      <!-- Pre-auth indicator bar -->
+      <div class="mt-3 flex items-center gap-2 bg-amber-500/20 border border-amber-400/40 rounded-xl px-3 py-2">
+        <span class="material-symbols-outlined text-amber-300 text-sm">bolt</span>
+        <p class="text-amber-200 text-[11px] font-bold">Quick Pre-Authorization &mdash; Total amount confirmation only. A detailed acceptance will follow after ticketing.</p>
+      </div>
+      <?php endif; ?>
+
       <div class="mt-4 flex items-center gap-2 bg-white/10 border border-white/15 rounded-xl px-4 py-2.5">
         <span class="material-symbols-outlined text-amber-300 text-sm">timer</span>
         <div class="flex-1">
@@ -494,13 +566,20 @@ tailwind.config = {
           <?php
           // NOTE: 'static' keyword is only valid inside functions — use plain var here
           $AIRLINES_PUB = [
-              'AC'=>'Air Canada','WS'=>'WestJet','AA'=>'American Airlines','DL'=>'Delta','UA'=>'United',
-              'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM','EK'=>'Emirates',
-              'QR'=>'Qatar Airways','SQ'=>'Singapore Airlines','CX'=>'Cathay Pacific','JL'=>'Japan Airlines',
-              'NH'=>'ANA','TK'=>'Turkish Airlines','EY'=>'Etihad','LX'=>'Swiss','OS'=>'Austrian',
-              'AI'=>'Air India','TP'=>'TAP Portugal','VS'=>'Virgin Atlantic',
-              'KE'=>'Korean Air','QF'=>'Qantas','TG'=>'Thai Airways','MH'=>'Malaysia Airlines',
-              'SV'=>'Saudia','MS'=>'EgyptAir','ET'=>'Ethiopian','B6'=>'JetBlue','AS'=>'Alaska',
+              'AC'=>'Air Canada','WS'=>'WestJet','TS'=>'Air Transat',
+              'AA'=>'American Airlines','DL'=>'Delta','UA'=>'United',
+              'WN'=>'Southwest','B6'=>'JetBlue','AS'=>'Alaska Airlines',
+              'F9'=>'Frontier','NK'=>'Spirit','G4'=>'Allegiant',
+              'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France',
+              'KL'=>'KLM','EK'=>'Emirates','QR'=>'Qatar Airways',
+              'SQ'=>'Singapore Airlines','CX'=>'Cathay Pacific','JL'=>'Japan Airlines',
+              'NH'=>'ANA','TK'=>'Turkish Airlines','EY'=>'Etihad',
+              'LX'=>'Swiss','OS'=>'Austrian','TP'=>'TAP Portugal',
+              'VS'=>'Virgin Atlantic','AI'=>'Air India',
+              'KE'=>'Korean Air','QF'=>'Qantas','TG'=>'Thai Airways',
+              'MH'=>'Malaysia Airlines','SV'=>'Saudia','MS'=>'EgyptAir',
+              'ET'=>'Ethiopian','6E'=>'IndiGo','SG'=>'SpiceJet',
+              'AM'=>'Aeromexico','LA'=>'LATAM','AV'=>'Avianca','CM'=>'Copa',
           ];
           $CITIES_PUB = [
               'YYZ'=>'Toronto','YVR'=>'Vancouver','YUL'=>'Montreal','YYC'=>'Calgary',
@@ -604,10 +683,97 @@ tailwind.config = {
         <?php endif; ?>
 
         <!-- Other description -->
-        <?php if ($acceptance->type === 'other' && !empty($acceptance->extra_data['description'])): ?>
+        <?php
+          $otherTitle = $acceptance->extra_data['other_title'] ?? '';
+          $otherNotes = $acceptance->extra_data['other_notes'] ?? '';
+        ?>
+        <?php if ($acceptance->type === 'other' && ($otherTitle || $otherNotes)): ?>
         <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl">
-          <p class="text-[10px] font-bold text-slate-400 uppercase mb-2">Details</p>
-          <p class="text-sm text-slate-700 whitespace-pre-wrap"><?= h($acceptance->extra_data['description']) ?></p>
+          <p class="text-[10px] font-bold text-slate-400 uppercase mb-2">Authorization Details</p>
+          <?php if ($otherTitle): ?>
+          <p class="text-sm font-bold text-slate-800 mb-1"><?= h($otherTitle) ?></p>
+          <?php endif; ?>
+          <?php if ($otherNotes): ?>
+          <p class="text-sm text-slate-700 whitespace-pre-wrap"><?= h($otherNotes) ?></p>
+          <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
+        <!-- Cancel / Refund details -->
+        <?php
+          $crRefundAmt = $acceptance->extra_data['refund_amount'] ?? null;
+          $crCancelFee = $acceptance->extra_data['cancel_fee']    ?? null;
+          $crMethod    = $acceptance->extra_data['refund_method'] ?? null;
+          $crTimeline  = $acceptance->extra_data['refund_timeline'] ?? null;
+        ?>
+        <?php if (empty($acceptance->is_preauth) && $acceptance->type === 'cancel_refund' && ($crRefundAmt !== null || $crCancelFee || $crMethod || $crTimeline)): ?>
+        <div class="p-4 bg-rose-50 border border-rose-200 rounded-xl">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="material-symbols-outlined text-rose-600">money_off</span>
+            <p class="text-[10px] font-bold text-rose-800 uppercase tracking-wider">Cancellation & Refund Summary</p>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <?php if ($crRefundAmt !== null): ?>
+            <div><p class="text-[9px] uppercase text-rose-400 font-bold">Refund Amount</p><p class="text-sm font-black text-rose-700"><?= h($acceptance->currency) ?> <?= number_format((float)$crRefundAmt, 2) ?></p></div>
+            <?php endif; ?>
+            <?php if ($crCancelFee): ?>
+            <div><p class="text-[9px] uppercase text-rose-400 font-bold">Cancellation Fee</p><p class="text-sm font-bold text-rose-700"><?= h($acceptance->currency) ?> <?= number_format((float)$crCancelFee, 2) ?></p></div>
+            <?php endif; ?>
+            <?php if ($crMethod): ?>
+            <div><p class="text-[9px] uppercase text-rose-400 font-bold">Refund Method</p><p class="text-sm font-bold text-rose-700"><?= h(ucwords(str_replace('_',' ',$crMethod))) ?></p></div>
+            <?php endif; ?>
+            <?php if ($crTimeline): ?>
+            <div><p class="text-[9px] uppercase text-rose-400 font-bold">Expected Timeline</p><p class="text-sm font-bold text-rose-700"><?= h($crTimeline) ?></p></div>
+            <?php endif; ?>
+          </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- Cancel / Credit details -->
+        <?php
+          $ccCreditAmt    = $acceptance->extra_data['credit_amount']  ?? null;
+          $ccValidUntil   = $acceptance->extra_data['valid_until']     ?? null;
+          $ccEtktList     = $acceptance->extra_data['etkt_list']       ?? [];
+          $ccInstructions = $acceptance->extra_data['instructions']    ?? null;
+        ?>
+        <?php if (empty($acceptance->is_preauth) && $acceptance->type === 'cancel_credit' && ($ccCreditAmt !== null || $ccValidUntil || !empty($ccEtktList) || $ccInstructions)): ?>
+        <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="material-symbols-outlined text-indigo-600">account_balance_wallet</span>
+            <p class="text-[10px] font-bold text-indigo-800 uppercase tracking-wider">Future Travel Credit Details</p>
+          </div>
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <?php if ($ccCreditAmt !== null): ?>
+              <div><p class="text-[9px] uppercase text-indigo-400 font-bold">Credit Value</p><p class="text-sm font-black text-indigo-700"><?= h($acceptance->currency) ?> <?= number_format((float)$ccCreditAmt, 2) ?></p></div>
+              <?php endif; ?>
+              <?php if ($ccValidUntil): ?>
+              <div><p class="text-[9px] uppercase text-indigo-400 font-bold">Valid Until</p><p class="text-sm font-bold text-indigo-700"><?= h(date('M j, Y', strtotime($ccValidUntil))) ?></p></div>
+              <?php endif; ?>
+            </div>
+            <?php if (!empty($ccEtktList)): ?>
+            <div class="pt-2 border-t border-indigo-100">
+              <p class="text-[9px] uppercase text-indigo-400 font-bold mb-2">E-Ticket(s) &amp; Passengers</p>
+              <div class="space-y-1">
+                <?php foreach ($ccEtktList as $row): ?>
+                  <div class="flex items-center gap-2 px-2 py-1.5 bg-white border border-indigo-100 rounded-lg">
+                    <?php if (!empty($row['pax_name'])): ?>
+                    <span class="text-xs font-bold text-indigo-700"><?= h($row['pax_name']) ?></span>
+                    <span class="text-slate-300">·</span>
+                    <?php endif; ?>
+                    <span class="text-[10px] font-mono text-indigo-600"><?= h($row['etkt'] ?? '') ?></span>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+            </div>
+            <?php endif; ?>
+            <?php if ($ccInstructions): ?>
+            <div class="pt-2 border-t border-indigo-100">
+              <p class="text-[9px] uppercase text-indigo-400 font-bold mb-1">Usage Instructions</p>
+              <p class="text-xs text-indigo-800 leading-relaxed"><?= nl2br(h($ccInstructions)) ?></p>
+            </div>
+            <?php endif; ?>
+          </div>
         </div>
         <?php endif; ?>
 
@@ -633,8 +799,14 @@ tailwind.config = {
         <div class="space-y-3">
           <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2" style="font-family:Manrope,sans-serif;">
             <span class="w-5 h-5 rounded-full bg-primary-600 text-white text-[10px] font-black flex items-center justify-center flex-none">3</span>
-            Amount Being Authorized
+            <?= !empty($acceptance->is_preauth) ? 'Pre-Authorization Total' : 'Amount Being Authorized' ?>
           </h2>
+          <?php if (!empty($acceptance->is_preauth)): ?>
+          <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3 mb-1">
+            <span class="material-symbols-outlined text-amber-500 text-sm">info</span>
+            <p class="text-amber-800 text-xs font-medium">This is a <strong>Quick Pre-Authorization</strong>. You are authorizing the total amount shown. A full acceptance with the complete fare breakdown will be sent separately after your ticket is processed.</p>
+          </div>
+          <?php endif; ?>
           <div class="border border-slate-200 rounded-xl overflow-hidden bg-white">
             <?php foreach ($fareBreakdown as $item): ?>
             <div class="flex justify-between items-center px-4 py-2.5 border-b border-slate-50">
@@ -652,34 +824,34 @@ tailwind.config = {
             </div>
           </div>
 
-          <!-- Card -->
-          <div class="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-            <span class="material-symbols-outlined text-slate-500">credit_card</span>
+          <!-- Card (bigger, more prominent) -->
+          <div class="flex items-center gap-4 p-5 bg-white border-2 border-slate-300 rounded-xl shadow-sm">
+            <span class="material-symbols-outlined text-primary-600 text-3xl">credit_card</span>
             <div>
-              <p class="text-sm font-bold text-slate-900"><?= h($acceptance->cardholder_name) ?></p>
-              <p class="text-xs text-slate-500 font-mono"><?= h($acceptance->card_type) ?> &middot; <?= h($acceptance->maskedCard()) ?></p>
+              <p class="text-base font-black text-slate-900"><?= h($acceptance->cardholder_name) ?></p>
+              <p class="text-sm font-bold text-slate-600 font-mono mt-0.5"><?= h($acceptance->card_type) ?> &middot; <?= h($acceptance->maskedCard()) ?></p>
+              <?php if ($acceptance->statement_descriptor): ?>
+              <p class="text-xs text-slate-400 mt-1">Statement: <span class="font-semibold text-slate-500"><?= h($acceptance->statement_descriptor) ?></span></p>
+              <?php endif; ?>
             </div>
           </div>
 
-          <?php if ($acceptance->statement_descriptor): ?>
-          <p class="text-[10px] text-slate-400 font-medium px-1">
-            Statement descriptor: <span class="font-semibold text-slate-600"><?= h($acceptance->statement_descriptor) ?></span>
-          </p>
-          <?php endif; ?>
-
           <?php if (!empty($acceptance->split_charge_note)): ?>
-          <div class="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-            <span class="material-symbols-outlined text-amber-500 flex-none text-base mt-0.5">info</span>
+          <div class="flex items-start gap-4 p-5 bg-amber-50 border-2 border-amber-300 rounded-xl shadow-sm">
+            <span class="material-symbols-outlined text-amber-500 flex-none text-2xl mt-0.5">info</span>
             <div>
-              <p class="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">Important — Split Charge Notice</p>
-              <p class="text-xs text-amber-800 leading-relaxed"><?= h($acceptance->split_charge_note) ?></p>
+              <p class="text-sm font-black text-amber-800 mb-1">⚠ Split Charge Notice</p>
+              <p class="text-sm text-amber-800 leading-relaxed font-medium"><?= h($acceptance->split_charge_note) ?></p>
             </div>
           </div>
           <?php endif; ?>
         </div>
 
-        <!-- ── 4. DOCUMENT UPLOADS ── -->
-        <?php if ($acceptance->req_passport || $acceptance->req_cc_front): ?>
+        <?php
+          // Required documents: ONLY show for full acceptance, never for pre-auth
+          $showDocs = empty($acceptance->is_preauth) && ($acceptance->req_passport || $acceptance->req_cc_front);
+        ?>
+        <?php if ($showDocs): ?>
         <div class="space-y-3">
           <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2" style="font-family:Manrope,sans-serif;">
             <span class="w-5 h-5 rounded-full bg-primary-600 text-white text-[10px] font-black flex items-center justify-center flex-none">4</span>
@@ -712,15 +884,11 @@ tailwind.config = {
           </div>
           <?php endif; ?>
         </div>
+        <?php endif; ?>
         <?php
-        $docStep = 5;
-        $sigStep = 5;
-        $conStep = 6;
-        else:
-        $docStep = null;
-        $sigStep = 4;
-        $conStep = 5;
-        endif; ?>
+          $sigStep = $showDocs ? 5 : 4;
+          $conStep = $showDocs ? 6 : 5;
+        ?>
 
         <!-- ── SIGNATURE (Step 4 or 5) ── -->
         <div class="space-y-3">
@@ -729,22 +897,34 @@ tailwind.config = {
             Digital Signature
           </h2>
 
-          <!-- Authorization Policy -->
-          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 max-h-52 overflow-y-auto">
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Authorization Policy — Please Read</p>
-            <pre class="text-[11px] text-slate-600 whitespace-pre-wrap font-sans leading-relaxed"><?= h($acceptance->policy_text ?? '') ?></pre>
-          </div>
-
-          <!-- Signature Canvas -->
-          <div>
-            <div class="flex items-center justify-between mb-2">
-              <p class="text-xs font-bold text-slate-600">Sign here (mouse or finger):</p>
-              <button type="button" onclick="clearSig()" class="text-[11px] text-slate-400 hover:text-rose-600 font-semibold transition-colors inline-flex items-center gap-1">
-                <span class="material-symbols-outlined text-sm">delete</span> Clear
-              </button>
+          <!-- Authorization Policy (collapsed, smaller text) -->
+          <details class="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+            <summary class="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider cursor-pointer select-none flex items-center gap-2">
+              <span class="material-symbols-outlined text-xs">policy</span>
+              Authorization Policy — Tap to read
+            </summary>
+            <div class="px-4 pb-4">
+              <pre class="text-[10px] text-slate-500 whitespace-pre-wrap font-sans leading-relaxed"><?= h($acceptance->policy_text ?? '') ?></pre>
             </div>
-            <canvas id="sig-canvas" width="560" height="160"></canvas>
-            <p id="sig-hint" class="text-[10px] text-slate-400 mt-1 text-center">Draw your signature above</p>
+          </details>
+
+          <!-- Digital Signature -->
+          <div>
+            <div class="esign-box p-5 bg-slate-50 border-2 border-slate-200 rounded-xl" id="esignBox">
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" id="esignConsent" name="esign_consent" value="1" onchange="toggleEsign()" class="w-6 h-6 mt-0.5 rounded accent-emerald-600 flex-none">
+                <div class="text-sm text-slate-800 leading-relaxed font-medium">
+                  I, <strong class="text-slate-900"><?= h($acceptance->customer_name) ?></strong>, digitally sign this authorization and confirm all the above details are accurate. I understand this electronic signature carries the same legal weight as a handwritten signature.
+                </div>
+              </label>
+              <div class="esign-meta hidden pt-3 mt-3 border-t border-slate-200" id="esignMeta">
+                <p class="text-sm text-emerald-700 font-semibold flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-base">verified</span>
+                  Signed digitally on <strong id="esignTimestamp"></strong>
+                </p>
+                <p class="text-xs text-slate-400 mt-0.5">IP and device fingerprint will be recorded for security.</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -775,20 +955,19 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- ── SUBMIT ── -->
+        <!-- ── SUBMIT (inline — also mirrored as sticky bar) ── -->
         <button type="button" onclick="submitAuth()" id="btn-submit"
           class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base py-4 rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2">
           <span class="material-symbols-outlined">verified</span>
-          Submit Authorization
+          I Authorize — Submit Signature
         </button>
 
         <!-- Security notice -->
-        <div class="flex items-start gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-          <span class="material-symbols-outlined text-slate-400 text-base flex-none mt-0.5">security</span>
-          <div class="text-[10px] text-slate-500 leading-relaxed">
-            <strong class="text-slate-700">Forensic Security Notice:</strong> By submitting, your IP address, browser fingerprint, and digital signature will be securely recorded as evidence of your authorization.
-            This information may be used to defend against credit card disputes or chargebacks.
-          </div>
+        <div class="flex items-start gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+          <span class="material-symbols-outlined text-slate-300 text-sm flex-none mt-0.5">security</span>
+          <p class="text-[9px] text-slate-400 leading-relaxed">
+            By submitting, your IP address, device fingerprint, and digital signature are securely recorded as legal evidence of authorization.
+          </p>
         </div>
 
         <!-- Footer -->
@@ -804,62 +983,42 @@ tailwind.config = {
   </div><!-- /glass-card -->
 </div><!-- /portal-bg -->
 
+<!-- ═══ STICKY BOTTOM CTA BAR ═══ -->
+<?php if ($acceptance && $acceptance->isPending()): ?>
+<div id="sticky-bar" class="fixed bottom-0 inset-x-0 z-50 no-print" style="background:linear-gradient(135deg,#0f1e3c,#1a3a6b); box-shadow:0 -4px 20px rgba(15,30,60,0.4); padding:12px 16px; display:flex; align-items:center; gap:12px; max-width:100%;">
+  <div class="flex-1 min-w-0">
+    <p class="text-[9px] text-blue-300 font-bold uppercase tracking-wider">Total to Authorize</p>
+    <p class="text-white font-black text-lg font-mono leading-tight"><?= h($acceptance->currency) ?> <?= number_format($acceptance->total_amount, 2) ?></p>
+  </div>
+  <button type="button" onclick="submitAuth()"
+    class="flex-none bg-emerald-500 hover:bg-emerald-400 text-white font-black px-5 py-3 rounded-xl text-sm flex items-center gap-2 transition-colors shadow-lg"
+    style="white-space:nowrap;">
+    <span class="material-symbols-outlined text-lg">verified</span>
+    Sign &amp; Authorize
+  </button>
+</div>
+<!-- Padding so content isn't hidden by the sticky bar -->
+<div style="height:80px;"></div>
+<?php endif; ?>
+
 <script>
-// ─── Signature Pad ────────────────────────────────────────────────────────────
-const canvas = document.getElementById('sig-canvas');
-const ctx    = canvas.getContext('2d');
-let drawing  = false;
-let hasSig   = false;
-
-function resizeCanvas() {
-  const rect = canvas.getBoundingClientRect();
-  const ratio = window.devicePixelRatio || 1;
-  const data  = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  canvas.width  = rect.width  * ratio;
-  canvas.height = 160         * ratio;
-  canvas.style.height = '160px';
-  ctx.scale(ratio, ratio);
-  ctx.putImageData(data, 0, 0);
-  ctx.strokeStyle = '#0f1e3c';
-  ctx.lineWidth   = 2;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-}
-resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
-
-function getPos(e) {
-  const rect  = canvas.getBoundingClientRect();
-  const touch = e.touches ? e.touches[0] : e;
-  return {
-    x: (touch.clientX - rect.left),
-    y: (touch.clientY - rect.top)
-  };
-}
-
-canvas.addEventListener('mousedown',  e => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); canvas.classList.add('active'); });
-canvas.addEventListener('mousemove',  e => { if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasSig = true; });
-canvas.addEventListener('mouseup',    () => { drawing = false; canvas.classList.remove('active'); if (hasSig) canvas.classList.add('signed'); updateSigHint(); });
-canvas.addEventListener('mouseleave', () => { drawing = false; });
-
-canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); canvas.classList.add('active'); }, { passive:false });
-canvas.addEventListener('touchmove',  e => { e.preventDefault(); if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasSig = true; }, { passive:false });
-canvas.addEventListener('touchend',   () => { drawing = false; canvas.classList.remove('active'); if (hasSig) canvas.classList.add('signed'); updateSigHint(); });
-
-function clearSig() {
-  const ratio = window.devicePixelRatio || 1;
-  ctx.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
-  hasSig = false;
-  canvas.classList.remove('signed','active');
-  document.getElementById('sig-hint').textContent = 'Draw your signature above';
-  document.getElementById('hid-signature').value  = '';
-}
-
-function updateSigHint() {
-  if (hasSig) {
-    document.getElementById('sig-hint').textContent = '✓ Signature captured';
-    document.getElementById('sig-hint').className   = 'text-[10px] text-emerald-600 font-semibold mt-1 text-center';
+// ─── E-Signature Toggle ────────────────────────────────────────────────────────
+function toggleEsign() {
+  const cb   = document.getElementById('esignConsent');
+  const box  = document.getElementById('esignBox');
+  const meta = document.getElementById('esignMeta');
+  const ts   = document.getElementById('esignTimestamp');
+  
+  if (cb.checked) {
+    box.classList.add('border-emerald-500', 'bg-emerald-50');
+    box.classList.remove('border-slate-200', 'bg-slate-50');
+    meta.classList.remove('hidden');
+    ts.textContent = new Date().toLocaleString('en-US', { dateStyle:'long', timeStyle:'medium' });
     document.getElementById('sig-error').classList.add('hidden');
+  } else {
+    box.classList.remove('border-emerald-500', 'bg-emerald-50');
+    box.classList.add('border-slate-200', 'bg-slate-50');
+    meta.classList.add('hidden');
   }
 }
 
@@ -933,9 +1092,10 @@ function submitAuth() {
   }
 
   // Check signature
-  if (!hasSig) {
+  const esign = document.getElementById('esignConsent');
+  if (!esign || !esign.checked) {
     document.getElementById('sig-error').classList.remove('hidden');
-    canvas.scrollIntoView({ behavior:'smooth', block:'center' });
+    if (esign) document.getElementById('esignBox').scrollIntoView({ behavior:'smooth', block:'center' });
     valid = false;
   } else {
     document.getElementById('sig-error').classList.add('hidden');
@@ -943,8 +1103,15 @@ function submitAuth() {
 
   if (!valid) return;
 
-  // Capture signature PNG
-  document.getElementById('hid-signature').value = canvas.toDataURL('image/png');
+  // Set signature data payload
+  const sigPayload = JSON.stringify({
+    type: 'one_click_consent',
+    agreed: true,
+    timestamp: new Date().toISOString(),
+    ip: 'captured_on_server',
+    ua: navigator.userAgent
+  });
+  document.getElementById('hid-signature').value = 'consent:' + btoa(sigPayload);
 
   // Lock button
   const btn = document.getElementById('btn-submit');
