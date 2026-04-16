@@ -39,7 +39,7 @@ $otherNotes   = $extraData['other_notes']     ?? '';
 // Collect all segment groups
 $segGroups = [];
 $filterSegs = fn($arr) => is_array($arr)
-    ? array_values(array_filter($arr, fn($s) => !empty($s['from']) && !empty($s['to']) && !empty($s['airline_iata'])))
+    ? array_values(array_filter($arr, fn($s) => !empty($s['from']) && !empty($s['to'])))
     : [];
 
 if (!empty($flightData['flights']))     $segGroups[] = ['title' => 'Flight Itinerary',           'segs' => $filterSegs($flightData['flights']),     'accent' => '#1a3a6b'];

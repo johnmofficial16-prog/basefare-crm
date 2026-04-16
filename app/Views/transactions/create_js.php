@@ -682,7 +682,7 @@ const formAssembly = {
     const filterSegs = function(list) {
       if (!list) return [];
       return list.filter(function(s) { 
-        return s.airline_iata && s.from && s.to; 
+        return s.from && s.to; 
       });
     };
 

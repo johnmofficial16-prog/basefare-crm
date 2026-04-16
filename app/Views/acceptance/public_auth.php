@@ -294,8 +294,8 @@ $error = $_GET['error'] ?? null;
 
         <!-- Flight Details -->
         <?php
-          $flights = array_filter($flightData['flights'] ?? $flightData['old_flights'] ?? [], fn($s) => !empty($s['airline_iata']) && !empty($s['from']) && !empty($s['to']));
-          $newFlights = array_filter($flightData['new_flights'] ?? [], fn($s) => !empty($s['airline_iata']) && !empty($s['from']) && !empty($s['to']));
+          $flights = array_filter($flightData['flights'] ?? $flightData['old_flights'] ?? [], fn($s) => !empty($s['from']) && !empty($s['to']));
+          $newFlights = array_filter($flightData['new_flights'] ?? [], fn($s) => !empty($s['from']) && !empty($s['to']));
         ?>
         <?php if (!empty($flights)): ?>
         <div class="section">
