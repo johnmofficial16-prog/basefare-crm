@@ -1593,6 +1593,15 @@ function fmtTime(t) {
 // ─────────────────────────────────────────────────────────────────────────────
 // FLIGHT MANAGER  (groups: 'main' | 'old' | 'new')
 // ─────────────────────────────────────────────────────────────────────────────
+function mapCabin(c) {
+  if (!c) return 'Economy';
+  c = c.toUpperCase();
+  if (['F','A','P'].includes(c)) return 'First';
+  if (['C','J','D','I','Z'].includes(c)) return 'Business';
+  if (['W','E','T','R'].includes(c)) return 'Premium Economy';
+  return 'Economy';
+}
+
 const flightMgr = {
 
   // ── Multi-format GDS segment parser ──────────────────────────────────────
@@ -1603,13 +1612,12 @@ const flightMgr = {
 
     // Strategy 1: 6-char airport pair (JFKFRA, JFKMIA) — Amadeus & Sabre compact
     // e.g. "1  AA1758 Y 21APR JFKMIA DK1  0530 0842  21APR"
-    //      "1 LH 419 Y 12MAR 1 JFKFRA HK2 1040 0610+1"
     const re6 = /^\s*\d{0,2}\s*\.?\s*([A-Z0-9]{2})\s*(\d{1,4}[A-Z]?)\s+([A-Z])\s+(\d{2}[A-Z]{3})(?:\s+\d)?\s+([A-Z]{3})([A-Z]{3})\s+[A-Z]{2,3}\d{0,2}\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)(?:\+(\d))?(?:\s+(\d{2}[A-Z]{3}))?/i;
     let m = re6.exec(ln);
     if (m) return {
       airline_iata: m[1].toUpperCase(),
       flight_no:    m[1].toUpperCase() + m[2].toUpperCase(),
-      cabin_class:  m[3].toUpperCase(),
+      cabin_class:  mapCabin(m[3]),
       date:         m[4].toUpperCase(),
       from:         m[5].toUpperCase(),
       to:           m[6].toUpperCase(),
@@ -1625,7 +1633,7 @@ const flightMgr = {
     if (m) return {
       airline_iata: m[1].toUpperCase(),
       flight_no:    m[1].toUpperCase() + m[2].toUpperCase(),
-      cabin_class:  m[3].toUpperCase(),
+      cabin_class:  mapCabin(m[3]),
       date:         m[4].toUpperCase(),
       from:         m[5].toUpperCase(),
       to:           m[6].toUpperCase(),
@@ -1641,7 +1649,7 @@ const flightMgr = {
     if (m) return {
       airline_iata: m[1].toUpperCase(),
       flight_no:    m[1].toUpperCase() + m[2].toUpperCase(),
-      cabin_class:  m[3].toUpperCase(),
+      cabin_class:  mapCabin(m[3]),
       date:         m[4].toUpperCase(),
       from:         m[5].toUpperCase(),
       to:           m[6].toUpperCase(),
@@ -1656,7 +1664,7 @@ const flightMgr = {
     if (m) return {
       airline_iata: m[1].toUpperCase(),
       flight_no:    m[1].toUpperCase() + m[2].toUpperCase(),
-      cabin_class:  m[3].toUpperCase(),
+      cabin_class:  mapCabin(m[3]),
       date:         m[4].toUpperCase(),
       from:         m[5].toUpperCase(),
       to:           m[6].toUpperCase(),
@@ -1695,7 +1703,7 @@ const flightMgr = {
 
   addManual: function(group) {
     state.segments[group].push({
-      airline_iata:'', flight_no:'', cabin_class:'Y', date:'', from:'', to:'',
+      airline_iata:'', flight_no:'', cabin_class:'Economy', date:'', from:'', to:'',
       dep_time:'', arr_time:'', arr_next_day:false
     });
     this._render(group);
@@ -1764,9 +1772,13 @@ const flightMgr = {
               </div>
               <div>
                 <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Cabin</label>
-                <input type="text" maxlength="2" placeholder="Y" value="${_esc(seg.cabin_class)}"
-                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono uppercase bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
-                  oninput="flightMgr._updateSeg('${group}',${i},'cabin_class',this.value.toUpperCase())">
+                <select class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
+                  onchange="flightMgr._updateSeg('${group}',${i},'cabin_class',this.value)">
+                  <option value="Economy" ${seg.cabin_class === 'Economy' ? 'selected' : ''}>Economy</option>
+                  <option value="Premium Economy" ${seg.cabin_class === 'Premium Economy' ? 'selected' : ''}>Premium Economy</option>
+                  <option value="Business" ${seg.cabin_class === 'Business' ? 'selected' : ''}>Business</option>
+                  <option value="First" ${seg.cabin_class === 'First' ? 'selected' : ''}>First</option>
+                </select>
               </div>
               <div>
                 <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">From (IATA)</label>

@@ -272,20 +272,28 @@ const paxMgr = {
 // ═══════════════════════════════════════════════════════════════════════════
 const flightMgr = {
   _parseOneLine: function(ln) {
+    if (!window.mapCabin) window.mapCabin = function(c) {
+      if (!c) return 'Economy';
+      c = c.toUpperCase();
+      if (['F','A','P'].includes(c)) return 'First';
+      if (['C','J','D','I','Z'].includes(c)) return 'Business';
+      if (['W','E','T','R'].includes(c)) return 'Premium Economy';
+      return 'Economy';
+    };
     ln = ln.replace(/\r/g,'').trim();
     if (!ln) return null;
     // Strategy 1: 6-char airport pair (JFKFRA) — Amadeus & Sabre compact
     const re6 = /^\s*\d{0,2}\s*\.?\s*([A-Z0-9]{2})\s*(\d{1,4}[A-Z]?)\s+([A-Z])\s+(\d{2}[A-Z]{3})(?:\s+\d)?\s+([A-Z]{3})([A-Z]{3})\s+[A-Z]{2,3}\d{0,2}\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)(?:\+(\d))?/i;
     let m = re6.exec(ln);
-    if (m) return { airline_iata:m[1].toUpperCase(), flight_no:m[1]+m[2], cabin_class:m[3].toUpperCase(), date:m[4].toUpperCase(), from:m[5].toUpperCase(), to:m[6].toUpperCase(), dep_time:fmtTime(m[7]), arr_time:fmtTime(m[8]), arr_next_day:!!(m[9]&&parseInt(m[9])>0) };
+    if (m) return { airline_iata:m[1].toUpperCase(), flight_no:m[1]+m[2], cabin_class:mapCabin(m[3]), date:m[4].toUpperCase(), from:m[5].toUpperCase(), to:m[6].toUpperCase(), dep_time:fmtTime(m[7]), arr_time:fmtTime(m[8]), arr_next_day:!!(m[9]&&parseInt(m[9])>0) };
     // Strategy 2: Space-separated airports — Galileo / Apollo
     const re3 = /^\s*\d{0,2}\s*\.?\s*([A-Z0-9]{2})\s+(\d{1,4}[A-Z]?)\s+([A-Z])\s+(\d{2}[A-Z]{3})(?:\s+[A-Z]{2})?\s+([A-Z]{3})\s+([A-Z]{3})\s+[A-Z]{2,3}\s*\d{0,2}\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)(?:\+(\d))?/i;
     m = re3.exec(ln);
-    if (m) return { airline_iata:m[1].toUpperCase(), flight_no:m[1]+m[2], cabin_class:m[3].toUpperCase(), date:m[4].toUpperCase(), from:m[5].toUpperCase(), to:m[6].toUpperCase(), dep_time:fmtTime(m[7]), arr_time:fmtTime(m[8]), arr_next_day:!!(m[9]&&parseInt(m[9])>0) };
+    if (m) return { airline_iata:m[1].toUpperCase(), flight_no:m[1]+m[2], cabin_class:mapCabin(m[3]), date:m[4].toUpperCase(), from:m[5].toUpperCase(), to:m[6].toUpperCase(), dep_time:fmtTime(m[7]), arr_time:fmtTime(m[8]), arr_next_day:!!(m[9]&&parseInt(m[9])>0) };
     // Strategy 3: Minimal fallback
     const reMin = /([A-Z0-9]{2})\s*(\d{1,4}[A-Z]?)\s+([A-Z])\s+(\d{2}[A-Z]{3})\s+([A-Z]{3})\s*([A-Z]{3})\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)/i;
     m = reMin.exec(ln);
-    if (m) return { airline_iata:m[1].toUpperCase(), flight_no:m[1]+m[2], cabin_class:m[3].toUpperCase(), date:m[4].toUpperCase(), from:m[5].toUpperCase(), to:m[6].toUpperCase(), dep_time:fmtTime(m[7]), arr_time:fmtTime(m[8]), arr_next_day:false };
+    if (m) return { airline_iata:m[1].toUpperCase(), flight_no:m[1]+m[2], cabin_class:mapCabin(m[3]), date:m[4].toUpperCase(), from:m[5].toUpperCase(), to:m[6].toUpperCase(), dep_time:fmtTime(m[7]), arr_time:fmtTime(m[8]), arr_next_day:false };
     return null;
   },
 
@@ -306,7 +314,7 @@ const flightMgr = {
   },
 
   addManual: function(group) {
-    state.segments[group].push({ airline_iata:'', flight_no:'', cabin_class:'Y', date:'', from:'', to:'', dep_time:'', arr_time:'', arr_next_day:false, _editing:true });
+    state.segments[group].push({ airline_iata:'', flight_no:'', cabin_class:'Economy', date:'', from:'', to:'', dep_time:'', arr_time:'', arr_next_day:false, _editing:true });
     this._render(group);
   },
 

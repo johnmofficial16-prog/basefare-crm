@@ -164,10 +164,11 @@
               <div>
                 <label class="field-label">Class of Service</label>
                 <select name="class_of_service" id="field_class_of_service" class="field-input">
-                  <option value="economy">Economy</option>
-                  <option value="premium_economy">Premium Economy</option>
-                  <option value="business">Business</option>
-                  <option value="first">First</option>
+                  <option value="">-- Select --</option>
+                  <option value="Economy">Economy</option>
+                  <option value="Premium Economy">Premium Economy</option>
+                  <option value="Business">Business</option>
+                  <option value="First">First</option>
                 </select>
               </div>
               <div>
