@@ -12,8 +12,10 @@ ALTER TABLE `users`
 -- 2. Add reports_to_id — every agent/supervisor maps to their direct superior.
 --    Nullable: admins/managers at the top have no "reports_to".
 ALTER TABLE `users`
-  ADD COLUMN IF NOT EXISTS `reports_to_id` INT NULL AFTER `role`,
-  ADD CONSTRAINT IF NOT EXISTS `fk_user_reports_to`
+  ADD COLUMN IF NOT EXISTS `reports_to_id` INT NULL AFTER `role`;
+
+ALTER TABLE `users`
+  ADD CONSTRAINT `fk_user_reports_to`
     FOREIGN KEY (`reports_to_id`) REFERENCES `users`(`id`) ON DELETE SET NULL;
 
 -- 3. Add shift publish workflow columns to shift_schedules.
@@ -22,6 +24,8 @@ ALTER TABLE `shift_schedules`
   ADD COLUMN IF NOT EXISTS `publish_status`
     ENUM('draft','pending_approval','published') NOT NULL DEFAULT 'published' AFTER `created_by`,
   ADD COLUMN IF NOT EXISTS `approved_by` INT NULL AFTER `publish_status`,
-  ADD COLUMN IF NOT EXISTS `approved_at` DATETIME NULL AFTER `approved_by`,
-  ADD CONSTRAINT IF NOT EXISTS `fk_shift_approved_by`
+  ADD COLUMN IF NOT EXISTS `approved_at` DATETIME NULL AFTER `approved_by`;
+
+ALTER TABLE `shift_schedules`
+  ADD CONSTRAINT `fk_shift_approved_by`
     FOREIGN KEY (`approved_by`) REFERENCES `users`(`id`) ON DELETE SET NULL;
