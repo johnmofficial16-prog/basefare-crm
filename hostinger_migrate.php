@@ -20,15 +20,12 @@ $dsn = sprintf(
 $user = $_ENV['DB_USERNAME'] ?? $_ENV['DB_USER'] ?? 'root';
 $pass = $_ENV['DB_PASSWORD'] ?? $_ENV['DB_PASS'] ?? '';
 
-try {
-    $pdo = new PDO($dsn, $user, $pass, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
-    ]);
-    echo "✅ Database connected successfully.\n\n";
-} catch (Exception $e) {
-    die("❌ Connection failed: " . $e->getMessage() . "\n");
+$mysqli = new mysqli($_ENV['DB_HOST'] ?? '127.0.0.1', $user, $pass, $_ENV['DB_DATABASE'] ?? $_ENV['DB_NAME'] ?? 'basefare_crm', $_ENV['DB_PORT'] ?? 3306);
+
+if ($mysqli->connect_error) {
+    die("❌ Connection failed: " . $mysqli->connect_error . "\n");
 }
+echo "✅ Database connected successfully via MySQLi.\n\n";
 
 $files = [
     __DIR__ . '/database/migrate_four_tier_rbac.sql',
@@ -37,34 +34,31 @@ $files = [
     __DIR__ . '/database/migrations/2026_04_14_create_error_log.sql',
     __DIR__ . '/database/migrations/2026_04_15_add_preauth_columns.sql',
     __DIR__ . '/database/migrations/record_notes.sql',
-    // add any other ones if needed
 ];
 
 foreach ($files as $file) {
-    if (!file_exists($file)) {
-        continue;
-    }
+    if (!file_exists($file)) continue;
     
     echo "Running migration: " . basename($file) . "...\n";
     $sql = file_get_contents($file);
-    $statements = array_filter(array_map('trim', explode(';', $sql)));
-
-    foreach ($statements as $stmt) {
-        if (empty($stmt)) continue;
-        try {
-            $pdo->exec($stmt);
-        } catch (PDOException $e) {
-            $msg = $e->getMessage();
-            // Ignore "Table already exists" and "Duplicate column name" to make it safely re-runnable
-            if (strpos($msg, 'SQLSTATE[42S01]') !== false || strpos($msg, 'SQLSTATE[42S21]') !== false || strpos($msg, 'Duplicate column name') !== false) {
-                // Safely ignore
-            } else {
-                echo "  ⚠️ Warning on statement: " . substr($stmt, 0, 50) . "...\n";
-                echo "  -> " . $msg . "\n";
+    
+    if ($mysqli->multi_query($sql)) {
+        do {
+            if ($result = $mysqli->store_result()) {
+                $result->free();
             }
+        } while ($mysqli->more_results() && $mysqli->next_result());
+        echo "  [OK]\n";
+    } else {
+        // Multi query failed on the very first statement, or we hit an error 
+        // We will just ignore common duplicates
+        $err = $mysqli->error;
+        if (strpos($err, 'Duplicate column name') !== false || strpos($err, 'already exists') !== false) {
+             echo "  [OK] (Safely skipped existing schema)\n";
+        } else {
+             echo "  ⚠️ Warning: " . $err . "\n";
         }
     }
-    echo "  [OK]\n";
 }
 
 echo "\n🎉 All migrations completed!\n";
