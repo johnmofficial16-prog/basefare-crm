@@ -163,11 +163,18 @@ $flightData    = $acceptance->flight_data   ?? [];
 $fareBreakdown = $acceptance->fare_breakdown ?? [];
 $passengers    = $acceptance->passengers    ?? [];
 
+// Filter out empty/corrupt flight entries (segments with no from AND no to AND no flight_no)
+$filterSegs = fn($arr) => is_array($arr)
+    ? array_values(array_filter($arr, fn($s) => !empty($s['from']) || !empty($s['to']) || !empty($s['flight_no'])))
+    : [];
+
 // Collect all segment groups for display
 $allSegGroups = [];
-if (!empty($flightData['flights']))     $allSegGroups[] = ['title' => 'Flight Itinerary',             'segs' => $flightData['flights'],     'color' => 'blue'];
-if (!empty($flightData['old_flights'])) $allSegGroups[] = ['title' => 'Original Flights',             'segs' => $flightData['old_flights'], 'color' => 'rose'];
-if (!empty($flightData['new_flights'])) $allSegGroups[] = ['title' => 'New Flights (After Change)',   'segs' => $flightData['new_flights'], 'color' => 'emerald'];
+if (!empty($flightData['flights']))     $allSegGroups[] = ['title' => 'Flight Itinerary',             'segs' => $filterSegs($flightData['flights']),     'color' => 'blue'];
+if (!empty($flightData['old_flights'])) $allSegGroups[] = ['title' => 'Original Flights',             'segs' => $filterSegs($flightData['old_flights']), 'color' => 'rose'];
+if (!empty($flightData['new_flights'])) $allSegGroups[] = ['title' => 'New Flights (After Change)',   'segs' => $filterSegs($flightData['new_flights']), 'color' => 'emerald'];
+
+$allSegGroups = array_filter($allSegGroups, fn($grp) => !empty($grp['segs']));
 
 // Primary airline lookup — define early so it can be used for reverse lookup
 $AIRLINES_PUB = [

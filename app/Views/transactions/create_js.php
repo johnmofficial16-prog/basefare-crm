@@ -649,12 +649,21 @@ const formAssembly = {
     // Flight data JSON
     let flightData = null;
     const t = state.type;
+    
+    // Helper to completely weed out empty segment objects
+    const filterSegs = function(list) {
+      if (!list) return [];
+      return list.filter(function(s) { 
+        return s.airline_iata && s.from && s.to; 
+      });
+    };
+
     if (['new_booking','seat_purchase','cabin_upgrade','name_correction'].includes(t)) {
-      flightData = { flights: state.segments.main || [] };
+      flightData = { flights: filterSegs(state.segments.main) };
     } else if (t === 'exchange') {
-      flightData = { old_flights: state.segments.old||[], new_flights: state.segments.new||[] };
+      flightData = { old_flights: filterSegs(state.segments.old), new_flights: filterSegs(state.segments.new) };
     } else if (['cancel_refund','cancel_credit'].includes(t)) {
-      flightData = { flights: state.segments.old || [] };
+      flightData = { flights: filterSegs(state.segments.old) };
     }
     if (t === 'name_correction') {
       flightData = flightData || {};

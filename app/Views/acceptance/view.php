@@ -342,6 +342,7 @@ tailwind.config = {
       <?php
       // Helper to render a list of segment cards
       function renderSegs(array $segs, string $theme = 'blue'): void {
+          $segs = array_values(array_filter($segs, fn($s) => !empty($s['airline_iata']) && !empty($s['from']) && !empty($s['to'])));
           static $AIRLINES = [
               'AC'=>'Air Canada','WS'=>'WestJet','AA'=>'American Airlines','DL'=>'Delta','UA'=>'United',
               'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM','EK'=>'Emirates',

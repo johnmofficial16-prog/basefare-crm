@@ -38,9 +38,16 @@ $otherNotes   = $extraData['other_notes']     ?? '';
 
 // Collect all segment groups
 $segGroups = [];
-if (!empty($flightData['flights']))     $segGroups[] = ['title' => 'Flight Itinerary',           'segs' => $flightData['flights'],     'accent' => '#1a3a6b'];
-if (!empty($flightData['old_flights'])) $segGroups[] = ['title' => 'Original Flights',           'segs' => $flightData['old_flights'], 'accent' => '#9f1239'];
-if (!empty($flightData['new_flights'])) $segGroups[] = ['title' => 'New Flights (After Change)', 'segs' => $flightData['new_flights'], 'accent' => '#065f46'];
+$filterSegs = fn($arr) => is_array($arr)
+    ? array_values(array_filter($arr, fn($s) => !empty($s['from']) && !empty($s['to']) && !empty($s['airline_iata'])))
+    : [];
+
+if (!empty($flightData['flights']))     $segGroups[] = ['title' => 'Flight Itinerary',           'segs' => $filterSegs($flightData['flights']),     'accent' => '#1a3a6b'];
+if (!empty($flightData['old_flights'])) $segGroups[] = ['title' => 'Original Flights',           'segs' => $filterSegs($flightData['old_flights']), 'accent' => '#9f1239'];
+if (!empty($flightData['new_flights'])) $segGroups[] = ['title' => 'New Flights (After Change)', 'segs' => $filterSegs($flightData['new_flights']), 'accent' => '#065f46'];
+
+$segGroups = array_filter($segGroups, fn($grp) => !empty($grp['segs']));
+
 
 // Primary airline for logo
 $primaryIata = '';
