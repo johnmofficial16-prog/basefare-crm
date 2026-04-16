@@ -23,6 +23,7 @@ $pass = $_ENV['DB_PASSWORD'] ?? $_ENV['DB_PASS'] ?? '';
 try {
     $pdo = new PDO($dsn, $user, $pass, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
     ]);
     echo "✅ Database connected successfully.\n\n";
 } catch (Exception $e) {
