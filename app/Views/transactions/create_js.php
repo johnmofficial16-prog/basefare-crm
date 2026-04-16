@@ -520,14 +520,42 @@ function importAcceptance(id) {
       }
       
       // Flights
-      if (d.flight_data && d.flight_data.flights) {
+      var hasMain = d.flight_data && Array.isArray(d.flight_data.flights) && d.flight_data.flights.length > 0;
+      var hasOld = d.flight_data && Array.isArray(d.flight_data.old_flights) && d.flight_data.old_flights.length > 0;
+      
+      var workingSegs = [];
+      if (hasMain) {
          state.segments.main = d.flight_data.flights.slice();
+         workingSegs = state.segments.main;
          flightMgr._render('main');
-      } else if (d.flight_data && d.flight_data.old_flights) {
+      } else if (hasOld) {
          state.segments.old = d.flight_data.old_flights.slice();
          state.segments.new = d.flight_data.new_flights ? d.flight_data.new_flights.slice() : [];
+         workingSegs = state.segments.old;
          flightMgr._render('old');
          flightMgr._render('new');
+      }
+
+      if (workingSegs.length > 0) {
+         var first = workingSegs[0];
+         var last = workingSegs[workingSegs.length - 1];
+         var parseFD = function(sd) {
+             if (!sd) return '';
+             if (sd.length === 10 && sd.indexOf('-') === 4) return sd;
+             var nd = new Date(sd + " " + new Date().getFullYear());
+             if (!isNaN(nd)) {
+                 return nd.getFullYear() + '-' + String(nd.getMonth()+1).padStart(2,'0') + '-' + String(nd.getDate()).padStart(2,'0');
+             }
+             return '';
+         };
+         
+         var travelEl = document.getElementById('field_travel_date');
+         var depEl = document.getElementById('field_departure_time');
+         var retEl = document.getElementById('field_return_date');
+         
+         if (travelEl && !travelEl.value && first.date) travelEl.value = parseFD(first.date);
+         if (depEl && !depEl.value && first.dep_time) depEl.value = first.dep_time;
+         if (retEl && !retEl.value && last.date && workingSegs.length > 1) retEl.value = parseFD(last.date);
       }
       
       // Fare Breakdown
