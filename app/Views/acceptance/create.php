@@ -1352,6 +1352,29 @@ const wizard = {
           return { valid: false, msg: 'At least one confirmed flight segment is required. Add a segment and click the green ✓ button to confirm it.' };
         }
       }
+      
+      let flightErrs = [];
+      const validateSegs = function(segs) {
+        (segs || []).forEach(function(s) {
+          if (s._editing) return;
+          let a = (s.airline_iata || '').trim().toUpperCase();
+          if (!a) {
+            flightErrs.push('Airline is missing on a confirmed flight segment.');
+          } else if (!/^[A-Z0-9]{2,3}$/.test(a)) {
+            let found = false;
+            for (let k in AIRLINES) {
+              if (AIRLINES[k].toUpperCase() === a) { found = true; break; }
+            }
+            if (!found) flightErrs.push('Invalid airline: "' + a + '". Please enter a valid 2-3 letter IATA code (e.g., UA, LH) or the exact recognized airline name.');
+          }
+        });
+      };
+      
+      validateSegs(state.segments.main);
+      validateSegs(state.segments.old);
+      validateSegs(state.segments.new);
+      if (flightErrs.length > 0) return { valid: false, msg: flightErrs[0] };
+      
       return { valid: true };
     }
     if (step === 4) {

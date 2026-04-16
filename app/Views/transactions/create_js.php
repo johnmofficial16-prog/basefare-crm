@@ -24,6 +24,29 @@ const COLOR_MAP = {
   seat_purchase:'cyan', cabin_upgrade:'emerald', name_correction:'amber', other:'gray'
 };
 
+const AIRLINES = {
+  'AC':'Air Canada','WS':'WestJet','AA':'American Airlines','DL':'Delta','UA':'United',
+  'BA':'British Airways','LH':'Lufthansa','AF':'Air France','KL':'KLM','EK':'Emirates',
+  'QR':'Qatar Airways','SQ':'Singapore Airlines','CX':'Cathay Pacific','JL':'Japan Airlines',
+  'NH':'ANA','TK':'Turkish Airlines','EY':'Etihad','LX':'Swiss','OS':'Austrian',
+  'AI':'Air India','TP':'TAP Portugal','VS':'Virgin Atlantic','AM':'Aeromexico',
+  'CM':'Copa Airlines','AV':'Avianca','LA':'LATAM','QF':'Qantas','NZ':'Air New Zealand',
+  'KE':'Korean Air','BR':'EVA Air','CI':'China Airlines','CZ':'China Southern',
+  'MU':'China Eastern','CA':'Air China','HU':'Hainan Airlines','MH':'Malaysia Airlines',
+  'TG':'Thai Airways','VN':'Vietnam Airlines','PR':'Philippine Airlines','GA':'Garuda',
+  'UL':'SriLankan','KU':'Kuwait Airways','WY':'Oman Air','GF':'Gulf Air','SV':'Saudia',
+  'MS':'EgyptAir','ET'=>'Ethiopian Airlines','AT':'Royal Air Maroc','FI':'Icelandair',
+  'F9':'Frontier','NK':'Spirit','B6':'JetBlue','WN':'Southwest','AS':'Alaska Airlines',
+  'HA':'Hawaiian Airlines','SY':'Sun Country','G4':'Allegiant','PD':'Porter Airlines',
+  'TS':'Air Transat','WG':'Sunwing','F8':'Flair Airlines','YN':'Air Creebec',
+  'U2':'easyJet','FR':'Ryanair','W6':'Wizz Air','VY':'Vueling','DY':'Norwegian',
+  'EI':'Aer Lingus','IB':'Iberia','AZ':'ITA Airways','SU':'Aeroflot','S7':'S7 Airlines',
+  'AR':'Aerolineas Argentinas','G3':'GOL','AD':'Azul','SA':'South African Airways',
+  'KQ':'Kenya Airways','AT':'Royal Air Maroc','HM':'Air Seychelles','MK':'Air Mauritius',
+  'QZ':'Indonesia AirAsia','AK':'AirAsia','TR':'Scoot','5J':'Cebu Pacific',
+  'VX':'Virgin America','FL':'AirTran','NW':'Northwest','CO':'Continental','US':'US Airways'
+};
+
 // ── Utility ──────────────────────────────────────────────────────────────
 function _esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -120,6 +143,28 @@ const wizard = {
           return { valid: false, msg: 'At least one confirmed flight segment is required. Add a segment and click the green ✓ button to confirm it.' };
         }
       }
+      let flightErrs = [];
+      const validateSegs = function(segs) {
+        (segs || []).forEach(function(s) {
+          if (s._editing) return;
+          let a = (s.airline_iata || '').trim().toUpperCase();
+          if (!a) {
+            flightErrs.push('Airline is missing on a confirmed flight segment.');
+          } else if (!/^[A-Z0-9]{2,3}$/.test(a)) {
+            let found = false;
+            for (let k in AIRLINES) {
+              if (AIRLINES[k].toUpperCase() === a) { found = true; break; }
+            }
+            if (!found) flightErrs.push('Invalid airline: "' + a + '". Please enter a valid 2-3 letter IATA code (e.g., UA, LH) or the exact recognized airline name.');
+          }
+        });
+      };
+      
+      validateSegs(state.segments.main);
+      validateSegs(state.segments.old);
+      validateSegs(state.segments.new);
+      if (flightErrs.length > 0) return { valid: false, msg: flightErrs[0] };
+      
       return { valid: true };
     }
     if (step === 4) {
