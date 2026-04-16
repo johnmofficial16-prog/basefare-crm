@@ -520,7 +520,7 @@ body {
     <?php endif; ?>
 
     <!-- Cabin Upgrade -->
-    <?php if ($acceptance->type === 'cabin_upgrade' && !empty($flightData['old_cabin'])): ?>
+    <?php if (!$acceptance->is_preauth && $acceptance->type === 'cabin_upgrade' && !empty($flightData['old_cabin'])): ?>
     <div class="section">
       <div class="section-title">Cabin Upgrade</div>
       <div style="display:flex;align-items:center;gap:12px;">
@@ -551,7 +551,7 @@ body {
     <?php endif; ?>
 
     <!-- Cancel / Refund details -->
-    <?php if ($acceptance->type === 'cancel_refund' && ($crRefundAmt !== null || $crCancelFee || $crMethod || $crTimeline)): ?>
+    <?php if (!$acceptance->is_preauth && $acceptance->type === 'cancel_refund' && ($crRefundAmt !== null || $crCancelFee || $crMethod || $crTimeline)): ?>
     <div class="section">
       <div class="section-title" style="color:#9f1239;">Cancellation &amp; Refund Summary</div>
       <div class="info-grid info-grid-2">
@@ -584,7 +584,7 @@ body {
     <?php endif; ?>
 
     <!-- Cancel / Credit details -->
-    <?php if ($acceptance->type === 'cancel_credit' && ($ccCreditAmt !== null || $ccValidUntil || !empty($ccEtktList) || $ccInstructions)): ?>
+    <?php if (!$acceptance->is_preauth && $acceptance->type === 'cancel_credit' && ($ccCreditAmt !== null || $ccValidUntil || !empty($ccEtktList) || $ccInstructions)): ?>
     <div class="section">
       <div class="section-title" style="color:#4c1d95;">Future Travel Credit Summary</div>
       <div class="info-grid info-grid-2">

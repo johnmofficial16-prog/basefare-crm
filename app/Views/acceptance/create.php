@@ -362,9 +362,9 @@ tailwind.config = {
             </div>
             <div>
               <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5" for="field_airline">
-                Primary Airline
+                Primary Airline <span class="text-rose-500">*</span>
               </label>
-              <input type="text" name="airline" id="field_airline" maxlength="60"
+              <input type="text" name="airline" id="field_airline" maxlength="60" required
                      placeholder="e.g. Lufthansa"
                      class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent">
             </div>
@@ -1323,11 +1323,13 @@ const wizard = {
       return { valid: true };
     }
     if (step === 2) {
-      const pnr   = document.getElementById('field_pnr').value.trim();
-      const name  = document.getElementById('field_customer_name').value.trim();
-      const email = document.getElementById('field_customer_email').value.trim();
+      const pnr     = document.getElementById('field_pnr').value.trim();
+      const name    = document.getElementById('field_customer_name').value.trim();
+      const email   = document.getElementById('field_customer_email').value.trim();
+      const airline = document.getElementById('field_airline').value.trim();
       const errors = [];
-      if (!pnr)   errors.push('PNR is required.');
+      if (!airline) errors.push('Primary airline is required.');
+      if (!pnr)     errors.push('PNR is required.');
       if (!name)  errors.push('Customer name is required.');
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Valid email is required.');
       if (state.passengers.length === 0) {

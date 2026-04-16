@@ -265,7 +265,11 @@ class AcceptanceRequest extends Model
      */
     public function publicUrl(): string
     {
-        $base = rtrim($_ENV['APP_URL'] ?? getenv('APP_URL') ?? 'https://crm.base-fare.com', '/');
+        $base = $_ENV['APP_URL'] ?? getenv('APP_URL');
+        if (empty($base)) {
+            $base = 'https://crm.base-fare.com';
+        }
+        $base = rtrim($base, '/');
         return $base . '/auth?token=' . $this->token;
     }
 

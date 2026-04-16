@@ -435,7 +435,7 @@ tailwind.config = {
       </div>
       <?php endif; ?>
 
-      <?php if ($acceptance->hasOldFlights() && !empty($flightData['old_flights'])): ?>
+      <?php if (!$acceptance->is_preauth && $acceptance->hasOldFlights() && !empty($flightData['old_flights'])): ?>
       <div class="bg-white border border-rose-200 rounded-xl shadow-sm overflow-hidden">
         <div class="px-5 py-3.5 border-b border-rose-100 bg-rose-50/40 flex items-center gap-2">
           <span class="material-symbols-outlined text-rose-500 text-base">flight_land</span>
@@ -445,7 +445,7 @@ tailwind.config = {
       </div>
       <?php endif; ?>
 
-      <?php if ($acceptance->hasNewFlights() && !empty($flightData['new_flights'])): ?>
+      <?php if (!$acceptance->is_preauth && $acceptance->hasNewFlights() && !empty($flightData['new_flights'])): ?>
       <div class="bg-white border border-emerald-200 rounded-xl shadow-sm overflow-hidden">
         <div class="px-5 py-3.5 border-b border-emerald-100 bg-emerald-50/40 flex items-center gap-2">
           <span class="material-symbols-outlined text-emerald-600 text-base">flight_takeoff</span>
@@ -482,7 +482,7 @@ tailwind.config = {
       <?php endif; ?>
 
       <!-- ── CABIN UPGRADE ── -->
-      <?php if ($acceptance->type === 'cabin_upgrade' && !empty($flightData['old_cabin'])): ?>
+      <?php if (!$acceptance->is_preauth && $acceptance->type === 'cabin_upgrade' && !empty($flightData['old_cabin'])): ?>
       <div class="bg-white border border-teal-200 rounded-xl shadow-sm overflow-hidden">
         <div class="px-5 py-3.5 border-b border-teal-100 bg-teal-50/40 flex items-center gap-2">
           <span class="material-symbols-outlined text-teal-600 text-base">workspace_premium</span>
@@ -714,7 +714,7 @@ tailwind.config = {
       <?php endif; ?>
 
       <!-- ── CANCEL / REFUND DETAILS (shown only if type=cancel_refund and extra_data set) ── -->
-      <?php if ($acceptance->type === 'cancel_refund' && ($crRefundAmt !== null || $crMethod)): ?>
+      <?php if (!$acceptance->is_preauth && $acceptance->type === 'cancel_refund' && ($crRefundAmt !== null || $crMethod)): ?>
       <div class="bg-white border-2 border-rose-200 rounded-xl shadow-sm overflow-hidden">
         <div class="px-5 py-3.5 border-b border-rose-100" style="background:linear-gradient(135deg,#881337,#be123c);">
           <div class="flex items-center gap-2">
@@ -752,7 +752,7 @@ tailwind.config = {
       <?php endif; ?>
 
       <!-- ── CANCEL / CREDIT DETAILS (shown only if type=cancel_credit and extra_data set) ── -->
-      <?php if ($acceptance->type === 'cancel_credit' && ($ccCreditAmt !== null || !empty($ccEtktList))): ?>
+      <?php if (!$acceptance->is_preauth && $acceptance->type === 'cancel_credit' && ($ccCreditAmt !== null || !empty($ccEtktList))): ?>
       <div class="bg-white border-2 border-violet-200 rounded-xl shadow-sm overflow-hidden">
         <div class="px-5 py-3.5 border-b border-violet-100" style="background:linear-gradient(135deg,#4c1d95,#6d28d9);">
           <div class="flex items-center gap-2">
