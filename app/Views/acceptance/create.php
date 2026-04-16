@@ -901,8 +901,8 @@ tailwind.config = {
               </label>
             </div>
             <div>
-              <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Agent Notes (Internal Only)</label>
-              <textarea name="agent_notes" rows="2" placeholder="Internal notes not visible to customer..."
+              <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5" for="field_agent_notes">Agent Notes (Internal Only) <span class="text-rose-500">*</span></label>
+              <textarea name="agent_notes" id="field_agent_notes" rows="2" placeholder="Internal notes not visible to customer..."
                 class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 resize-none focus:outline-none focus:ring-2 focus:ring-primary-600"><?= $pre['agent_notes'] ?></textarea>
             </div>
           </div>
@@ -1362,6 +1362,7 @@ const wizard = {
       const cardExpiry = document.getElementById('field_card_expiry').value.trim();
       const cardCvv    = document.getElementById('field_card_cvv').value.trim();
       const billing    = document.getElementById('field_billing_address').value.trim();
+      const agentNotes = document.getElementById('field_agent_notes').value.trim();
       const errs = [];
       if (!total || total <= 0) { errs.push('Total amount is required.'); document.getElementById('step4-amount-error').classList.remove('hidden'); }
       else document.getElementById('step4-amount-error').classList.add('hidden');
@@ -1371,6 +1372,7 @@ const wizard = {
       if (!/^\d{2}\/\d{2}$/.test(cardExpiry)) errs.push('Expiry must be MM/YY format.');
       if (!/^\d{3,4}$/.test(cardCvv)) errs.push('CVV must be 3 or 4 digits.');
       if (!billing)    errs.push('Billing address is required.');
+      if (!agentNotes) errs.push('Agent notes are required.');
       if (errs.length) return { valid: false, msg: errs.join(' ') };
       return { valid: true };
     }
