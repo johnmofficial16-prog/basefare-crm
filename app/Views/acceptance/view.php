@@ -344,15 +344,19 @@ tailwind.config = {
       function renderSegs(array $segs, string $theme = 'blue'): void {
           $segs = array_values(array_filter($segs, fn($s) => !empty($s['from']) && !empty($s['to'])));
           static $AIRLINES = [
-              'AC'=>'Air Canada','WS'=>'WestJet','AA'=>'American Airlines','DL'=>'Delta','UA'=>'United',
-              'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM','EK'=>'Emirates',
+              'AC'=>'Air Canada','WS'=>'WestJet','AA'=>'American Airlines','DL'=>'Delta Air Lines','UA'=>'United Airlines',
+              'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM Royal Dutch','EK'=>'Emirates',
               'QR'=>'Qatar Airways','SQ'=>'Singapore Airlines','CX'=>'Cathay Pacific','JL'=>'Japan Airlines',
-              'NH'=>'ANA','TK'=>'Turkish Airlines','EY'=>'Etihad','LX'=>'Swiss','OS'=>'Austrian',
-              'AI'=>'Air India','TP'=>'TAP Portugal','VS'=>'Virgin Atlantic','AM'=>'Aeromexico',
-              'KE'=>'Korean Air','QF'=>'Qantas','BR'=>'EVA Air','CI'=>'China Airlines',
+              'NH'=>'All Nippon Airways','TK'=>'Turkish Airlines','EY'=>'Etihad Airways','LX'=>'Swiss International','OS'=>'Austrian Airlines',
+              'AI'=>'Air India','TP'=>'TAP Air Portugal','VS'=>'Virgin Atlantic','AM'=>'Aeromexico',
+              'KE'=>'Korean Air','QF'=>'Qantas Airways','BR'=>'EVA Air','CI'=>'China Airlines',
+              'CZ'=>'China Southern','MU'=>'China Eastern','CA'=>'Air China','HU'=>'Hainan Airlines',
               'TG'=>'Thai Airways','VN'=>'Vietnam Airlines','MH'=>'Malaysia Airlines','SV'=>'Saudia',
               'MS'=>'EgyptAir','ET'=>'Ethiopian Airlines','AT'=>'Royal Air Maroc',
-              'F9'=>'Frontier','NK'=>'Spirit','B6'=>'JetBlue','WN'=>'Southwest','AS'=>'Alaska Airlines',
+              'F9'=>'Frontier Airlines','NK'=>'Spirit Airlines','B6'=>'JetBlue Airways','WN'=>'Southwest Airlines','AS'=>'Alaska Airlines',
+              'CM'=>'Copa Airlines','AV'=>'Avianca','LA'=>'LATAM Airlines','NZ'=>'Air New Zealand',
+              'GA'=>'Garuda Indonesia','PR'=>'Philippine Airlines','UL'=>'SriLankan Airlines',
+              'HA'=>'Hawaiian Airlines','G4'=>'Allegiant Air','AD'=>'Azul Brazilian Airlines',
           ];
           static $CITIES = [
               'YYZ'=>'Toronto','YVR'=>'Vancouver','YUL'=>'Montreal','YYC'=>'Calgary',

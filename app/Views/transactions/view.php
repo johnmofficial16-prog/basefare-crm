@@ -75,12 +75,17 @@ $CITIES_R = [
   'SYD'=>'Sydney','MEL'=>'Melbourne',
 ];
 $AIRLINES_R = [
-  'AC'=>'Air Canada','WS'=>'WestJet','AA'=>'American','DL'=>'Delta','UA'=>'United',
-  'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM','EK'=>'Emirates',
-  'QR'=>'Qatar Airways','SQ'=>'Singapore Air','CX'=>'Cathay Pacific','JL'=>'Japan Airlines',
-  'NH'=>'ANA','TK'=>'Turkish','EY'=>'Etihad','LX'=>'Swiss','OS'=>'Austrian',
+  'AC'=>'Air Canada','WS'=>'WestJet','AA'=>'American Airlines','DL'=>'Delta Air Lines','UA'=>'United Airlines',
+  'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM Royal Dutch','EK'=>'Emirates',
+  'QR'=>'Qatar Airways','SQ'=>'Singapore Airlines','CX'=>'Cathay Pacific','JL'=>'Japan Airlines',
+  'NH'=>'All Nippon Airways','TK'=>'Turkish Airlines','EY'=>'Etihad Airways','LX'=>'Swiss International','OS'=>'Austrian Airlines',
   'AI'=>'Air India','VS'=>'Virgin Atlantic','KE'=>'Korean Air','TG'=>'Thai Airways',
-  'MH'=>'Malaysia Airlines','B6'=>'JetBlue','AS'=>'Alaska Airlines',
+  'MH'=>'Malaysia Airlines','B6'=>'JetBlue Airways','AS'=>'Alaska Airlines',
+  'F9'=>'Frontier Airlines','NK'=>'Spirit Airlines','WN'=>'Southwest Airlines','AM'=>'Aeromexico',
+  'CM'=>'Copa Airlines','AV'=>'Avianca','LA'=>'LATAM Airlines','QF'=>'Qantas Airways','NZ'=>'Air New Zealand',
+  'GA'=>'Garuda Indonesia','PR'=>'Philippine Airlines','UL'=>'SriLankan Airlines',
+  'HA'=>'Hawaiian Airlines','G4'=>'Allegiant Air','AD'=>'Azul Brazilian Airlines',
+  'TP'=>'TAP Air Portugal','SV'=>'Saudia','MS'=>'EgyptAir','ET'=>'Ethiopian Airlines','AT'=>'Royal Air Maroc',
 ];
 
 $canApprove = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])

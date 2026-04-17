@@ -1178,20 +1178,25 @@ tailwind.config = {
 // LOOKUP MAPS
 // ─────────────────────────────────────────────────────────────────────────────
 const AIRLINES = {
-  'AC':'Air Canada','WS':'WestJet','AA':'American Airlines','DL':'Delta','UA':'United',
-  'BA':'British Airways','LH':'Lufthansa','AF':'Air France','KL':'KLM','EK':'Emirates',
+  'AC':'Air Canada','WS':'WestJet','AA':'American Airlines','DL':'Delta Air Lines','UA':'United Airlines',
+  'BA':'British Airways','LH':'Lufthansa','AF':'Air France','KL':'KLM Royal Dutch','EK':'Emirates',
   'QR':'Qatar Airways','SQ':'Singapore Airlines','CX':'Cathay Pacific','JL':'Japan Airlines',
-  'NH':'ANA','TK':'Turkish Airlines','EY':'Etihad','LX':'Swiss','OS':'Austrian',
-  'AI':'Air India','TP':'TAP Portugal','VS':'Virgin Atlantic','AM':'Aeromexico',
-  'CM':'Copa Airlines','AV':'Avianca','LA':'LATAM','QF':'Qantas','NZ':'Air New Zealand',
+  'NH':'All Nippon Airways','TK':'Turkish Airlines','EY':'Etihad Airways','LX':'Swiss International','OS':'Austrian Airlines',
+  'AI':'Air India','TP':'TAP Air Portugal','VS':'Virgin Atlantic','AM':'Aeromexico',
+  'CM':'Copa Airlines','AV':'Avianca','LA':'LATAM Airlines','QF':'Qantas Airways','NZ':'Air New Zealand',
   'KE':'Korean Air','BR':'EVA Air','CI':'China Airlines','CZ':'China Southern',
   'MU':'China Eastern','CA':'Air China','HU':'Hainan Airlines','MH':'Malaysia Airlines',
-  'TG':'Thai Airways','VN':'Vietnam Airlines','PR':'Philippine Airlines','GA':'Garuda',
-  'UL':'SriLankan','KU':'Kuwait Airways','WY':'Oman Air','GF':'Gulf Air','SV':'Saudia',
+  'TG':'Thai Airways','VN':'Vietnam Airlines','PR':'Philippine Airlines','GA':'Garuda Indonesia',
+  'UL':'SriLankan Airlines','KU':'Kuwait Airways','WY':'Oman Air','GF':'Gulf Air','SV':'Saudia',
   'MS':'EgyptAir','ET':'Ethiopian Airlines','AT':'Royal Air Maroc','KQ':'Kenya Airways',
-  'F9':'Frontier','NK':'Spirit','B6':'JetBlue','WN':'Southwest','AS':'Alaska Airlines',
-  'HA':'Hawaiian Airlines','G4':'Allegiant','VX':'Virgin America','AD':'Azul',
-  'O6':'Avianca Brasil','JJ':'LATAM Brasil','AR':'Aerolíneas Argentinas'
+  'F9':'Frontier Airlines','NK':'Spirit Airlines','B6':'JetBlue Airways','WN':'Southwest Airlines','AS':'Alaska Airlines',
+  'HA':'Hawaiian Airlines','G4':'Allegiant Air','VX':'Virgin America','AD':'Azul Brazilian Airlines',
+  'O6':'Avianca Brasil','JJ':'LATAM Brasil','AR':'Aerolíneas Argentinas',
+  'FI':'Icelandair','PD':'Porter Airlines','TS':'Air Transat','WG':'Sunwing',
+  'U2':'easyJet','FR':'Ryanair','W6':'Wizz Air','VY':'Vueling Airlines','DY':'Norwegian Air',
+  'EI':'Aer Lingus','IB':'Iberia','AZ':'ITA Airways','SU':'Aeroflot','S7':'S7 Airlines',
+  'G3':'GOL Linhas Aéreas','SA':'South African Airways','HM':'Air Seychelles','MK':'Air Mauritius',
+  'QZ':'Indonesia AirAsia','AK':'AirAsia','TR':'Scoot','5J':'Cebu Pacific'
 };
 
 const CITIES = {

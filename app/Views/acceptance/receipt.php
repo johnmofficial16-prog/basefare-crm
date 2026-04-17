@@ -76,13 +76,18 @@ $CITIES_R = [
 ];
 
 $AIRLINES_R = [
-    'AC'=>'Air Canada','WS'=>'WestJet','AA'=>'American Airlines','DL'=>'Delta','UA'=>'United',
-    'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM','EK'=>'Emirates',
+    'AC'=>'Air Canada','WS'=>'WestJet','AA'=>'American Airlines','DL'=>'Delta Air Lines','UA'=>'United Airlines',
+    'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM Royal Dutch','EK'=>'Emirates',
     'QR'=>'Qatar Airways','SQ'=>'Singapore Airlines','CX'=>'Cathay Pacific','JL'=>'Japan Airlines',
-    'NH'=>'ANA','TK'=>'Turkish Airlines','EY'=>'Etihad','LX'=>'Swiss','OS'=>'Austrian',
-    'AI'=>'Air India','TP'=>'TAP Portugal','VS'=>'Virgin Atlantic','KE'=>'Korean Air',
-    'TG'=>'Thai Airways','MH'=>'Malaysia Airlines','B6'=>'JetBlue','AS'=>'Alaska Airlines',
-    'F9'=>'Frontier','NK'=>'Spirit','WN'=>'Southwest','AM'=>'Aeromexico',
+    'NH'=>'All Nippon Airways','TK'=>'Turkish Airlines','EY'=>'Etihad Airways','LX'=>'Swiss International','OS'=>'Austrian Airlines',
+    'AI'=>'Air India','TP'=>'TAP Air Portugal','VS'=>'Virgin Atlantic','KE'=>'Korean Air',
+    'TG'=>'Thai Airways','MH'=>'Malaysia Airlines','B6'=>'JetBlue Airways','AS'=>'Alaska Airlines',
+    'F9'=>'Frontier Airlines','NK'=>'Spirit Airlines','WN'=>'Southwest Airlines','AM'=>'Aeromexico',
+    'CM'=>'Copa Airlines','AV'=>'Avianca','LA'=>'LATAM Airlines','QF'=>'Qantas Airways','NZ'=>'Air New Zealand',
+    'BR'=>'EVA Air','CI'=>'China Airlines','CZ'=>'China Southern','MU'=>'China Eastern','CA'=>'Air China',
+    'HU'=>'Hainan Airlines','VN'=>'Vietnam Airlines','PR'=>'Philippine Airlines','GA'=>'Garuda Indonesia',
+    'UL'=>'SriLankan Airlines','SV'=>'Saudia','MS'=>'EgyptAir','ET'=>'Ethiopian Airlines',
+    'AT'=>'Royal Air Maroc','HA'=>'Hawaiian Airlines','G4'=>'Allegiant Air','AD'=>'Azul Brazilian Airlines',
 ];
 
 $receiptNumber = 'BF-' . str_pad($acceptance->id, 6, '0', STR_PAD_LEFT);
@@ -351,11 +356,7 @@ body {
   <div class="receipt-header">
     <div class="brand-block">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
-        <?php if ($logoUrl): ?>
-        <img src="<?= rh($logoUrl) ?>" alt="<?= rh($primaryIata) ?>"
-          style="width:36px;height:36px;object-fit:contain;background:rgba(255,255,255,0.1);border-radius:6px;padding:3px;"
-          onerror="this.style.display='none'">
-        <?php endif; ?>
+
         <div>
           <div class="brand-name">LETS FLY TRAVEL</div>
           <div class="brand-dba">DBA Base Fare</div>
