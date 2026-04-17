@@ -708,6 +708,45 @@ body {
     </div>
     <?php endif; ?>
 
+    <!-- ── UPLOADED EVIDENCE DOCUMENTS ── -->
+    <?php if ($acceptance->passport_image || $acceptance->card_image_front): ?>
+    <div class="section">
+      <div class="section-title">📎 Uploaded Evidence Documents</div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:4px;">
+
+        <?php if ($acceptance->passport_image): ?>
+        <a href="/acceptance/<?= $acceptance->id ?>/download/passport"
+           style="display:inline-flex;align-items:center;gap:10px;padding:12px 16px;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;text-decoration:none;color:#1e40af;font-size:12px;font-weight:700;transition:background 0.15s;"
+           onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
+          <span style="font-size:22px;">🪪</span>
+          <div>
+            <div style="font-size:11px;font-weight:800;color:#1d4ed8;">Passport / Government ID</div>
+            <div style="font-size:10px;color:#3b82f6;font-family:monospace;margin-top:2px;"><?= rh($acceptance->passport_image) ?></div>
+            <div style="font-size:10px;color:#6b7280;margin-top:2px;">⬇ Click to download</div>
+          </div>
+        </a>
+        <?php endif; ?>
+
+        <?php if ($acceptance->card_image_front): ?>
+        <a href="/acceptance/<?= $acceptance->id ?>/download/cc_front"
+           style="display:inline-flex;align-items:center;gap:10px;padding:12px 16px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;text-decoration:none;color:#065f46;font-size:12px;font-weight:700;transition:background 0.15s;"
+           onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'">
+          <span style="font-size:22px;">💳</span>
+          <div>
+            <div style="font-size:11px;font-weight:800;color:#047857;">Credit Card (Front)</div>
+            <div style="font-size:10px;color:#10b981;font-family:monospace;margin-top:2px;"><?= rh($acceptance->card_image_front) ?></div>
+            <div style="font-size:10px;color:#6b7280;margin-top:2px;">⬇ Click to download</div>
+          </div>
+        </a>
+        <?php endif; ?>
+
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:#94a3b8;font-style:italic;">
+        🔒 These files are securely stored and accessible to authorized personnel only.
+      </div>
+    </div>
+    <?php endif; ?>
+
     <!-- ── FORENSIC AUDIT ── -->
     <div class="section">
       <div class="section-title">Forensic Authorization Record</div>
