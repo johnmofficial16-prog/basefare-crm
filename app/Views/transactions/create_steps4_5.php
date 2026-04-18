@@ -188,7 +188,9 @@
             </div>
             <div>
               <label class="field-label">Fare Rules</label>
-              <textarea name="fare_rules" id="field_fare_rules" rows="3" placeholder="Paste fare rules or key restrictions..." class="field-input resize-none"></textarea>
+              <textarea name="fare_rules" id="field_fare_rules" rows="3" placeholder="Paste fare rules or key restrictions..." class="field-input resize-none">Exchange : Permitted with Fee
+Cancellation : Non Refundable Ticket
+Name Change : Not Allowed</textarea>
             </div>
             <div>
               <label class="field-label">Agent Notes <span class="text-rose-500">*</span></label>
