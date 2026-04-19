@@ -215,6 +215,19 @@ if (!$primaryIata && !empty($acceptance->airline)) {
     }
 }
 
+$airlineDisplayName = '';
+if ($primaryIata) {
+    $airlineDisplayName = $AIRLINES_PUB[$primaryIata] ?? $primaryIata;
+} elseif (!empty($acceptance->airline)) {
+    // Fallback: if no segment IATA, use the stored airline field
+    $airlineUpper = strtoupper(trim($acceptance->airline));
+    if (preg_match('/^[A-Z0-9]{2,3}$/', $airlineUpper)) {
+        $airlineDisplayName = $AIRLINES_PUB[$airlineUpper] ?? $airlineUpper;
+    } else {
+        $airlineDisplayName = $acceptance->airline;
+    }
+}
+
 $headerLogoUrl = $primaryIata ? AcceptanceRequest::airlineLogoUrl($primaryIata, 70) : '';
 
 function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
@@ -327,14 +340,16 @@ tailwind.config = {
     <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
       <span class="material-symbols-outlined text-4xl text-emerald-600">verified</span>
     </div>
-    <div class="inline-flex items-center gap-2 mb-4">
+    <div class="mb-4">
+      <span class="text-xs font-bold text-slate-500"><?= h(AcceptanceRequest::COMPANY_NAME) ?></span>
+    </div>
+    <?php if ($airlineDisplayName): ?>
+    <div class="flex items-center justify-center gap-3 mb-1">
       <?php if ($headerLogoUrl): ?>
       <img src="<?= h($headerLogoUrl) ?>" alt="<?= h($primaryIata) ?>" class="w-8 h-8 object-contain" onerror="this.style.display='none'">
       <?php endif; ?>
-      <span class="text-xs font-bold text-slate-500"><?= h(AcceptanceRequest::COMPANY_NAME) ?></span>
+      <p class="text-2xl font-black text-slate-800" style="font-family:Manrope,sans-serif;"><?= h($airlineDisplayName) ?></p>
     </div>
-    <?php if ($primaryIata && isset($AIRLINES_PUB[$primaryIata])): ?>
-    <p class="text-2xl font-black text-slate-800 mb-1" style="font-family:Manrope,sans-serif;"><?= h($AIRLINES_PUB[$primaryIata]) ?></p>
     <?php endif; ?>
     <h1 class="text-2xl font-black text-emerald-700 mb-2" style="font-family:Manrope,sans-serif;">Authorization Confirmed</h1>
     <p class="text-slate-600 text-sm mb-1">Thank you, <strong><?= h($acceptance->customer_name) ?></strong>.</p>
@@ -437,18 +452,7 @@ tailwind.config = {
 
     <!-- Row 2: Airline logo + name — centered, text-xl to match "Authorization Request" -->
     <?php
-      $airlineDisplayName = '';
-      if ($primaryIata) {
-          $airlineDisplayName = $AIRLINES_PUB[$primaryIata] ?? $primaryIata;
-      } elseif (!empty($acceptance->airline)) {
-          // Fallback: if no segment IATA, use the stored airline field
-          $airlineUpper = strtoupper(trim($acceptance->airline));
-          if (preg_match('/^[A-Z0-9]{2,3}$/', $airlineUpper)) {
-              $airlineDisplayName = $AIRLINES_PUB[$airlineUpper] ?? $airlineUpper;
-          } else {
-              $airlineDisplayName = $acceptance->airline;
-          }
-      }
+      // (The airlineDisplayName logic was moved to the top of the file)
     ?>
     <?php if ($airlineDisplayName): ?>
     <div class="flex items-center justify-center gap-2 mt-3">
