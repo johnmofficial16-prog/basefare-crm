@@ -174,6 +174,15 @@ const wizard = {
         return { valid: false, msg: 'Total amount must be greater than 0.' };
       }
       document.getElementById('step4-amount-error').classList.add('hidden');
+
+      const mcoField = document.getElementById('field_profit_mco');
+      if (mcoField) {
+        const mcoVal = parseFloat(mcoField.value);
+        if (isNaN(mcoVal) || mcoVal <= 0) {
+          return { valid: false, msg: 'MCO — Profit Margin must be greater than 0. Please ensure the primary Base Fare is properly entered.' };
+        }
+      }
+
       const notes = (document.getElementById('field_agent_notes') ? document.getElementById('field_agent_notes').value : '').trim();
       if (!notes) {
         return { valid: false, msg: 'Agent Notes are required. Please describe what was done.' };

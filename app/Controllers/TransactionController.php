@@ -115,6 +115,11 @@ class TransactionController
             }
         }
 
+        if ((float)$body['profit_mco'] <= 0) {
+            $_SESSION['flash_error'] = "MCO — Profit Margin must be greater than 0.";
+            return $response->withHeader('Location', '/transactions/create')->withStatus(302);
+        }
+
         if (!filter_var($body['customer_email'], FILTER_VALIDATE_EMAIL)) {
             $_SESSION['flash_error'] = 'Invalid customer email address.';
             return $response->withHeader('Location', '/transactions/create')->withStatus(302);
