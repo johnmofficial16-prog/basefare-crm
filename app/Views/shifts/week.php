@@ -87,9 +87,14 @@ tailwind.config = {
         Next Week<span class="material-symbols-outlined text-lg">chevron_right</span>
       </a>
     </div>
-    <button id="publishWeekBtn" class="bg-gradient-to-r from-primary to-primary-container text-white px-8 py-3 rounded-lg font-headline font-bold text-sm shadow-xl shadow-primary/20 hover:opacity-90 transition-all active:scale-95 flex items-center gap-2">
-      <span class="material-symbols-outlined text-lg">publish</span> Publish Week
-    </button>
+    <div class="flex items-center gap-3">
+      <button id="bulkAssignBtn" class="bg-gradient-to-r from-secondary to-secondary-container text-white px-6 py-3 rounded-lg font-headline font-bold text-sm shadow-xl shadow-secondary/20 hover:opacity-90 transition-all active:scale-95 flex items-center gap-2">
+        <span class="material-symbols-outlined text-lg">group_add</span> Bulk Assign
+      </button>
+      <button id="publishWeekBtn" class="bg-gradient-to-r from-primary to-primary-container text-white px-8 py-3 rounded-lg font-headline font-bold text-sm shadow-xl shadow-primary/20 hover:opacity-90 transition-all active:scale-95 flex items-center gap-2">
+        <span class="material-symbols-outlined text-lg">publish</span> Publish Week
+      </button>
+    </div>
   </header>
 
   <!-- Flash messages (success/error from POST) -->
@@ -226,6 +231,131 @@ tailwind.config = {
   </section>
 </main>
 
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- BULK ASSIGN MODAL                                                    -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="bulkAssignModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between px-8 pt-8 pb-4 border-b border-outline-variant/15">
+      <div>
+        <h3 class="font-headline font-extrabold text-2xl text-primary flex items-center gap-2">
+          <span class="material-symbols-outlined">group_add</span> Bulk Assign Shift
+        </h3>
+        <p class="text-sm text-on-surface-variant mt-0.5 opacity-70">Assign a shift to multiple people across multiple days in one click.</p>
+      </div>
+      <button onclick="closeBulkModal()" class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center hover:bg-surface-container-high transition-colors">
+        <span class="material-symbols-outlined text-on-surface-variant">close</span>
+      </button>
+    </div>
+
+    <!-- Scrollable body -->
+    <div class="overflow-y-auto flex-1 px-8 py-6 space-y-7">
+
+      <!-- STEP 1: Shift Template -->
+      <div>
+        <p class="text-[11px] font-extrabold uppercase tracking-widest text-primary mb-3 flex items-center gap-1.5">
+          <span class="w-5 h-5 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center">1</span>
+          Select Shift
+        </p>
+        <select id="bulkTemplate" class="w-full rounded-xl bg-surface-container-low border border-outline-variant/20 focus:ring-2 focus:ring-primary/20 text-sm font-semibold py-3 px-4">
+          <option value="">– Select a shift template –</option>
+          <?php foreach ($templates as $t): ?>
+          <option value="<?= $t->id ?>" data-start="<?= $t->start_time ?>" data-end="<?= $t->end_time ?>">
+            <?= htmlspecialchars($t->name) ?> (<?= date('g:iA', strtotime($t->start_time)) ?>–<?= date('g:iA', strtotime($t->end_time)) ?>)
+          </option>
+          <?php endforeach; ?>
+          <option value="__custom__">⚙ Custom times…</option>
+        </select>
+        <!-- Custom time row (hidden by default) -->
+        <div id="bulkCustomTimes" class="hidden mt-3 grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1 block">Start Time</label>
+            <input type="time" id="bulkStart" class="w-full rounded-lg bg-surface-container-low border border-outline-variant/20 focus:ring-2 focus:ring-primary/20 text-sm py-2.5 px-3"/>
+          </div>
+          <div>
+            <label class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1 block">End Time</label>
+            <input type="time" id="bulkEnd" class="w-full rounded-lg bg-surface-container-low border border-outline-variant/20 focus:ring-2 focus:ring-primary/20 text-sm py-2.5 px-3"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2: People -->
+      <div>
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-[11px] font-extrabold uppercase tracking-widest text-primary flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center">2</span>
+            Select People
+          </p>
+          <div class="flex gap-2">
+            <button type="button" onclick="bulkSelectAllPeople(true)" class="text-[11px] font-bold text-primary hover:underline">Select All</button>
+            <span class="text-outline-variant">·</span>
+            <button type="button" onclick="bulkSelectAllPeople(false)" class="text-[11px] font-bold text-on-surface-variant hover:underline">Clear</button>
+          </div>
+        </div>
+        <div id="bulkPeopleList" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-44 overflow-y-auto pr-1">
+          <?php foreach ($agents as $agent):
+            $initBulk = initials($agent->name);
+          ?>
+          <label class="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-outline-variant/20 bg-surface-container-low hover:bg-primary/5 hover:border-primary/30 cursor-pointer transition-all has-[:checked]:bg-primary/8 has-[:checked]:border-primary/40 group">
+            <input type="checkbox" name="bulk_agents" value="<?= $agent->id ?>" class="bulk-agent-cb rounded accent-primary w-4 h-4 flex-shrink-0"/>
+            <div class="w-6 h-6 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-black text-[9px] flex-shrink-0"><?= $initBulk ?></div>
+            <span class="text-xs font-semibold text-on-surface leading-tight truncate"><?= htmlspecialchars($agent->name) ?></span>
+          </label>
+          <?php endforeach; ?>
+        </div>
+        <p id="bulkPeopleCount" class="text-[11px] text-on-surface-variant mt-2 opacity-60">0 people selected</p>
+      </div>
+
+      <!-- STEP 3: Days -->
+      <div>
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-[11px] font-extrabold uppercase tracking-widest text-primary flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center">3</span>
+            Select Days
+          </p>
+          <div class="flex gap-2">
+            <button type="button" onclick="bulkSelectAllDays(true)" class="text-[11px] font-bold text-primary hover:underline">All Week</button>
+            <span class="text-outline-variant">·</span>
+            <button type="button" onclick="bulkSelectAllDays(false)" class="text-[11px] font-bold text-on-surface-variant hover:underline">Clear</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-7 gap-2">
+          <?php foreach ($weekDates as $date):
+            $dtBulk = new DateTime($date);
+          ?>
+          <label class="flex flex-col items-center gap-1.5 px-1 py-2.5 rounded-xl border border-outline-variant/20 bg-surface-container-low hover:bg-primary/5 hover:border-primary/30 cursor-pointer transition-all has-[:checked]:bg-primary/8 has-[:checked]:border-primary/40">
+            <input type="checkbox" name="bulk_days" value="<?= $date ?>" class="bulk-day-cb rounded accent-primary w-4 h-4"/>
+            <span class="text-[10px] font-extrabold uppercase text-on-surface-variant tracking-wider"><?= $dtBulk->format('D') ?></span>
+            <span class="text-[9px] text-on-surface-variant opacity-50"><?= $dtBulk->format('M d') ?></span>
+          </label>
+          <?php endforeach; ?>
+        </div>
+        <p id="bulkDayCount" class="text-[11px] text-on-surface-variant mt-2 opacity-60">0 days selected</p>
+      </div>
+
+      <!-- Summary + Error -->
+      <div id="bulkSummaryBox" class="hidden bg-primary/5 border border-primary/15 rounded-xl px-5 py-4">
+        <p class="text-sm font-bold text-primary" id="bulkSummaryText"></p>
+      </div>
+      <div id="bulkError" class="hidden bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-sm text-red-700 font-semibold"></div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="px-8 pb-8 pt-4 border-t border-outline-variant/15 flex gap-3">
+      <button id="bulkApplyBtn" class="flex-1 bg-gradient-to-r from-primary to-primary-container text-white py-3.5 rounded-xl font-headline font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-base">bolt</span>
+        Apply to Selected
+      </button>
+      <button onclick="closeBulkModal()" class="flex-1 bg-surface-container text-on-surface-variant py-3.5 rounded-xl font-bold text-sm hover:bg-surface-container-high transition-all">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Assign Shift Modal -->
 <div id="assignModal" class="hidden fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
@@ -265,6 +395,141 @@ tailwind.config = {
 </div>
 
 <script>
+// ─── BULK ASSIGN LOGIC ────────────────────────────────────────────────────────
+
+const CSRF_TOKEN = '<?= $_SESSION['csrf_token'] ?? '' ?>';
+
+document.getElementById('bulkAssignBtn').addEventListener('click', () => {
+  document.getElementById('bulkAssignModal').classList.remove('hidden');
+  updateBulkSummary();
+});
+
+function closeBulkModal() {
+  document.getElementById('bulkAssignModal').classList.add('hidden');
+  document.getElementById('bulkError').classList.add('hidden');
+  document.getElementById('bulkSummaryBox').classList.add('hidden');
+}
+
+// Show/hide custom time fields based on template selection
+document.getElementById('bulkTemplate').addEventListener('change', function() {
+  const isCustom = this.value === '__custom__';
+  document.getElementById('bulkCustomTimes').classList.toggle('hidden', !isCustom);
+  updateBulkSummary();
+});
+
+function bulkSelectAllPeople(checked) {
+  document.querySelectorAll('.bulk-agent-cb').forEach(cb => cb.checked = checked);
+  updateBulkSummary();
+}
+
+function bulkSelectAllDays(checked) {
+  document.querySelectorAll('.bulk-day-cb').forEach(cb => cb.checked = checked);
+  updateBulkSummary();
+}
+
+function updateBulkSummary() {
+  const people  = document.querySelectorAll('.bulk-agent-cb:checked').length;
+  const days    = document.querySelectorAll('.bulk-day-cb:checked').length;
+  const total   = people * days;
+  document.getElementById('bulkPeopleCount').textContent = people + ' people selected';
+  document.getElementById('bulkDayCount').textContent    = days + ' days selected';
+
+  const box = document.getElementById('bulkSummaryBox');
+  if (people > 0 && days > 0) {
+    box.classList.remove('hidden');
+    document.getElementById('bulkSummaryText').textContent =
+      `✅ This will create/overwrite ${total} shift assignment${total !== 1 ? 's' : ''} (${people} people × ${days} days).`;
+  } else {
+    box.classList.add('hidden');
+  }
+}
+
+// Re-compute summary on any checkbox change
+document.querySelectorAll('.bulk-agent-cb, .bulk-day-cb').forEach(cb => {
+  cb.addEventListener('change', updateBulkSummary);
+});
+
+document.getElementById('bulkApplyBtn').addEventListener('click', async function() {
+  const err = document.getElementById('bulkError');
+  err.classList.add('hidden');
+
+  // Gather template / times
+  const templateSel = document.getElementById('bulkTemplate');
+  const templateId  = (templateSel.value && templateSel.value !== '__custom__') ? parseInt(templateSel.value) : null;
+
+  let shiftStart, shiftEnd;
+  if (templateSel.value === '__custom__') {
+    shiftStart = document.getElementById('bulkStart').value;
+    shiftEnd   = document.getElementById('bulkEnd').value;
+  } else if (templateId) {
+    const opt  = templateSel.options[templateSel.selectedIndex];
+    shiftStart = opt.dataset.start;
+    shiftEnd   = opt.dataset.end;
+  }
+
+  // Validate
+  if (!shiftStart || !shiftEnd) {
+    err.textContent = 'Please select a shift template or enter custom times.';
+    err.classList.remove('hidden'); return;
+  }
+
+  const selectedAgents = [...document.querySelectorAll('.bulk-agent-cb:checked')].map(cb => parseInt(cb.value));
+  const selectedDays   = [...document.querySelectorAll('.bulk-day-cb:checked')].map(cb => cb.value);
+
+  if (selectedAgents.length === 0) {
+    err.textContent = 'Please select at least one person.';
+    err.classList.remove('hidden'); return;
+  }
+  if (selectedDays.length === 0) {
+    err.textContent = 'Please select at least one day.';
+    err.classList.remove('hidden'); return;
+  }
+
+  // Build entries cartesian product: every person × every day
+  const entries = [];
+  selectedAgents.forEach(agentId => {
+    selectedDays.forEach(date => {
+      entries.push({
+        agent_id:    agentId,
+        shift_date:  date,
+        shift_start: shiftStart.substring(0, 5),
+        shift_end:   shiftEnd.substring(0, 5),
+        template_id: templateId
+      });
+    });
+  });
+
+  // Optimistic UI
+  const btn = document.getElementById('bulkApplyBtn');
+  const ogHTML = btn.innerHTML;
+  btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-sm">sync</span> Applying…';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch('/shifts/week/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+      body: JSON.stringify({ week_start: '<?= $weekDates[0] ?? '' ?>', entries })
+    });
+    const data = await r.json();
+    if (data.success) {
+      closeBulkModal();
+      window.location.reload();
+    } else {
+      err.textContent = data.message || 'Could not apply shifts. Please try again.';
+      err.classList.remove('hidden');
+    }
+  } catch(e) {
+    err.textContent = 'Network error. Please try again.';
+    err.classList.remove('hidden');
+  } finally {
+    btn.innerHTML = ogHTML;
+    btn.disabled = false;
+  }
+});
+
+// ─── END BULK ASSIGN LOGIC ────────────────────────────────────────────────────
+
 // Pre-fill times from template selector
 document.getElementById('modalTemplate').addEventListener('change', function() {
   const opt = this.options[this.selectedIndex];
