@@ -148,6 +148,7 @@ CREATE TABLE IF NOT EXISTS `transactions` (
   `void_of_transaction_id`  BIGINT UNSIGNED NULL,
   `checkin_notified`        TINYINT(1) NOT NULL DEFAULT 0,
   `checkin_completed`       TINYINT(1) NOT NULL DEFAULT 0,
+  `proof_of_sale_path`      VARCHAR(255) NULL,
   `agent_notes`             TEXT NULL,
   `created_at`              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

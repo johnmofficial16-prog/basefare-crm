@@ -118,6 +118,7 @@ class Transaction extends Model
         'void_of_transaction_id',
         'checkin_notified',
         'checkin_completed',
+        'proof_of_sale_path',
         'agent_notes',
     ];
 

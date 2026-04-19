@@ -132,6 +132,23 @@ class TransactionController
             return $response->withHeader('Location', '/transactions/create')->withStatus(302);
         }
 
+        // Handle Proof of Sale upload
+        $uploadedFiles = $request->getUploadedFiles();
+        if (empty($uploadedFiles['proof_of_sale']) || $uploadedFiles['proof_of_sale']->getError() !== UPLOAD_ERR_OK) {
+            $_SESSION['flash_error'] = 'Proof of sale document is missing or invalid.';
+            return $response->withHeader('Location', '/transactions/create')->withStatus(302);
+        }
+        
+        $proofFile = $uploadedFiles['proof_of_sale'];
+        $extension = pathinfo($proofFile->getClientFilename(), PATHINFO_EXTENSION);
+        $filename = uniqid('proof_') . '_' . bin2hex(random_bytes(8)) . '.' . $extension;
+        $uploadDir = __DIR__ . '/../../storage/proofs';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+        $proofFile->moveTo($uploadDir . '/' . $filename);
+        $body['proof_of_sale_path'] = 'storage/proofs/' . $filename;
+
         $typeData = null;
         if (!empty($body['type_specific_data_json'])) {
             $typeData = json_decode($body['type_specific_data_json'], true);
@@ -186,6 +203,43 @@ class TransactionController
         $html = ob_get_clean();
         $response->getBody()->write($html);
         return $response;
+    }
+
+    // =========================================================================
+    // VIEW PROOF  —  GET /transactions/{id}/proof
+    // =========================================================================
+
+    public function viewProof(Request $request, Response $response, array $args): Response
+    {
+        $id       = (int)$args['id'];
+        $userRole = $_SESSION['role'] ?? 'agent';
+        $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
+
+        if (!$isAdmin) {
+            $response->getBody()->write('Access denied. Only managers and admins can view proof of sale documents.');
+            return $response->withStatus(403);
+        }
+
+        $txn = Transaction::find($id);
+        if (!$txn || empty($txn->proof_of_sale_path)) {
+            $response->getBody()->write('Proof of sale document not found.');
+            return $response->withStatus(404);
+        }
+
+        $filePath = __DIR__ . '/../../' . $txn->proof_of_sale_path;
+        if (!file_exists($filePath)) {
+            $response->getBody()->write('File not found on server.');
+            return $response->withStatus(404);
+        }
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mimeType = finfo_file($finfo, $filePath);
+        finfo_close($finfo);
+
+        $stream = new \Slim\Psr7\Stream(fopen($filePath, 'r'));
+        return $response->withHeader('Content-Type', $mimeType)
+                        ->withHeader('Content-Disposition', 'inline; filename="proof_of_sale_' . $txn->id . '"')
+                        ->withBody($stream);
     }
 
     // =========================================================================

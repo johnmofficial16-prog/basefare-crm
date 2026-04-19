@@ -710,6 +710,17 @@ const formAssembly = {
     const { valid, msg } = wizard.validate(4);
     if (!valid) { wizard.goTo(4); setTimeout(function() { alert('Please fix: ' + msg); }, 100); return; }
 
+    // Validate Proof of Sale
+    const proofInput = document.getElementById('proof_of_sale');
+    const proofError = document.getElementById('step5-proof-error');
+    if (!proofInput || proofInput.files.length === 0) {
+        if (proofError) proofError.classList.remove('hidden');
+        alert('Proof of sale document is mandatory. Please upload a screenshot or PDF.');
+        return;
+    } else {
+        if (proofError) proofError.classList.add('hidden');
+    }
+
     // Passengers JSON
     document.getElementById('hidPassengers').value = JSON.stringify(
       state.passengers.filter(function(p) { return (p.first_name||'').trim() || (p.last_name||'').trim(); }).map(function(p) { return {

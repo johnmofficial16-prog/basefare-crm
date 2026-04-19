@@ -134,7 +134,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','Manr
 
     <!-- LEFT: Steps Column -->
     <div>
-    <form id="txnForm" method="POST" action="/transactions/create">
+    <form id="txnForm" method="POST" action="/transactions/create" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
     <?php if ($pre['acceptance_id']): ?>
     <input type="hidden" name="acceptance_id" value="<?= (int)$pre['acceptance_id'] ?>">

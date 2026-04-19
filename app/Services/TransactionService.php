@@ -68,6 +68,7 @@ class TransactionService
                 'data'            => $data['type_specific_data'] ?? null,
                 'status'          => Transaction::STATUS_PENDING,
                 'agent_notes'     => trim($data['agent_notes'] ?? ''),
+                'proof_of_sale_path' => $data['proof_of_sale_path'] ?? null,
             ]);
 
             // ── Passengers ───────────────────────────────────────────────

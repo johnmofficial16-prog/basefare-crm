@@ -135,6 +135,7 @@ $app->group('/transactions', function ($group) {
 
     // Single transaction actions
     $group->get('/{id:[0-9]+}',              [TransactionController::class, 'view']);
+    $group->get('/{id:[0-9]+}/proof',        [TransactionController::class, 'viewProof']);
     $group->get('/{id:[0-9]+}/edit',         [TransactionController::class, 'editForm']);
     $group->post('/{id:[0-9]+}/edit',        [TransactionController::class, 'update']);
 
