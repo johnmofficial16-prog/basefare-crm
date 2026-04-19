@@ -431,7 +431,11 @@ const fareMgr = {
     state.fareItems.push({ label: label||'', amount: parseFloat(amount)||0 });
     this._render();
   },
-  removeItem: function(idx) { state.fareItems.splice(idx, 1); this._render(); },
+  removeItem: function(idx) { 
+    if (idx === 0) return; // Cannot delete the primary fixed fare
+    state.fareItems.splice(idx, 1); 
+    this._render(); 
+  },
   _updateItem: function(idx, field, val) {
     if (!state.fareItems[idx]) return;
     state.fareItems[idx][field] = field==='amount' ? parseFloat(val)||0 : val;
@@ -442,22 +446,52 @@ const fareMgr = {
     for (var k = 0; k < state.fareItems.length; k++) { sum += parseFloat(state.fareItems[k].amount) || 0; }
     var totalEl = document.getElementById('field_total_amount');
     if (sum > 0 && totalEl) { totalEl.value = sum.toFixed(2); syncSummary(); }
+
+    // Auto-fill MCO with the first item's amount
+    var mcoEl = document.getElementById('field_profit_mco');
+    if (mcoEl && state.fareItems.length > 0) {
+      mcoEl.value = (parseFloat(state.fareItems[0].amount) || 0).toFixed(2);
+    }
   },
   _render: function() {
+    // Ensure there is always at least one primary item
+    if (state.fareItems.length === 0) {
+      state.fareItems.push({ label: 'Base Fare', amount: 0 });
+    }
+    
     const el = document.getElementById('fare-items');
-    el.innerHTML = state.fareItems.map(function(item, i) { return `
-      <div class="fare-row flex items-center gap-2">
-        <input type="text" value="${_esc(item.label)}" placeholder="e.g. Base Fare"
-          class="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
-          oninput="fareMgr._updateItem(${i},'label',this.value)">
-        <input type="number" step="0.01" value="${item.amount||''}" placeholder="0.00"
-          class="w-28 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-mono bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-          oninput="fareMgr._updateItem(${i},'amount',this.value)">
-        <button type="button" onclick="fareMgr.removeItem(${i})"
-          class="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg transition-colors flex-none">
-          <span class="material-symbols-outlined text-sm">delete</span>
-        </button>
-      </div>`; }).join('');
+    el.innerHTML = state.fareItems.map(function(item, i) { 
+      if (i === 0) {
+        // Fixed Primary Fare Dropdown
+        return `
+        <div class="fare-row flex items-center gap-2">
+          <select class="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-slate-50 font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            onchange="fareMgr._updateItem(${i},'label',this.value)">
+            <option value="Base Fare" ${item.label === 'Base Fare' ? 'selected' : ''}>Base Fare</option>
+            <option value="Airline Tickets" ${item.label === 'Airline Tickets' ? 'selected' : ''}>Airline Tickets</option>
+          </select>
+          <input type="number" step="0.01" value="${item.amount||''}" placeholder="0.00"
+            class="w-28 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-mono bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+            oninput="fareMgr._updateItem(${i},'amount',this.value)">
+          <div class="w-8 flex-none"></div> <!-- Empty space to align with delete buttons -->
+        </div>`;
+      } else {
+        // Free-flow additional fares
+        return `
+        <div class="fare-row flex items-center gap-2">
+          <input type="text" value="${_esc(item.label)}" placeholder="e.g. Taxes"
+            class="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            oninput="fareMgr._updateItem(${i},'label',this.value)">
+          <input type="number" step="0.01" value="${item.amount||''}" placeholder="0.00"
+            class="w-28 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-mono bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+            oninput="fareMgr._updateItem(${i},'amount',this.value)">
+          <button type="button" onclick="fareMgr.removeItem(${i})"
+            class="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg transition-colors flex-none">
+            <span class="material-symbols-outlined text-sm">delete</span>
+          </button>
+        </div>`; 
+      }
+    }).join('');
     this._recalc();
   }
 };

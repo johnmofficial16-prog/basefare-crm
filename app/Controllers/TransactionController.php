@@ -107,9 +107,9 @@ class TransactionController
         $agentId = $_SESSION['user_id'];
         $body    = $request->getParsedBody();
 
-        $required = ['type', 'customer_name', 'customer_email', 'pnr', 'total_amount'];
+        $required = ['type', 'customer_name', 'customer_email', 'pnr', 'total_amount', 'profit_mco'];
         foreach ($required as $field) {
-            if (empty($body[$field])) {
+            if (!isset($body[$field]) || trim((string)$body[$field]) === '') {
                 $_SESSION['flash_error'] = "Missing required field: {$field}";
                 return $response->withHeader('Location', '/transactions/create')->withStatus(302);
             }

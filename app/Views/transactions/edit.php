@@ -272,8 +272,11 @@ tailwind.config = {
             <label class="fl">MCO — Profit Margin</label>
             <input type="number" step="0.01" name="profit_mco" id="field_profit_mco"
                    value="<?= htmlspecialchars($txn->profit_mco) ?>" required class="fi"
-                   style="font-family:monospace;font-weight:700;color:#059669;background-color:#ecfdf5;border-color:#34d399;">
-            <p style="font-size:10px;color:#64748b;margin-top:3px;">Manual entry</p>
+                   <?= !$isAdmin ? 'readonly' : '' ?>
+                   style="font-family:monospace;font-weight:700;color:#059669;background-color:<?= !$isAdmin ? '#d1fae5' : '#ecfdf5' ?>;border-color:#34d399;<?= !$isAdmin ? 'cursor:not-allowed;' : '' ?>">
+            <p style="font-size:10px;color:#64748b;margin-top:3px;">
+              <?= $isAdmin ? 'Manual entry (Admin/Manager)' : 'Locked (Admin/Manager only)' ?>
+            </p>
           </div>
         </div>
         <div class="grid2">

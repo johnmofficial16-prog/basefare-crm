@@ -142,7 +142,7 @@ class TransactionService
                 'return_date'     => $data['return_date'] ?: $txn->return_date,
                 'total_amount'    => (float)($data['total_amount'] ?? $txn->total_amount),
                 'cost_amount'     => (float)($data['cost_amount'] ?? $txn->cost_amount),
-                'profit_mco'      => isset($data['profit_mco']) ? (float)$data['profit_mco'] : $txn->profit_mco,
+                'profit_mco'      => ($isAdmin && isset($data['profit_mco'])) ? (float)$data['profit_mco'] : $txn->profit_mco,
                 'currency'        => strtoupper($data['currency'] ?? $txn->currency),
                 'payment_method'  => $data['payment_method'] ?? $txn->payment_method,
                 'payment_status'  => $data['payment_status'] ?? $txn->payment_status,

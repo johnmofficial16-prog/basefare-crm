@@ -48,10 +48,10 @@
                 </div>
               </div>
               <div class="mt-4 p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex flex-col gap-1">
-                <div class="text-xs font-bold text-emerald-800">MCO — Profit Margin</div>
-                <input type="number" name="profit_mco" id="field_profit_mco" step="0.01" value="0.00"
-                   class="w-full border border-emerald-300 rounded px-3 py-1.5 text-lg font-black text-emerald-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                <div class="text-[10px] text-emerald-600/80">Manual entry</div>
+                <div class="text-xs font-bold text-emerald-800">MCO — Profit Margin <span class="text-rose-500">*</span></div>
+                <input type="number" name="profit_mco" id="field_profit_mco" step="0.01" value="0.00" required readonly
+                   class="w-full border border-emerald-300 rounded px-3 py-1.5 text-lg font-black text-emerald-700 bg-emerald-100/50 focus:outline-none cursor-not-allowed">
+                <div class="text-[10px] text-emerald-600/80">Auto-filled from primary fare</div>
               </div>
             </div>
             <div id="step4-amount-error" class="hidden text-rose-600 text-xs font-medium flex items-center gap-1">
