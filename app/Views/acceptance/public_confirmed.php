@@ -10,13 +10,23 @@ $pnr          = $acceptance ? htmlspecialchars($acceptance->pnr) : '—';
 $customerName = $acceptance ? htmlspecialchars($acceptance->customer_name) : 'Customer';
 $typeLabel    = $acceptance ? htmlspecialchars($acceptance->typeLabel()) : 'Authorization';
 $approvedAt   = ($acceptance && $acceptance->approved_at) ? $acceptance->approved_at->format('F j, Y \a\t g:i A T') : date('F j, Y \a\t g:i A T');
+
+$dbaName = 'Lets Fly Travel LLC DBA Base Fare';
+if ($acceptance) {
+    $fareBreakdown = $acceptance->fare_breakdown ?? [];
+    if (!empty($fareBreakdown) && isset($fareBreakdown[0]['label'])) {
+        if (trim($fareBreakdown[0]['label']) === 'Airline Tickets') {
+            $dbaName = 'Airline Tickets';
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Authorization Confirmed — Lets Fly Travel</title>
+<title>Authorization Confirmed | <?= htmlspecialchars($dbaName) ?></title>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap" rel="stylesheet"/>
 <style>
@@ -45,8 +55,7 @@ $approvedAt   = ($acceptance && $acceptance->approved_at) ? $acceptance->approve
 
 <div class="card">
   <div class="card-header">
-    <div class="logo-text">LETS FLY TRAVEL</div>
-    <div class="logo-sub">DBA BASE FARE</div>
+    <div class="logo-text"><?= htmlspecialchars(strtoupper($dbaName)) ?></div>
   </div>
   <div class="card-body">
     <div class="check-circle">
@@ -58,10 +67,12 @@ $approvedAt   = ($acceptance && $acceptance->approved_at) ? $acceptance->approve
     </p>
 
     <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
+      <?php if (!empty($acceptance->pnr)): ?>
       <div class="detail-row">
         <span class="detail-label">Booking Reference</span>
         <span class="detail-value" style="letter-spacing:2px;"><?= $pnr ?></span>
       </div>
+      <?php endif; ?>
       <div class="detail-row">
         <span class="detail-label">Authorization Type</span>
         <span class="detail-value" style="font-family:Inter,sans-serif; font-size:12px;"><?= $typeLabel ?></span>
@@ -80,7 +91,7 @@ $approvedAt   = ($acceptance && $acceptance->approved_at) ? $acceptance->approve
     </div>
 
     <div class="footer-note">
-      <strong style="color:#0f1e3c;">Lets Fly Travel DBA Base Fare</strong><br>
+      <strong style="color:#0f1e3c;"><?= htmlspecialchars($dbaName) ?></strong><br>
       This is an official confirmation of your digital authorization.<br>
       A copy has been saved with your digital signature and forensic data for security purposes.
     </div>

@@ -848,7 +848,7 @@ tailwind.config = {
             <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">Ticket Conditions</h2>
           </div>
           <div class="p-6 space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Endorsements</label>
                 <input type="text" name="endorsements" value="NON END/NON REF/NON RRT" placeholder="e.g. NON END/NON REF/NON RRT"
@@ -857,6 +857,11 @@ tailwind.config = {
               <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Baggage Info</label>
                 <input type="text" name="baggage_info" placeholder="e.g. 1PC 23KG checked, 7KG carry-on"
+                  class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Seat Number(s)</label>
+                <input type="text" id="field_seat_number" name="seat_number" placeholder="e.g. 12A, 14C"
                   class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
               </div>
             </div>
@@ -2186,6 +2191,9 @@ const formAssembly = {
 
     // 5. Extra data (type-specific fields: other, cancel_refund, cancel_credit)
     const extraData = {};
+    const seatNum = (document.getElementById('field_seat_number')?.value || '').trim();
+    if (seatNum) extraData.seat_number = seatNum;
+
     if (t === 'other') {
       extraData.other_title = (document.getElementById('field_other_title')?.value || '').trim();
       extraData.other_notes = (document.getElementById('field_other_notes')?.value || '').trim();
@@ -2313,6 +2321,13 @@ function setMode(mode) {
     const el = document.getElementById(id);
     if (el) el.style.display = (mode === 'full') ? '' : 'none';
   });
+
+  // Toggle PNR required
+  const pnrInput = document.getElementById('field_pnr');
+  if (pnrInput) {
+    if (mode === 'preauth') pnrInput.removeAttribute('required');
+    else pnrInput.setAttribute('required', 'required');
+  }
 
   // Show/hide preauth total box
   const preBox = document.getElementById('sec-preauth-total');

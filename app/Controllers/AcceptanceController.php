@@ -73,12 +73,17 @@ class AcceptanceController
         $params = $request->getQueryParams();
 
         // Pre-fill support: if opened from Transaction Recorder
+        $maxId = AcceptanceRequest::max('id') ?? 0;
+        $nextId = $maxId + 1;
+        $autoOrderId = 'BF-REC-' . str_pad($nextId, 5, '0', STR_PAD_LEFT);
+
         $prefill = [
             'transaction_id' => $params['transaction_id'] ?? null,
             'pnr'            => $params['pnr'] ?? '',
             'customer_name'  => $params['customer_name'] ?? '',
             'customer_email' => $params['customer_email'] ?? '',
             'type'           => $params['type'] ?? '',
+            'order_id'       => $params['order_id'] ?? $autoOrderId,
         ];
 
         // Pre-auth promotion: if ?from_preauth=ID, load the pre-auth record to pre-fill
@@ -127,7 +132,11 @@ class AcceptanceController
         $body    = $request->getParsedBody();
 
         // ── Validate required fields ───────────────────────────────────────
-        $required = ['type', 'customer_name', 'customer_email', 'pnr', 'total_amount'];
+        $required = ['type', 'customer_name', 'customer_email', 'total_amount'];
+        if (($body['is_preauth'] ?? '0') !== '1') {
+            $required[] = 'pnr';
+        }
+        
         foreach ($required as $field) {
             if (empty($body[$field])) {
                 $_SESSION['flash_error'] = "Missing required field: {$field}";

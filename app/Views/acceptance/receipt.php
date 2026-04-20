@@ -18,6 +18,14 @@ if (!isset($acceptance) || !$acceptance->isApproved()) {
 }
 
 $fareBreakdown   = $acceptance->fare_breakdown   ?? [];
+
+$dbaName = 'Lets Fly Travel LLC DBA Base Fare';
+if (!empty($fareBreakdown) && isset($fareBreakdown[0]['label'])) {
+    if (trim($fareBreakdown[0]['label']) === 'Airline Tickets') {
+        $dbaName = 'Airline Tickets';
+    }
+}
+
 $passengers      = $acceptance->passengers       ?? [];
 $flightData      = $acceptance->flight_data      ?? [];
 $additionalCards = $acceptance->additional_cards ?? [];
@@ -35,6 +43,7 @@ $ccEtktList   = $extraData['etkt_list']       ?? [];
 $ccInstructions = $extraData['instructions']  ?? null;
 $otherTitle   = $extraData['other_title']     ?? '';
 $otherNotes   = $extraData['other_notes']     ?? '';
+$seatNumber   = $extraData['seat_number']     ?? '';
 
 // Collect all segment groups
 $segGroups = [];
@@ -98,7 +107,7 @@ $approvedAt    = Carbon::parse($acceptance->approved_at);
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Receipt <?= rh($receiptNumber) ?> — <?= rh($acceptance->customer_name) ?> — Base Fare</title>
+<title>Receipt <?= rh($receiptNumber) ?> — <?= rh($acceptance->customer_name) ?> — <?= rh($dbaName) ?></title>
 <meta name="robots" content="noindex, nofollow"/>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <style>
@@ -358,8 +367,7 @@ body {
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
 
         <div>
-          <div class="brand-name">LETS FLY TRAVEL</div>
-          <div class="brand-dba">DBA Base Fare</div>
+          <div class="brand-name"><?= htmlspecialchars(strtoupper($dbaName)) ?></div>
         </div>
       </div>
       <div class="brand-sub">Authorized Travel Services &mdash; <?= rh(AcceptanceRequest::COMPANY_EMAIL) ?></div>
@@ -376,7 +384,7 @@ body {
     <div class="status-icon">✅</div>
     <div>
       <div class="status-text">Authorization Confirmed</div>
-      <div class="status-sub"><?= rh($acceptance->typeLabel()) ?> &mdash; PNR: <strong><?= rh($acceptance->pnr) ?></strong></div>
+      <div class="status-sub"><?= rh($acceptance->typeLabel()) ?><?= $acceptance->pnr ? ' &mdash; PNR: <strong>' . rh($acceptance->pnr) . '</strong>' : '' ?></div>
     </div>
     <div class="status-time">
       Signed: <?= $approvedAt->format('M j, Y') ?> at <?= $approvedAt->format('g:i:s A') ?> UTC
@@ -398,10 +406,12 @@ body {
           <div class="info-label">Email Address</div>
           <div class="info-value" style="font-size:12px;"><?= rh($acceptance->customer_email) ?></div>
         </div>
+        <?php if ($acceptance->pnr): ?>
         <div class="info-cell">
           <div class="info-label">PNR / Booking Ref</div>
           <div class="info-value mono"><?= rh($acceptance->pnr) ?></div>
         </div>
+        <?php endif; ?>
         <?php if ($acceptance->order_id): ?>
         <div class="info-cell">
           <div class="info-label">Order ID</div>
@@ -682,10 +692,10 @@ body {
     </div>
 
     <!-- ── TICKET CONDITIONS ── -->
-    <?php if ($acceptance->endorsements || $acceptance->baggage_info || $acceptance->fare_rules): ?>
+    <?php if ($acceptance->endorsements || $acceptance->baggage_info || $acceptance->fare_rules || $seatNumber): ?>
     <div class="section">
       <div class="section-title">Ticket Conditions</div>
-      <div class="info-grid" style="grid-template-columns:<?= ($acceptance->endorsements && $acceptance->baggage_info)?'1fr 1fr':'1fr'; ?>">
+      <div class="info-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
         <?php if ($acceptance->endorsements): ?>
         <div class="info-cell">
           <div class="info-label">Endorsements</div>
@@ -696,6 +706,12 @@ body {
         <div class="info-cell">
           <div class="info-label">Baggage Allowance</div>
           <div class="info-value" style="font-size:12px;"><?= rh($acceptance->baggage_info) ?></div>
+        </div>
+        <?php endif; ?>
+        <?php if ($seatNumber): ?>
+        <div class="info-cell">
+          <div class="info-label">Seat Number(s)</div>
+          <div class="info-value" style="font-size:12px; font-weight: 700;"><?= rh($seatNumber) ?></div>
         </div>
         <?php endif; ?>
       </div>
@@ -843,7 +859,7 @@ body {
   <!-- ── FOOTER ── -->
   <div class="receipt-footer">
     <div>
-      <span class="brand">Lets Fly Travel DBA Base Fare</span><br>
+      <span class="brand"><?= htmlspecialchars($dbaName) ?></span><br>
       <?= rh(AcceptanceRequest::COMPANY_EMAIL) ?> | Receipt: <strong><?= rh($receiptNumber) ?></strong>
     </div>
     <div style="text-align:right;">

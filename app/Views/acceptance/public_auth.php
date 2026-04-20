@@ -31,6 +31,14 @@ $descriptor    = htmlspecialchars($acceptance->statement_descriptor ?? '');
 $passengers    = $acceptance->passengers ?? [];
 $flightData    = $acceptance->flight_data ?? [];
 $fareBreakdown = $acceptance->fare_breakdown ?? [];
+
+$dbaName = 'Lets Fly Travel LLC DBA Base Fare';
+if (!empty($fareBreakdown) && isset($fareBreakdown[0]['label'])) {
+    if (trim($fareBreakdown[0]['label']) === 'Airline Tickets') {
+        $dbaName = 'Airline Tickets';
+    }
+}
+
 $companyName   = AcceptanceRequest::COMPANY_NAME;
 // Derive airline from stored field or auto-detect from first flight segment
 $airlineRaw = trim($acceptance->airline ?? '');
@@ -81,6 +89,8 @@ $ccCreditAmt   = $extraData['credit_amount']   ?? null;
 $ccValidUntil  = $extraData['valid_until']     ?? null;
 $ccInstructions= $extraData['instructions']    ?? null;
 $ccEtktList    = $extraData['etkt_list']       ?? [];
+$seatNumber    = $extraData['seat_number']     ?? '';
+$baggageInfo   = $acceptance->baggage_info     ?? '';
 $isPreauth     = (bool)($acceptance->is_preauth ?? false);
 
 // Status checks
@@ -97,7 +107,7 @@ $error = $_GET['error'] ?? null;
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Authorization — <?= $pnr ?> | Lets Fly Travel</title>
+<title>Authorization<?= $pnr ? ' — ' . $pnr : '' ?> | <?= htmlspecialchars($dbaName) ?></title>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap" rel="stylesheet"/>
 <style>
@@ -166,8 +176,8 @@ $error = $_GET['error'] ?? null;
   <!-- Header Card -->
   <div class="card">
     <div class="header">
-      <div class="logo">LETS FLY TRAVEL</div>
-      <div class="dba">DBA BASE FARE</div>
+      <div class="logo"><?= htmlspecialchars(strtoupper($dbaName)) ?></div>
+
       <?php if ($airline): ?>
       <div style="margin-top:12px; display:flex; align-items:center; justify-content:center; gap:10px;">
         <?php
@@ -237,10 +247,14 @@ $error = $_GET['error'] ?? null;
     <?php else: ?>
       <!-- ACTIONABLE FORM -->
       <div class="pnr-bar">
+        <?php if ($pnr): ?>
         <div>
           <div class="label">Booking Reference (PNR)</div>
           <div class="value"><?= $pnr ?></div>
         </div>
+        <?php else: ?>
+        <div></div>
+        <?php endif; ?>
         <?php if ($expiryLabel): ?>
           <span class="expiry-badge">
             <span class="material-symbols-outlined" style="font-size:14px;">schedule</span>
@@ -499,11 +513,21 @@ $error = $_GET['error'] ?? null;
         </div>
         <?php endif; ?>
 
-        <!-- Endorsements -->
-        <?php if ($endorsements): ?>
+        <!-- Ticket Conditions: Endorsements, Baggage, Seats -->
+        <?php if ($endorsements || $baggageInfo || $seatNumber): ?>
         <div class="section">
-          <div class="section-title">Endorsements / Restrictions</div>
-          <p style="font-size:13px; color:#dc2626; font-weight:700; font-family:monospace;"><?= $endorsements ?></p>
+          <div class="section-title">Ticket Conditions</div>
+          <table class="fare-table">
+            <?php if ($baggageInfo): ?>
+            <tr><td class="label">Baggage Info</td><td class="amt" style="font-family:Inter,sans-serif; text-align:right; font-weight:600; color:#1e293b;"><?= htmlspecialchars($baggageInfo) ?></td></tr>
+            <?php endif; ?>
+            <?php if ($seatNumber): ?>
+            <tr><td class="label">Seat Number(s)</td><td class="amt" style="font-family:Inter,sans-serif; text-align:right; font-weight:600; color:#1e293b;"><?= htmlspecialchars($seatNumber) ?></td></tr>
+            <?php endif; ?>
+            <?php if ($endorsements): ?>
+            <tr><td class="label">Endorsements</td><td class="amt" style="color:#dc2626; font-family:monospace; text-align:right;"><?= $endorsements ?></td></tr>
+            <?php endif; ?>
+          </table>
         </div>
         <?php endif; ?>
 
@@ -593,7 +617,7 @@ $error = $_GET['error'] ?? null;
 
   <!-- Footer -->
   <div class="footer">
-    <strong style="color:#0f1e3c;">Lets Fly Travel DBA Base Fare</strong><br>
+    <strong style="color:#0f1e3c;"><?= htmlspecialchars($dbaName) ?></strong><br>
     Authorized Travel Services · This is an official payment authorization document.<br>
     Do not share this link. &copy; <?= date('Y') ?> All rights reserved.
   </div>
