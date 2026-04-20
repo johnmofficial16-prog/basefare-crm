@@ -245,8 +245,8 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8')
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<title>Authorization Request — Lets Fly Travel DBA Base Fare</title>
-<meta name="description" content="Secure customer authorization portal for Lets Fly Travel DBA Base Fare."/>
+<title>Authorization Request — Lets Fly Travel LLC DBA Base Fare</title>
+<meta name="description" content="Secure customer authorization portal for Lets Fly Travel LLC DBA Base Fare."/>
 <meta name="robots" content="noindex, nofollow"/>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap" rel="stylesheet"/>
@@ -925,8 +925,7 @@ tailwind.config = {
             <div class="px-4 pb-4">
               <?php
                 $rawPolicy = $acceptance->policy_text ?? '';
-                $dynamicPolicy = str_ireplace('Lets Fly Travel DBA Base Fare', $dbaName, $rawPolicy);
-                $dynamicPolicy = str_ireplace('Lets Fly Travel LLC DBA Base Fare', $dbaName, $dynamicPolicy);
+                $dynamicPolicy = str_ireplace(['Lets Fly Travel LLC DBA Base Fare', 'Lets Fly Travel DBA Base Fare'], $dbaName, $rawPolicy);
               ?>
               <pre class="text-[10px] text-slate-500 whitespace-pre-wrap font-sans leading-relaxed"><?= h($dynamicPolicy) ?></pre>
             </div>

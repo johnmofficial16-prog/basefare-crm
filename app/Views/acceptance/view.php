@@ -32,6 +32,15 @@ $statusCfg = match($acceptance->status) {
 // Flight data helpers
 $flightData   = $acceptance->flight_data   ?? [];
 $fareBreakdown= $acceptance->fare_breakdown ?? [];
+// Extract DBA Name dynamically from fare breakdown
+$dbaName = 'Lets Fly Travel LLC DBA Base Fare';
+if (!empty($fareBreakdown) && is_array($fareBreakdown)) {
+    $firstItem = reset($fareBreakdown);
+    if ($firstItem && isset($firstItem['label']) && strtolower(trim($firstItem['label'])) === 'airline tickets') {
+        $dbaName = 'Airline Tickets';
+    }
+}
+
 $passengers   = $acceptance->passengers    ?? [];
 $additionalCards = $acceptance->additional_cards ?? [];
 
@@ -711,7 +720,7 @@ tailwind.config = {
           <?php if ($acceptance->fare_rules): ?>
           <div>
             <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fare Rules</p>
-            <p class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed"><?= htmlspecialchars($acceptance->fare_rules) ?></p>
+            <p class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed"><?= htmlspecialchars(str_ireplace(['Lets Fly Travel LLC DBA Base Fare', 'Lets Fly Travel DBA Base Fare'], $dbaName, $acceptance->fare_rules)) ?></p>
           </div>
           <?php endif; ?>
         </div>
@@ -921,7 +930,7 @@ tailwind.config = {
           <h2 class="font-bold text-slate-900 text-sm" style="font-family:Manrope,sans-serif;">Authorization Policy (Customer Agreed To)</h2>
         </div>
         <div class="p-5">
-          <pre class="text-[11px] text-slate-600 whitespace-pre-wrap font-sans leading-relaxed"><?= htmlspecialchars($acceptance->policy_text) ?></pre>
+          <pre class="text-[11px] text-slate-600 whitespace-pre-wrap font-sans leading-relaxed"><?= htmlspecialchars(str_ireplace(['Lets Fly Travel LLC DBA Base Fare', 'Lets Fly Travel DBA Base Fare'], $dbaName, $acceptance->policy_text)) ?></pre>
         </div>
       </div>
       <?php endif; ?>

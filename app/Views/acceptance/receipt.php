@@ -840,7 +840,7 @@ body {
     <?php if ($acceptance->policy_text): ?>
     <div class="section">
       <div class="section-title">Authorization Policy (Customer Agreed To)</div>
-      <div class="policy-text"><?= rh($acceptance->policy_text) ?></div>
+      <div class="policy-text"><?= rh(str_ireplace(['Lets Fly Travel LLC DBA Base Fare', 'Lets Fly Travel DBA Base Fare'], $dbaName, $acceptance->policy_text)) ?></div>
     </div>
     <?php endif; ?>
 

@@ -40,7 +40,7 @@ if (!empty($fareBreakdown) && is_array($fareBreakdown)) {
 }
 
 $rawPolicy = $acceptance->policy_text ?? '';
-$policyText = nl2br(htmlspecialchars(str_replace('Lets Fly Travel DBA Base Fare', $dbaName, $rawPolicy)));
+$policyText = nl2br(htmlspecialchars(str_ireplace(['Lets Fly Travel LLC DBA Base Fare', 'Lets Fly Travel DBA Base Fare'], $dbaName, $rawPolicy)));
 
 $companyName   = $dbaName;
 // Derive airline from stored field or auto-detect from first flight segment
