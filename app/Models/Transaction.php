@@ -89,6 +89,20 @@ class Transaction extends Model
     const PAYMENT_CREDITED = 'credited';
 
     // =========================================================================
+    // Dispute status constants
+    // =========================================================================
+    const DISPUTE_OPENED     = 'dispute_opened';
+    const DISPUTE_CHARGEBACK = 'chargeback_received';
+    const DISPUTE_REFUNDED   = 'refunded_dispute';
+    const DISPUTE_RESOLVED   = 'resolved';
+
+    // =========================================================================
+    // Gateway status constants
+    // =========================================================================
+    const GATEWAY_SUCCESS  = 'charge_successful';
+    const GATEWAY_DECLINED = 'charge_declined';
+
+    // =========================================================================
     // Fillable fields
     // =========================================================================
     protected $fillable = [
@@ -120,6 +134,14 @@ class Transaction extends Model
         'checkin_completed',
         'proof_of_sale_path',
         'agent_notes',
+        'dispute_status',
+        'dispute_notes',
+        'dispute_flagged_at',
+        'dispute_flagged_by',
+        'gateway_status',
+        'gateway_transaction_id',
+        'gateway_actioned_at',
+        'gateway_actioned_by',
     ];
 
     // =========================================================================
@@ -226,6 +248,11 @@ class Transaction extends Model
         return $this->status === self::STATUS_VOIDED;
     }
 
+    public function hasDispute(): bool
+    {
+        return !empty($this->dispute_status) && $this->dispute_status !== self::DISPUTE_RESOLVED;
+    }
+
     // =========================================================================
     // Display helpers
     // =========================================================================
@@ -269,6 +296,32 @@ class Transaction extends Model
     /**
      * Status badge configuration [label, color classes].
      */
+    /**
+     * Dispute status badge configuration [label, color classes].
+     */
+    public function disputeBadge(): array
+    {
+        return match ($this->dispute_status) {
+            self::DISPUTE_OPENED     => ['⚠ Dispute Opened',     'bg-orange-100 text-orange-800'],
+            self::DISPUTE_CHARGEBACK => ['🔴 Chargeback Received', 'bg-red-100 text-red-800'],
+            self::DISPUTE_REFUNDED   => ['↩ Refunded (Dispute)',  'bg-rose-100 text-rose-800'],
+            self::DISPUTE_RESOLVED   => ['✓ Resolved',            'bg-emerald-100 text-emerald-800'],
+            default                  => ['No Dispute',            'bg-slate-100 text-slate-500'],
+        };
+    }
+
+    /**
+     * Gateway status badge configuration [label, color classes].
+     */
+    public function gatewayBadge(): array
+    {
+        return match ($this->gateway_status) {
+            self::GATEWAY_SUCCESS  => ['✓ Charge Successful', 'bg-emerald-100 text-emerald-800'],
+            self::GATEWAY_DECLINED => ['✗ Charge Declined',   'bg-red-100 text-red-800'],
+            default                => ['Pending Gateway',     'bg-slate-100 text-slate-500'],
+        };
+    }
+
     public function statusBadge(): array
     {
         return match ($this->status) {

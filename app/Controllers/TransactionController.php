@@ -427,10 +427,117 @@ class TransactionController
     }
 
     // =========================================================================
+    // UPDATE DISPUTE  —  POST /transactions/{id}/dispute  (Admin/Manager only)
+    // =========================================================================
+
+    public function updateDispute(Request $request, Response $response, array $args): Response
+    {
+        $userId   = (int)$_SESSION['user_id'];
+        $userRole = $_SESSION['role'] ?? 'agent';
+
+        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            return $this->jsonResponse($response, ['error' => 'Admin access required.'], 403);
+        }
+
+        $id            = (int)($args['id'] ?? 0);
+        $body          = (array)$request->getParsedBody();
+        $disputeStatus = trim($body['dispute_status'] ?? '');
+        $disputeNotes  = trim($body['dispute_notes'] ?? '');
+
+        $allowed = [
+            Transaction::DISPUTE_OPENED,
+            Transaction::DISPUTE_CHARGEBACK,
+            Transaction::DISPUTE_REFUNDED,
+            Transaction::DISPUTE_RESOLVED,
+        ];
+
+        if (!in_array($disputeStatus, $allowed)) {
+            return $this->jsonResponse($response, ['error' => 'Invalid dispute status.'], 422);
+        }
+
+        $txn = Transaction::find($id);
+        if (!$txn) {
+            return $this->jsonResponse($response, ['error' => 'Transaction not found.'], 404);
+        }
+
+        $txn->dispute_status     = $disputeStatus;
+        $txn->dispute_notes      = $disputeNotes ?: null;
+        $txn->dispute_flagged_at = date('Y-m-d H:i:s');
+        $txn->dispute_flagged_by = $userId;
+        $txn->save();
+
+        $noteText = "[Dispute] Status changed to: {$disputeStatus}";
+        if ($disputeNotes) { $noteText .= " — Notes: {$disputeNotes}"; }
+        \App\Models\RecordNote::log('transaction', $id, $userId, $noteText, 'dispute');
+
+        [$label, $class] = $txn->disputeBadge();
+
+        return $this->jsonResponse($response, [
+            'success'        => true,
+            'dispute_status' => $disputeStatus,
+            'label'          => $label,
+            'class'          => $class,
+        ]);
+    }
+
+    // =========================================================================
+    // UPDATE GATEWAY  —  POST /transactions/{id}/gateway  (Admin/Manager only)
+    // =========================================================================
+
+    public function updateGateway(Request $request, Response $response, array $args): Response
+    {
+        $userId   = (int)$_SESSION['user_id'];
+        $userRole = $_SESSION['role'] ?? 'agent';
+
+        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            return $this->jsonResponse($response, ['error' => 'Admin access required.'], 403);
+        }
+
+        $id            = (int)($args['id'] ?? 0);
+        $body          = (array)$request->getParsedBody();
+        $gatewayStatus = trim($body['gateway_status'] ?? '');
+        $gatewayTxnId  = trim($body['gateway_transaction_id'] ?? '');
+
+        if (!in_array($gatewayStatus, [Transaction::GATEWAY_SUCCESS, Transaction::GATEWAY_DECLINED])) {
+            return $this->jsonResponse($response, ['error' => 'Invalid gateway status.'], 422);
+        }
+
+        if ($gatewayStatus === Transaction::GATEWAY_SUCCESS && empty($gatewayTxnId)) {
+            return $this->jsonResponse($response, ['error' => 'Gateway Transaction ID is required when charge is successful.'], 422);
+        }
+
+        $txn = Transaction::find($id);
+        if (!$txn) {
+            return $this->jsonResponse($response, ['error' => 'Transaction not found.'], 404);
+        }
+
+        $txn->gateway_status         = $gatewayStatus;
+        $txn->gateway_transaction_id = ($gatewayStatus === Transaction::GATEWAY_SUCCESS) ? $gatewayTxnId : null;
+        $txn->gateway_actioned_at    = date('Y-m-d H:i:s');
+        $txn->gateway_actioned_by    = $userId;
+        $txn->save();
+
+        $noteText = "[Gateway] Charge marked as: {$gatewayStatus}";
+        if (!empty($gatewayTxnId)) { $noteText .= " — Gateway Txn ID: {$gatewayTxnId}"; }
+        \App\Models\RecordNote::log('transaction', $id, $userId, $noteText, 'gateway');
+
+        [$label, $class] = $txn->gatewayBadge();
+
+        return $this->jsonResponse($response, [
+            'success'                => true,
+            'gateway_status'         => $gatewayStatus,
+            'gateway_transaction_id' => $txn->gateway_transaction_id,
+            'label'                  => $label,
+            'class'                  => $class,
+        ]);
+    }
+
+    // =========================================================================
     // AUTOFILL OPTIONS  —  GET /transactions/autofill-options  (AJAX)
     // =========================================================================
 
     public function autofillOptions(Request $request, Response $response): Response
+
     {
         $userId   = $_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';

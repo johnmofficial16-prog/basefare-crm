@@ -194,10 +194,24 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             </td>
           </tr>
           <?php else: ?>
-          <?php foreach ($items as $t): ?>
-          <?php [$statusLabel, $statusClass] = $t->statusBadge(); ?>
-          <tr class="hover:bg-slate-50/50 cursor-pointer transition-colors" onclick="window.location='/transactions/<?= $t->id ?>'">
-            <td class="px-4 py-3 font-mono text-xs font-bold text-primary">#<?= $t->id ?></td>
+          <?php
+            // Split: disputed (active) records float to top for agents/supervisors
+            $disputed = $items->filter(fn($t) => $t->hasDispute());
+            $normal   = $items->reject(fn($t)  => $t->hasDispute());
+            $renderRows = function($list, $isAdmin, $isSearchingAll, $disputed_highlight) use ($txn) {
+              foreach ($list as $t):
+                [$statusLabel, $statusClass] = $t->statusBadge();
+                $rowClass = $disputed_highlight && $t->hasDispute()
+                  ? 'bg-red-50 hover:bg-red-100/70 border-l-4 border-l-red-400 cursor-pointer transition-colors'
+                  : 'hover:bg-slate-50/50 cursor-pointer transition-colors';
+          ?>
+          <tr class="<?= $rowClass ?>" onclick="window.location='/transactions/<?= $t->id ?>'">
+            <td class="px-4 py-3 font-mono text-xs font-bold text-primary">
+              #<?= $t->id ?>
+              <?php if ($t->hasDispute()): ?>
+              <span class="ml-1 inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" title="Active Dispute"></span>
+              <?php endif; ?>
+            </td>
             <td class="px-4 py-3">
               <span class="inline-block px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 text-slate-700">
                 <?= $t->typeBadge() ?>
@@ -225,14 +239,32 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               <span class="inline-block px-2.5 py-1 text-[10px] font-bold rounded-full <?= $statusClass ?>">
                 <?= $statusLabel ?>
               </span>
+              <?php if ($t->hasDispute()): ?>
+              <?php [$dl, $dc] = $t->disputeBadge(); ?>
+              <span class="ml-1 inline-block px-2 py-0.5 text-[10px] font-bold rounded-full <?= $dc ?>"><?= htmlspecialchars($dl) ?></span>
+              <?php endif; ?>
             </td>
             <?php if ($isAdmin || $isSearchingAll): ?>
             <td class="px-4 py-3 text-xs text-slate-500"><?= htmlspecialchars($t->agent->name ?? '—') ?></td>
             <?php endif; ?>
             <td class="px-4 py-3 text-xs text-slate-400"><?= date('M d, Y g:i A', strtotime($t->created_at)) ?></td>
           </tr>
-          <?php endforeach; ?>
-
+          <?php endforeach; };
+          // Disputed first (only for non-admin agents/supervisors who own the record)
+          if (!$isAdmin && $disputed->isNotEmpty()):
+          ?>
+          <tr><td colspan="<?= $isAdmin ? 10 : 9 ?>" class="px-4 pt-3 pb-1">
+            <p class="text-[10px] font-bold text-red-600 uppercase tracking-wider flex items-center gap-1">
+              <span class="material-symbols-outlined text-sm">warning</span> Action Required — Active Disputes
+            </p>
+          </td></tr>
+          <?php $renderRows($disputed, $isAdmin, $isSearchingAll, true); ?>
+          <tr><td colspan="<?= $isAdmin ? 10 : 9 ?>" class="px-4 pt-1 pb-2">
+            <hr class="border-slate-200">
+          </td></tr>
+          <?php endif; ?>
+          <?php $renderRows($normal, $isAdmin, $isSearchingAll, $isAdmin); ?>
+          <?php $renderRows($disputed, $isAdmin, $isSearchingAll, true); // admins see disputed inline ?>
           <?php endif; ?>
         </tbody>
       </table>

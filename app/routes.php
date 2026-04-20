@@ -145,6 +145,10 @@ $app->group('/transactions', function ($group) {
     // Void — manager + admin only (enforced in controller)
     $group->post('/{id:[0-9]+}/void',    [TransactionController::class, 'void']);
 
+    // Dispute & Gateway — admin/manager only (enforced in controller)
+    $group->post('/{id:[0-9]+}/dispute', [TransactionController::class, 'updateDispute']);
+    $group->post('/{id:[0-9]+}/gateway', [TransactionController::class, 'updateGateway']);
+
     // Add note — all authenticated users
     $group->post('/{id:[0-9]+}/note',    [TransactionController::class, 'addNote']);
 })

@@ -92,6 +92,11 @@ $canApprove = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::R
               && $txn->status === Transaction::STATUS_PENDING;
 $canVoid    = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])
               && !$txn->isVoided();
+$isAdminOnly = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
+
+// Dispute & gateway display data
+[$disputeLabel, $disputeClass] = $txn->disputeBadge();
+[$gatewayLabel, $gatewayClass] = $txn->gatewayBadge();
 ?>
 <!DOCTYPE html>
 <html class="light" lang="en">
@@ -678,9 +683,104 @@ $notePostUrl   = '/transactions/' . $txn->id . '/note';
 $recordId      = $txn->id;
 $currentUserId = $_SESSION['user_id'] ?? 0;
 $currentRole   = $_SESSION['role'] ?? 'agent';
-require __DIR__ . '/../partials/notes_panel.php';
 ?>
+
+<?php if ($txn->hasDispute()): ?>
+<div class="mx-8 mb-4 px-5 py-4 bg-red-50 border border-red-300 rounded-xl flex items-start gap-3 shadow-sm">
+  <span class="material-symbols-outlined text-red-600 text-2xl mt-0.5">warning</span>
+  <div class="flex-1">
+    <p class="font-bold text-red-800 text-sm">Dispute / Chargeback Alert</p>
+    <p class="text-xs text-red-700 mt-0.5">
+      Status: <span class="font-semibold"><?= htmlspecialchars($disputeLabel) ?></span>
+      <?php if (!empty($txn->dispute_notes)): ?>
+        — <?= htmlspecialchars($txn->dispute_notes) ?>
+      <?php endif; ?>
+    </p>
+  </div>
+  <span class="inline-block px-2.5 py-1 text-[10px] font-bold rounded-full <?= $disputeClass ?>"><?= htmlspecialchars($disputeLabel) ?></span>
+</div>
+<?php endif; ?>
+
+<?php if ($isAdminOnly): ?>
+<div class="mx-8 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+  <!-- ── DISPUTE / CHARGEBACK PANEL ── -->
+  <div id="dispute-panel" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-5 py-3 border-b border-slate-100 bg-red-50/60 flex items-center justify-between">
+      <h2 class="font-bold text-slate-900 text-sm flex items-center gap-1.5" style="font-family:Manrope">
+        <span class="material-symbols-outlined text-base text-red-600">gavel</span> Dispute &amp; Chargeback
+      </h2>
+      <span id="dispute-badge" class="inline-block px-2.5 py-1 text-[10px] font-bold rounded-full <?= $disputeClass ?>">
+        <?= htmlspecialchars($disputeLabel) ?>
+      </span>
+    </div>
+    <div class="p-5 space-y-3">
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Dispute Status</label>
+        <select id="dispute_status_sel" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-red-400">
+          <option value="dispute_opened"     <?= $txn->dispute_status === 'dispute_opened'     ? 'selected' : '' ?>>⚠ Dispute Opened</option>
+          <option value="chargeback_received" <?= $txn->dispute_status === 'chargeback_received' ? 'selected' : '' ?>>🔴 Chargeback Received</option>
+          <option value="refunded_dispute"   <?= $txn->dispute_status === 'refunded_dispute'   ? 'selected' : '' ?>>↩ Refunded (Dispute)</option>
+          <option value="resolved"           <?= $txn->dispute_status === 'resolved'           ? 'selected' : '' ?>>✓ Resolved</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Admin Notes</label>
+        <textarea id="dispute_notes_txt" rows="3" placeholder="Describe the dispute or resolution…"
+          class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 resize-none focus:ring-2 focus:ring-red-400"><?= htmlspecialchars($txn->dispute_notes ?? '') ?></textarea>
+      </div>
+      <button onclick="saveDispute()" class="w-full py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-base">save</span> Save Dispute Status
+      </button>
+      <p id="dispute-msg" class="text-xs text-center hidden"></p>
+      <?php if ($txn->dispute_flagged_at): ?>
+      <p class="text-[10px] text-slate-400 text-center">Last updated: <?= date('M d, Y g:i A', strtotime($txn->dispute_flagged_at)) ?></p>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <!-- ── PAYMENT GATEWAY PANEL ── -->
+  <div id="gateway-panel" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-5 py-3 border-b border-slate-100 bg-emerald-50/60 flex items-center justify-between">
+      <h2 class="font-bold text-slate-900 text-sm flex items-center gap-1.5" style="font-family:Manrope">
+        <span class="material-symbols-outlined text-base text-emerald-600">credit_card</span> Payment Gateway
+      </h2>
+      <span id="gateway-badge" class="inline-block px-2.5 py-1 text-[10px] font-bold rounded-full <?= $gatewayClass ?>">
+        <?= htmlspecialchars($gatewayLabel) ?>
+      </span>
+    </div>
+    <div class="p-5 space-y-3">
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Gateway Result</label>
+        <select id="gateway_status_sel" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-emerald-400" onchange="toggleGatewayTxnId()">
+          <option value="charge_successful" <?= $txn->gateway_status === 'charge_successful' ? 'selected' : '' ?>>✓ Charge Successful</option>
+          <option value="charge_declined"   <?= $txn->gateway_status === 'charge_declined'   ? 'selected' : '' ?>>✗ Charge Declined</option>
+        </select>
+      </div>
+      <div id="gateway-txnid-wrap">
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Gateway Transaction ID <span class="text-rose-500">*</span></label>
+        <input type="text" id="gateway_transaction_id_inp"
+          value="<?= htmlspecialchars($txn->gateway_transaction_id ?? '') ?>"
+          placeholder="e.g. ch_1ABC2DEF3GHI…"
+          class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono bg-slate-50 focus:ring-2 focus:ring-emerald-400">
+        <p class="text-[10px] text-slate-400 mt-1">Required when charge is successful</p>
+      </div>
+      <button onclick="saveGateway()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-base">save</span> Save Gateway Status
+      </button>
+      <p id="gateway-msg" class="text-xs text-center hidden"></p>
+      <?php if ($txn->gateway_actioned_at): ?>
+      <p class="text-[10px] text-slate-400 text-center">Last updated: <?= date('M d, Y g:i A', strtotime($txn->gateway_actioned_at)) ?></p>
+      <?php endif; ?>
+    </div>
+  </div>
+
+</div>
+<?php endif; ?>
+
+<?php require __DIR__ . '/../partials/notes_panel.php'; ?>
 </main>
+
 
 
 <!-- ── VOID MODAL ────────────────────────────────────────────────────────── -->
@@ -773,6 +873,73 @@ function _showCard(cardId) {
   document.getElementById('eye-icon-' + cardId).textContent = 'visibility_off';
   c.revealed = true;
 }
+
+// ── Dispute Panel ─────────────────────────────────────────────────────────
+function saveDispute() {
+  const status = document.getElementById('dispute_status_sel').value;
+  const notes  = document.getElementById('dispute_notes_txt').value;
+  const msg    = document.getElementById('dispute-msg');
+  msg.className = 'text-xs text-center text-slate-400'; msg.textContent = 'Saving…'; msg.classList.remove('hidden');
+  fetch('/transactions/<?= $txn->id ?>/dispute', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'dispute_status=' + encodeURIComponent(status) + '&dispute_notes=' + encodeURIComponent(notes)
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.success) {
+      const badge = document.getElementById('dispute-badge');
+      badge.textContent = res.label;
+      badge.className = 'inline-block px-2.5 py-1 text-[10px] font-bold rounded-full ' + res.class;
+      msg.className = 'text-xs text-center text-emerald-600'; msg.textContent = '✓ Saved successfully';
+      // Update alert banner if exists
+      const banner = document.querySelector('.dispute-banner-label');
+      if (banner) banner.textContent = res.label;
+    } else {
+      msg.className = 'text-xs text-center text-red-600'; msg.textContent = res.error || 'Error saving.';
+    }
+  })
+  .catch(() => { msg.className = 'text-xs text-center text-red-600'; msg.textContent = 'Network error.'; });
+}
+
+// ── Gateway Panel ─────────────────────────────────────────────────────────
+function toggleGatewayTxnId() {
+  const status = document.getElementById('gateway_status_sel').value;
+  const wrap   = document.getElementById('gateway-txnid-wrap');
+  wrap.style.display = (status === 'charge_successful') ? '' : 'none';
+}
+
+function saveGateway() {
+  const status = document.getElementById('gateway_status_sel').value;
+  const txnId  = document.getElementById('gateway_transaction_id_inp').value.trim();
+  const msg    = document.getElementById('gateway-msg');
+  if (status === 'charge_successful' && !txnId) {
+    msg.className = 'text-xs text-center text-red-600'; msg.textContent = 'Gateway Transaction ID is required.'; msg.classList.remove('hidden'); return;
+  }
+  msg.className = 'text-xs text-center text-slate-400'; msg.textContent = 'Saving…'; msg.classList.remove('hidden');
+  fetch('/transactions/<?= $txn->id ?>/gateway', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'gateway_status=' + encodeURIComponent(status) + '&gateway_transaction_id=' + encodeURIComponent(txnId)
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.success) {
+      const badge = document.getElementById('gateway-badge');
+      badge.textContent = res.label;
+      badge.className = 'inline-block px-2.5 py-1 text-[10px] font-bold rounded-full ' + res.class;
+      msg.className = 'text-xs text-center text-emerald-600'; msg.textContent = '✓ Saved successfully';
+    } else {
+      msg.className = 'text-xs text-center text-red-600'; msg.textContent = res.error || 'Error saving.';
+    }
+  })
+  .catch(() => { msg.className = 'text-xs text-center text-red-600'; msg.textContent = 'Network error.'; });
+}
+
+// ── Init gateway panel visibility ─────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  if (document.getElementById('gateway_status_sel')) toggleGatewayTxnId();
+});
 </script>
 </body>
 </html>
