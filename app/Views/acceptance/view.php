@@ -191,11 +191,6 @@ tailwind.config = {
         class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors shadow-sm">
         <span class="material-symbols-outlined text-base">upgrade</span> Create Full Acceptance
       </a>
-      <?php else: ?>
-      <a href="/transactions/create?autofill=<?= $acceptance->id ?>"
-        class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors shadow-sm">
-        <span class="material-symbols-outlined text-base">add_card</span> Record Transaction
-      </a>
       <?php endif; ?>
       <?php endif; ?>
       <button onclick="window.print()"
