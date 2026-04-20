@@ -320,7 +320,7 @@ tailwind.config = {
           <div class="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5" for="field_pnr">
-                Booking Reference (PNR) <span class="text-rose-500">*</span>
+                Booking Reference (PNR) <span id="pnr_asterisk" class="text-rose-500">*</span>
               </label>
               <input type="text" name="pnr" id="field_pnr" required maxlength="10"
                      value="<?= $pre['pnr'] ?>" placeholder="e.g. ABCD12"
@@ -2324,9 +2324,15 @@ function setMode(mode) {
 
   // Toggle PNR required
   const pnrInput = document.getElementById('field_pnr');
+  const pnrAsterisk = document.getElementById('pnr_asterisk');
   if (pnrInput) {
-    if (mode === 'preauth') pnrInput.removeAttribute('required');
-    else pnrInput.setAttribute('required', 'required');
+    if (mode === 'preauth') {
+      pnrInput.removeAttribute('required');
+      if (pnrAsterisk) pnrAsterisk.style.display = 'none';
+    } else {
+      pnrInput.setAttribute('required', 'required');
+      if (pnrAsterisk) pnrAsterisk.style.display = 'inline';
+    }
   }
 
   // Show/hide preauth total box
