@@ -456,10 +456,20 @@ const fareMgr = {
     var totalEl = document.getElementById('field_total_amount');
     if (sum > 0 && totalEl) { totalEl.value = sum.toFixed(2); syncSummary(); }
 
-    // Auto-fill MCO with the first item's amount
+    // Auto-fill MCO with the first item's amount, applying gateway deduction
     var mcoEl = document.getElementById('field_profit_mco');
     if (mcoEl && state.fareItems.length > 0) {
-      mcoEl.value = (parseFloat(state.fareItems[0].amount) || 0).toFixed(2);
+      var primaryAmount = parseFloat(state.fareItems[0].amount) || 0;
+      var primaryLabel = state.fareItems[0].label;
+      var mcoAmount = primaryAmount;
+      
+      if (primaryLabel === 'Base Fare') {
+        mcoAmount = primaryAmount * 0.80; // Flat 20% deduction
+      } else if (primaryLabel === 'Airline Tickets') {
+        mcoAmount = primaryAmount * 0.75; // Flat 25% deduction
+      }
+      
+      mcoEl.value = mcoAmount.toFixed(2);
     }
   },
   _render: function() {
