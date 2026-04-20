@@ -883,7 +883,7 @@ function saveDispute() {
   fetch('/transactions/<?= $txn->id ?>/dispute', {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-    body: 'dispute_status=' + encodeURIComponent(status) + '&dispute_notes=' + encodeURIComponent(notes)
+    body: 'csrf_token=<?= htmlspecialchars($_SESSION["csrf_token"] ?? "") ?>&dispute_status=' + encodeURIComponent(status) + '&dispute_notes=' + encodeURIComponent(notes)
   })
   .then(r => r.json())
   .then(res => {
@@ -920,7 +920,7 @@ function saveGateway() {
   fetch('/transactions/<?= $txn->id ?>/gateway', {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-    body: 'gateway_status=' + encodeURIComponent(status) + '&gateway_transaction_id=' + encodeURIComponent(txnId)
+    body: 'csrf_token=<?= htmlspecialchars($_SESSION["csrf_token"] ?? "") ?>&gateway_status=' + encodeURIComponent(status) + '&gateway_transaction_id=' + encodeURIComponent(txnId)
   })
   .then(r => r.json())
   .then(res => {
