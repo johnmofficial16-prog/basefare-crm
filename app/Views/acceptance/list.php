@@ -316,15 +316,14 @@ tailwind.config = {
                   </a>
                   <?php endif; ?>
                   <?php else: ?>
+                  <a href="/acceptance/<?= $row->id ?>"
+                     class="inline-flex items-center gap-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors">
+                    <span class="material-symbols-outlined text-sm">visibility</span> View
+                  </a>
                   <?php if ($row->status === 'APPROVED'): ?>
                   <a href="/acceptance/<?= $row->id ?>/receipt" target="_blank"
                      class="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors">
                     <span class="material-symbols-outlined text-sm">receipt_long</span> Receipt
-                  </a>
-                  <?php else: ?>
-                  <a href="/acceptance/<?= $row->id ?>"
-                     class="inline-flex items-center gap-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors">
-                    <span class="material-symbols-outlined text-sm">visibility</span> View
                   </a>
                   <?php endif; ?>
 
