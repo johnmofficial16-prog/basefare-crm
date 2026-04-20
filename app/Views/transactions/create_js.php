@@ -624,18 +624,28 @@ function importAcceptance(id) {
         paxMgr._render();
       }
       
-      // Flights
-      var hasMain = d.flight_data && Array.isArray(d.flight_data.flights) && d.flight_data.flights.length > 0;
-      var hasOld = d.flight_data && Array.isArray(d.flight_data.old_flights) && d.flight_data.old_flights.length > 0;
+      function _objToArray(v) {
+        if (!v) return [];
+        if (Array.isArray(v)) return v;
+        if (typeof v === 'object') return Object.values(v);
+        return [];
+      }
+      
+      var mainFlights = _objToArray(d.flight_data ? d.flight_data.flights : null);
+      var oldFlights  = _objToArray(d.flight_data ? d.flight_data.old_flights : null);
+      var newFlights  = _objToArray(d.flight_data ? d.flight_data.new_flights : null);
+      
+      var hasMain = mainFlights.length > 0;
+      var hasOld = oldFlights.length > 0;
       
       var workingSegs = [];
       if (hasMain) {
-         state.segments.main = d.flight_data.flights.slice().map(function(s) { s._editing = false; return s; });
+         state.segments.main = mainFlights.map(function(s) { s._editing = false; return s; });
          workingSegs = state.segments.main;
          flightMgr._render('main');
       } else if (hasOld) {
-         state.segments.old = d.flight_data.old_flights.slice().map(function(s) { s._editing = false; return s; });
-         state.segments.new = d.flight_data.new_flights ? d.flight_data.new_flights.slice().map(function(s) { s._editing = false; return s; }) : [];
+         state.segments.old = oldFlights.map(function(s) { s._editing = false; return s; });
+         state.segments.new = newFlights.map(function(s) { s._editing = false; return s; });
          workingSegs = state.segments.old;
          flightMgr._render('old');
          flightMgr._render('new');

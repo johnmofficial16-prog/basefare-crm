@@ -1905,12 +1905,12 @@ const fareMgr = {
         const policyEl = document.getElementById('field_policy_text');
         if (policyEl) {
           let pt = policyEl.value;
-          const dbaOld = oldLabel === 'Airline Tickets' ? 'Airline Tickets' : 'Lets Fly Travel DBA Base Fare';
-          const dbaNew = newLabel === 'Airline Tickets' ? 'Airline Tickets' : 'Lets Fly Travel DBA Base Fare';
+          const dbaOld = oldLabel === 'Airline Tickets' ? 'Airline Tickets' : 'Lets Fly Travel LLC DBA Base Fare';
+          const dbaNew = newLabel === 'Airline Tickets' ? 'Airline Tickets' : 'Lets Fly Travel LLC DBA Base Fare';
           
           pt = pt.replace(new RegExp(dbaOld, 'gi'), dbaNew);
-          if (dbaOld === 'Lets Fly Travel DBA Base Fare') {
-            pt = pt.replace(new RegExp('Lets Fly Travel LLC DBA Base Fare', 'gi'), dbaNew);
+          if (dbaOld === 'Lets Fly Travel LLC DBA Base Fare') {
+            pt = pt.replace(new RegExp('Lets Fly Travel DBA Base Fare', 'gi'), dbaNew);
           }
           policyEl.value = pt;
         }
