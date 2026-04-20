@@ -1882,6 +1882,26 @@ const fareMgr = {
   },
   _updateItem(idx, field, val) {
     if (!state.fareItems[idx]) return;
+
+    if (idx === 0 && field === 'label') {
+      const oldLabel = state.fareItems[0].label;
+      const newLabel = val;
+      if (oldLabel !== newLabel) {
+        const policyEl = document.getElementById('field_policy_text');
+        if (policyEl) {
+          let pt = policyEl.value;
+          const dbaOld = oldLabel === 'Airline Tickets' ? 'Airline Tickets' : 'Lets Fly Travel DBA Base Fare';
+          const dbaNew = newLabel === 'Airline Tickets' ? 'Airline Tickets' : 'Lets Fly Travel DBA Base Fare';
+          
+          pt = pt.replace(new RegExp(dbaOld, 'gi'), dbaNew);
+          if (dbaOld === 'Lets Fly Travel DBA Base Fare') {
+            pt = pt.replace(new RegExp('Lets Fly Travel LLC DBA Base Fare', 'gi'), dbaNew);
+          }
+          policyEl.value = pt;
+        }
+      }
+    }
+
     state.fareItems[idx][field] = field === 'amount' ? (parseFloat(val) || 0) : val;
     this._recalc();
   },

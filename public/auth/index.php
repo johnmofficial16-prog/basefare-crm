@@ -163,6 +163,14 @@ $flightData    = $acceptance->flight_data   ?? [];
 $fareBreakdown = $acceptance->fare_breakdown ?? [];
 $passengers    = $acceptance->passengers    ?? [];
 
+$dbaName = AcceptanceRequest::COMPANY_NAME;
+if (!empty($fareBreakdown) && is_array($fareBreakdown)) {
+    $firstItem = reset($fareBreakdown);
+    if ($firstItem && isset($firstItem['label']) && strtolower(trim($firstItem['label'])) === 'airline tickets') {
+        $dbaName = 'Airline Tickets';
+    }
+}
+
 // Filter out empty/corrupt flight entries (segments with no from AND no to AND no flight_no)
 $filterSegs = fn($arr) => is_array($arr)
     ? array_values(array_filter($arr, fn($s) => !empty($s['from']) || !empty($s['to']) || !empty($s['flight_no'])))
@@ -325,7 +333,7 @@ tailwind.config = {
     </p>
     <div class="mt-6 p-3 bg-slate-50 rounded-xl inline-flex items-center gap-2">
       <span class="material-symbols-outlined text-sm text-slate-400">business</span>
-      <span class="text-xs text-slate-500 font-semibold"><?= h(AcceptanceRequest::COMPANY_NAME) ?></span>
+      <span class="text-xs text-slate-500 font-semibold"><?= h($dbaName) ?></span>
     </div>
   </div>
 </div>
@@ -341,7 +349,7 @@ tailwind.config = {
       <span class="material-symbols-outlined text-4xl text-emerald-600">verified</span>
     </div>
     <div class="mb-4">
-      <span class="text-xs font-bold text-slate-500"><?= h(AcceptanceRequest::COMPANY_NAME) ?></span>
+      <span class="text-xs font-bold text-slate-500"><?= h($dbaName) ?></span>
     </div>
     <?php if ($airlineDisplayName): ?>
     <div class="flex items-center justify-center gap-3 mb-1">
@@ -380,7 +388,7 @@ tailwind.config = {
     </div>
     <div class="mt-6 p-3 bg-slate-50 rounded-xl flex items-center justify-center gap-2">
       <span class="material-symbols-outlined text-sm text-slate-400">lock</span>
-      <span class="text-[11px] text-slate-400">Secured &amp; encrypted by <?= h(AcceptanceRequest::COMPANY_NAME) ?></span>
+      <span class="text-[11px] text-slate-400">Secured &amp; encrypted by <?= h($dbaName) ?></span>
     </div>
   </div>
 </div>
@@ -442,7 +450,7 @@ tailwind.config = {
     <!-- Row 1: Company name (left) + SSL badge (right), vertically centered -->
     <div class="flex items-center justify-between">
       <p class="text-white font-black text-sm leading-tight" style="font-family:Manrope,sans-serif;">
-        <?= h(AcceptanceRequest::COMPANY_NAME) ?>
+        <?= h($dbaName) ?>
       </p>
       <div class="security-badge flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-full px-3 py-1.5 flex-none">
         <span class="material-symbols-outlined text-emerald-400 text-sm">lock</span>
@@ -915,7 +923,12 @@ tailwind.config = {
               Authorization Policy — Tap to read
             </summary>
             <div class="px-4 pb-4">
-              <pre class="text-[10px] text-slate-500 whitespace-pre-wrap font-sans leading-relaxed"><?= h($acceptance->policy_text ?? '') ?></pre>
+              <?php
+                $rawPolicy = $acceptance->policy_text ?? '';
+                $dynamicPolicy = str_ireplace('Lets Fly Travel DBA Base Fare', $dbaName, $rawPolicy);
+                $dynamicPolicy = str_ireplace('Lets Fly Travel LLC DBA Base Fare', $dbaName, $dynamicPolicy);
+              ?>
+              <pre class="text-[10px] text-slate-500 whitespace-pre-wrap font-sans leading-relaxed"><?= h($dynamicPolicy) ?></pre>
             </div>
           </details>
 
@@ -950,7 +963,7 @@ tailwind.config = {
             <div>
               <p class="text-sm font-bold text-primary-900 leading-tight">I confirm I have read, understood, and agree to the above authorization policy.</p>
               <p class="text-xs text-primary-600 mt-0.5 leading-relaxed">
-                By checking and signing, I authorize <strong><?= h(AcceptanceRequest::COMPANY_NAME) ?></strong> to charge
+                By checking and signing, I authorize <strong><?= h($dbaName) ?></strong> to charge
                 <strong><?= h($acceptance->currency) ?> <?= number_format($acceptance->total_amount, 2) ?></strong>
                 to my <?= h($acceptance->card_type) ?> card ending in <?= h($acceptance->card_last_four) ?>.
               </p>
@@ -984,7 +997,7 @@ tailwind.config = {
         <!-- Footer -->
         <div class="text-center pt-2">
           <p class="text-[10px] text-slate-400">
-            <?= h(AcceptanceRequest::COMPANY_NAME) ?> &mdash;
+            <?= h($dbaName) ?> &mdash;
             <a href="mailto:<?= h(AcceptanceRequest::COMPANY_EMAIL) ?>" class="hover:underline"><?= h(AcceptanceRequest::COMPANY_EMAIL) ?></a>
           </p>
         </div>
