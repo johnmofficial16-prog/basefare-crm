@@ -14,8 +14,9 @@ $approvedAt   = ($acceptance && $acceptance->approved_at) ? $acceptance->approve
 $dbaName = 'Lets Fly Travel LLC DBA Base Fare';
 if ($acceptance) {
     $fareBreakdown = $acceptance->fare_breakdown ?? [];
-    if (!empty($fareBreakdown) && isset($fareBreakdown[0]['label'])) {
-        if (trim($fareBreakdown[0]['label']) === 'Airline Tickets') {
+    if (!empty($fareBreakdown) && is_array($fareBreakdown)) {
+        $firstItem = reset($fareBreakdown);
+        if ($firstItem && isset($firstItem['label']) && strtolower(trim($firstItem['label'])) === 'airline tickets') {
             $dbaName = 'Airline Tickets';
         }
     }

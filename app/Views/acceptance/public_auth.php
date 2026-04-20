@@ -32,8 +32,9 @@ $passengers    = $acceptance->passengers ?? [];
 $flightData    = $acceptance->flight_data ?? [];
 
 $dbaName = 'Lets Fly Travel LLC DBA Base Fare';
-if (!empty($fareBreakdown) && isset($fareBreakdown[0]['label'])) {
-    if (trim($fareBreakdown[0]['label']) === 'Airline Tickets') {
+if (!empty($fareBreakdown) && is_array($fareBreakdown)) {
+    $firstItem = reset($fareBreakdown);
+    if ($firstItem && isset($firstItem['label']) && strtolower(trim($firstItem['label'])) === 'airline tickets') {
         $dbaName = 'Airline Tickets';
     }
 }
@@ -41,7 +42,7 @@ if (!empty($fareBreakdown) && isset($fareBreakdown[0]['label'])) {
 $rawPolicy = $acceptance->policy_text ?? '';
 $policyText = nl2br(htmlspecialchars(str_replace('Lets Fly Travel DBA Base Fare', $dbaName, $rawPolicy)));
 
-$companyName   = AcceptanceRequest::COMPANY_NAME;
+$companyName   = $dbaName;
 // Derive airline from stored field or auto-detect from first flight segment
 $airlineRaw = trim($acceptance->airline ?? '');
 if (empty($airlineRaw)) {
