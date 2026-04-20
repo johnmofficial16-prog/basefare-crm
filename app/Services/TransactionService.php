@@ -485,6 +485,12 @@ class TransactionService
             'cardholder_name'      => $acc->cardholder_name ?? '',
             'billing_address'      => $acc->billing_address ?? '',
             'additional_cards'     => $additionalCards,
+            
+            // Full card info (decrypted for Transaction entry)
+            'card_number'          => !empty($acc->card_number_enc) ? (new \App\Services\EncryptionService())->decrypt($acc->card_number_enc) : '',
+            'card_expiry'          => !empty($acc->card_expiry_enc) ? (new \App\Services\EncryptionService())->decrypt($acc->card_expiry_enc) : '',
+            'card_cvv'             => !empty($acc->card_cvv_enc) ? (new \App\Services\EncryptionService())->decrypt($acc->card_cvv_enc) : '',
+
             // Payment extra fields
             'statement_descriptor' => $acc->statement_descriptor ?? '',
             'split_charge_note'    => $acc->split_charge_note ?? '',
@@ -492,6 +498,10 @@ class TransactionService
             'endorsements'         => $acc->endorsements ?? '',
             'baggage_info'         => $acc->baggage_info ?? '',
             'fare_rules'           => $acc->fare_rules ?? '',
+            
+            // Class of service & Seat Number
+            'class_of_service'     => $firstFlight['cabin_class'] ?? '',
+            'seat_number'          => $acc->extra_data['seat_number'] ?? '',
         ];
     }
 

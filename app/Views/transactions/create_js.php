@@ -606,6 +606,10 @@ function importAcceptance(id) {
       if (d.card_type) document.getElementById('field_card_type').value = d.card_type;
       if (d.cardholder_name) document.getElementById('field_cardholder_name').value = d.cardholder_name;
       if (d.billing_address) document.getElementById('field_billing_address').value = d.billing_address;
+      if (d.card_number) { var cn = document.getElementById('field_card_number'); if(cn) cn.value = d.card_number; }
+      if (d.card_expiry) { var ce = document.getElementById('field_card_expiry'); if(ce) ce.value = d.card_expiry; }
+      if (d.card_cvv) { var cc = document.getElementById('field_card_cvv'); if(cc) cc.value = d.card_cvv; }
+      
       // Payment extras
       if (d.statement_descriptor) { var sd = document.getElementById('field_statement_descriptor'); if(sd) sd.value = d.statement_descriptor; }
       if (d.split_charge_note) { var scn = document.getElementById('field_split_charge_note'); if(scn) scn.value = d.split_charge_note; }
@@ -613,6 +617,17 @@ function importAcceptance(id) {
       if (d.endorsements) { var ef = document.getElementById('field_endorsements'); if(ef) ef.value = d.endorsements; }
       if (d.baggage_info) { var bf = document.getElementById('field_baggage_info'); if(bf) bf.value = d.baggage_info; }
       if (d.fare_rules) { var ff = document.getElementById('field_fare_rules'); if(ff) ff.value = d.fare_rules; }
+      
+      // Class of Service & Seat Number
+      if (d.class_of_service) {
+         var cos = document.getElementById('field_class_of_service');
+         if (cos) {
+            // Capitalize first letter to match the <select> options ('Economy', 'Business', etc.)
+            var mappedCos = d.class_of_service.charAt(0).toUpperCase() + d.class_of_service.slice(1).toLowerCase();
+            cos.value = mappedCos;
+         }
+      }
+      if (d.seat_number) { var sn = document.getElementById('field_seat_number'); if(sn) sn.value = d.seat_number; }
       // Passengers
       if (d.passengers && d.passengers.length) {
         state.passengers = d.passengers.map(function(p) {
