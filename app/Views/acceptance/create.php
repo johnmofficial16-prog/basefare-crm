@@ -1708,6 +1708,21 @@ const flightMgr = {
       arr_next_day: false,
     };
 
+    // Strategy 5: Missing cabin class and spaces between airports (e.g. user pasted: LH419 12MAY 10:40 JFK 06:10 FRA)
+    const re5 = /^\s*\d{0,2}\s*\.?\s*([A-Z0-9]{2})\s*(\d{1,4}[A-Z]?)(?:\s+([A-Z]))?\s+(\d{2}[A-Z]{3})\s+(\d{1,2}:?\d{2}[APap]?)\s+([A-Z]{3})\s+(\d{1,2}:?\d{2}[APap]?)\s+([A-Z]{3})/i;
+    m = re5.exec(ln);
+    if (m) return {
+      airline_iata: m[1].toUpperCase(),
+      flight_no:    m[1].toUpperCase() + m[2].toUpperCase(),
+      cabin_class:  mapCabin(m[3]),
+      date:         m[4].toUpperCase(),
+      from:         m[6].toUpperCase(),
+      to:           m[8].toUpperCase(),
+      dep_time:     fmtTime(m[5]),
+      arr_time:     fmtTime(m[7]),
+      arr_next_day: false,
+    };
+
     return null;
   },
 

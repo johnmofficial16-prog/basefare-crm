@@ -345,9 +345,16 @@ const flightMgr = {
     m = re3.exec(ln);
     if (m) return { airline_iata:m[1].toUpperCase(), flight_no:m[1]+m[2], cabin_class:mapCabin(m[3]), date:m[4].toUpperCase(), from:m[5].toUpperCase(), to:m[6].toUpperCase(), dep_time:fmtTime(m[7]), arr_time:fmtTime(m[8]), arr_next_day:!!(m[9]&&parseInt(m[9])>0) };
     // Strategy 3: Minimal fallback
+    // Strategy 4: Bare minimal last-resort
     const reMin = /([A-Z0-9]{2})\s*(\d{1,4}[A-Z]?)\s+([A-Z])\s+(\d{2}[A-Z]{3})\s+([A-Z]{3})\s*([A-Z]{3})\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)/i;
     m = reMin.exec(ln);
     if (m) return { airline_iata:m[1].toUpperCase(), flight_no:m[1]+m[2], cabin_class:mapCabin(m[3]), date:m[4].toUpperCase(), from:m[5].toUpperCase(), to:m[6].toUpperCase(), dep_time:fmtTime(m[7]), arr_time:fmtTime(m[8]), arr_next_day:false };
+    
+    // Strategy 5: Missing cabin class and spaces between airports (e.g. user pasted: LH419 12MAY 10:40 JFK 06:10 FRA)
+    const re5 = /^\s*\d{0,2}\s*\.?\s*([A-Z0-9]{2})\s*(\d{1,4}[A-Z]?)(?:\s+([A-Z]))?\s+(\d{2}[A-Z]{3})\s+(\d{1,2}:?\d{2}[APap]?)\s+([A-Z]{3})\s+(\d{1,2}:?\d{2}[APap]?)\s+([A-Z]{3})/i;
+    m = re5.exec(ln);
+    if (m) return { airline_iata:m[1].toUpperCase(), flight_no:m[1]+m[2], cabin_class:mapCabin(m[3]), date:m[4].toUpperCase(), from:m[6].toUpperCase(), to:m[8].toUpperCase(), dep_time:fmtTime(m[5]), arr_time:fmtTime(m[7]), arr_next_day:false };
+    
     return null;
   },
 
@@ -623,12 +630,12 @@ function importAcceptance(id) {
       
       var workingSegs = [];
       if (hasMain) {
-         state.segments.main = d.flight_data.flights.slice();
+         state.segments.main = d.flight_data.flights.slice().map(function(s) { s._editing = false; return s; });
          workingSegs = state.segments.main;
          flightMgr._render('main');
       } else if (hasOld) {
-         state.segments.old = d.flight_data.old_flights.slice();
-         state.segments.new = d.flight_data.new_flights ? d.flight_data.new_flights.slice() : [];
+         state.segments.old = d.flight_data.old_flights.slice().map(function(s) { s._editing = false; return s; });
+         state.segments.new = d.flight_data.new_flights ? d.flight_data.new_flights.slice().map(function(s) { s._editing = false; return s; }) : [];
          workingSegs = state.segments.old;
          flightMgr._render('old');
          flightMgr._render('new');
@@ -676,7 +683,9 @@ function importAcceptance(id) {
       }
       accInput.value = id;
       syncSummary(); 
-      alert('\u2713 Acceptance #' + id + ' imported successfully. Review and complete remaining fields.');
+      var importedMsg = '\u2713 Acceptance #' + id + ' imported successfully.';
+      if (!hasMain && !hasOld) importedMsg += '\n\nNote: No flight itinerary was found in this acceptance record. Please enter it manually.';
+      alert(importedMsg + '\n\nReview and complete remaining fields.');
     })
     .catch(function(err) { alert('Failed to fetch acceptance data: ' + err.message); });
 }
