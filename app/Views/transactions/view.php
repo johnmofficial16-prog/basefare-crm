@@ -686,7 +686,7 @@ $currentRole   = $_SESSION['role'] ?? 'agent';
 ?>
 
 <?php if ($txn->hasDispute()): ?>
-<div class="mx-8 mb-4 px-5 py-4 bg-red-50 border border-red-300 rounded-xl flex items-start gap-3 shadow-sm">
+<div class="mt-6 mb-4 px-5 py-4 bg-red-50 border border-red-300 rounded-xl flex items-start gap-3 shadow-sm">
   <span class="material-symbols-outlined text-red-600 text-2xl mt-0.5">warning</span>
   <div class="flex-1">
     <p class="font-bold text-red-800 text-sm">Dispute / Chargeback Alert</p>
@@ -702,7 +702,7 @@ $currentRole   = $_SESSION['role'] ?? 'agent';
 <?php endif; ?>
 
 <?php if ($isAdminOnly): ?>
-<div class="mx-8 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+<div class="mt-6 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
 
   <!-- ── DISPUTE / CHARGEBACK PANEL ── -->
   <div id="dispute-panel" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
