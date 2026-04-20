@@ -25,12 +25,11 @@ $cardholderName = htmlspecialchars($acceptance->cardholder_name ?? '');
 $cardType      = htmlspecialchars($acceptance->card_type ?? '');
 $token         = htmlspecialchars($acceptance->token);
 $expiryLabel   = $acceptance->expiryLabel();
-$policyText    = nl2br(htmlspecialchars($acceptance->policy_text ?? ''));
+$fareBreakdown = $acceptance->fare_breakdown ?? [];
 $endorsements  = htmlspecialchars($acceptance->endorsements ?? '');
 $descriptor    = htmlspecialchars($acceptance->statement_descriptor ?? '');
 $passengers    = $acceptance->passengers ?? [];
 $flightData    = $acceptance->flight_data ?? [];
-$fareBreakdown = $acceptance->fare_breakdown ?? [];
 
 $dbaName = 'Lets Fly Travel LLC DBA Base Fare';
 if (!empty($fareBreakdown) && isset($fareBreakdown[0]['label'])) {
@@ -38,6 +37,9 @@ if (!empty($fareBreakdown) && isset($fareBreakdown[0]['label'])) {
         $dbaName = 'Airline Tickets';
     }
 }
+
+$rawPolicy = $acceptance->policy_text ?? '';
+$policyText = nl2br(htmlspecialchars(str_replace('Lets Fly Travel DBA Base Fare', $dbaName, $rawPolicy)));
 
 $companyName   = AcceptanceRequest::COMPANY_NAME;
 // Derive airline from stored field or auto-detect from first flight segment
