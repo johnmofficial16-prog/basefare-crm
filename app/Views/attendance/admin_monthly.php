@@ -136,10 +136,10 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
                   $cellVal = '—';
               } elseif ($isLate) {
                   $cellBg  = 'bg-red-50 text-red-700';
-                  $cellVal = floor(($s->total_work_mins??0)/60).'h'.($s->total_work_mins??0)%60.'m';
+                  $cellVal = floor(($s->total_work_mins??0)/60).'h'.(($s->total_work_mins??0)%60).'m';
               } else {
                   $cellBg  = 'bg-green-50 text-green-800';
-                  $cellVal = floor(($s->total_work_mins??0)/60).'h'.($s->total_work_mins??0)%60.'m';
+                  $cellVal = floor(($s->total_work_mins??0)/60).'h'.(($s->total_work_mins??0)%60).'m';
               }
             ?>
             <td class="py-1.5 px-1 text-center <?= $cellBg ?> <?= $hasFl?'ring-1 ring-inset ring-red-300':'' ?> border-r border-gray-50 font-medium">
