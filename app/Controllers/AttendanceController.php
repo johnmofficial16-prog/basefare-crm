@@ -299,8 +299,9 @@ class AttendanceController
                 'late' => $i['session']->late_minutes ?? 0,
             ], $boardData['in']),
             'break_agents'   => array_map(fn($i) => [
-                'name' => $i['agent']->name,
-                'type' => $i['break']->break_type,
+                'id'    => $i['agent']->id,
+                'name'  => $i['agent']->name,
+                'type'  => $i['break']->break_type,
                 'start' => $i['break']->break_start,
             ], $boardData['on_break']),
         ];

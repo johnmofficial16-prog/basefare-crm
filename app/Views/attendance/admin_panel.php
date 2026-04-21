@@ -14,6 +14,10 @@ $abuseAlerts = Capsule::table('activity_log')
     ->where('created_at', '>=', $today . ' 00:00:00')
     ->orderBy('created_at', 'desc')
     ->get();
+
+// Load washroom thresholds for live highlighting
+$_wcRow        = Capsule::table('system_config')->where('key', 'abuse.single_washroom_max')->first();
+$_wcSingleMax  = (int)($_wcRow->value ?? 15);
 ?>
 <!DOCTYPE html>
 <html class="light" lang="en">
@@ -155,32 +159,57 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
   <!-- On Break -->
   <?php if (!empty($boardData['on_break'])): ?>
-  <section class="mb-10">
+  <section class="mb-10" id="section-on-break">
     <h2 class="text-xl font-headline font-extrabold text-primary mb-4 flex items-center gap-2">
       <span class="material-symbols-outlined text-amber-500">coffee</span> On Break
     </h2>
-    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4" id="break-cards-grid">
       <?php foreach ($boardData['on_break'] as $item): ?>
       <?php
-        $breakStartTs = strtotime($item['break']->break_start);
-        $breakElapsedMins = (int) round((time() - $breakStartTs) / 60);
+        $breakStartTs      = strtotime($item['break']->break_start);
+        $breakElapsedMins  = (int) round((time() - $breakStartTs) / 60);
+        $isWc              = $item['break']->break_type === 'washroom';
+        $isOverrun         = $isWc && $breakElapsedMins > $_wcSingleMax;
+        $cardBg            = $isOverrun ? 'bg-red-50 border border-red-300' : 'bg-amber-50';
+        $avatarBg          = $isOverrun ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800';
+        $elapsedClass      = $isOverrun ? 'text-red-600 font-bold' : 'text-amber-700 font-semibold';
       ?>
-      <div class="bg-amber-50 rounded-xl p-4 shadow-sm flex items-center gap-4">
-        <div class="w-10 h-10 rounded-full bg-amber-200 flex items-center justify-center text-amber-800 font-bold text-sm">
+      <div class="<?= $cardBg ?> rounded-xl p-4 shadow-sm flex items-center gap-4 break-card"
+           data-agent-id="<?= $item['agent']->id ?>"
+           data-break-start="<?= $breakStartTs ?>"
+           data-break-type="<?= htmlspecialchars($item['break']->break_type) ?>"
+           data-agent-name="<?= htmlspecialchars(addslashes($item['agent']->name)) ?>">
+        <div class="w-10 h-10 rounded-full <?= $avatarBg ?> flex items-center justify-center font-bold text-sm">
           <?= strtoupper(substr($item['agent']->name, 0, 1)) ?>
         </div>
-        <div class="flex-1">
-          <p class="font-headline font-bold text-on-surface text-sm"><?= htmlspecialchars($item['agent']->name) ?></p>
-          <p class="text-xs text-amber-700 font-semibold"><?= ucfirst($item['break']->break_type) ?> break · <?= $breakElapsedMins ?>m elapsed</p>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <p class="font-headline font-bold text-on-surface text-sm truncate"><?= htmlspecialchars($item['agent']->name) ?></p>
+            <?php if ($isOverrun): ?>
+            <span class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full text-[9px] font-extrabold uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[10px]">warning</span> Overrun
+            </span>
+            <?php endif; ?>
+          </div>
+          <p class="text-xs <?= $elapsedClass ?> break-elapsed-label">
+            <?= ucfirst($item['break']->break_type) ?> break ·
+            <span class="break-elapsed-mins"><?= $breakElapsedMins ?></span>m elapsed
+            <?php if ($isWc): ?>
+            <span class="text-slate-400">(max <?= $_wcSingleMax ?>m)</span>
+            <?php endif; ?>
+          </p>
         </div>
-        <button onclick="adminForceEndBreak(<?= $item['agent']->id ?>, '<?= addslashes($item['agent']->name) ?>')" 
-                class="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg text-xs font-bold hover:bg-orange-200 transition-all flex items-center gap-1" title="Force End Break">
+        <button onclick="adminForceEndBreak(<?= $item['agent']->id ?>, '<?= addslashes($item['agent']->name) ?>')"
+                class="shrink-0 px-3 py-1.5 <?= $isOverrun ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-orange-100 text-orange-700 hover:bg-orange-200' ?> rounded-lg text-xs font-bold transition-all flex items-center gap-1" title="Force End Break">
           <span class="material-symbols-outlined text-xs">timer_off</span> End Break
         </button>
       </div>
       <?php endforeach; ?>
     </div>
   </section>
+  <?php endif; ?>
+  <?php if (empty($boardData['on_break'])): ?>
+  <div id="section-on-break" class="hidden"></div>
   <?php endif; ?>
 
   <!-- Absent / Not In -->
@@ -279,6 +308,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 <script>
 const csrfToken = '<?= $_SESSION['csrf_token'] ?? '' ?>';
 let lastPendingCount = <?= count($boardData['pending_override']) ?>;
+const WC_SINGLE_MAX = <?= $_wcSingleMax ?>; // from system_config
 
 async function approveOverride(agentId) {
   const reason = document.getElementById('reason-' + agentId)?.value?.trim();
@@ -286,7 +316,6 @@ async function approveOverride(agentId) {
     alert('Please enter a reason (at least 5 characters).');
     return;
   }
-
   const r = await fetch('/attendance/override', {
     method: 'POST',
     headers: {'Content-Type':'application/json', 'X-CSRF-Token': csrfToken},
@@ -300,14 +329,12 @@ async function approveOverride(agentId) {
   }
 }
 
-// P0 #9 — Deny with persistence
 async function denyOverride(agentId) {
   const reason = prompt('Reason for denial (required):');
   if (!reason || reason.trim().length < 3) {
     alert('A reason of at least 3 characters is required.');
     return;
   }
-
   const r = await fetch('/attendance/deny', {
     method: 'POST',
     headers: {'Content-Type':'application/json', 'X-CSRF-Token': csrfToken},
@@ -321,7 +348,6 @@ async function denyOverride(agentId) {
   }
 }
 
-// P1 #10 — Manual clock in/out
 async function adminForceEndBreak(agentId, agentName) {
   if (!confirm('Force-end break for ' + agentName + '?')) return;
   const r = await fetch('/attendance/admin/force-end-break', {
@@ -358,25 +384,126 @@ async function manualClockOut(agentId, agentName) {
   if (data.success) refreshBoard();
 }
 
-// AJAX refresh — updates all counter cards using stable IDs
+// ── Live break elapsed ticker ────────────────────────────────────────────────
+// Runs every 60s client-side to update elapsed minutes and flip cards red
+// without waiting for a full AJAX board refresh.
+function tickBreakCards() {
+  const now = Math.floor(Date.now() / 1000);
+  document.querySelectorAll('.break-card').forEach(card => {
+    const start     = parseInt(card.dataset.breakStart, 10);
+    const type      = card.dataset.breakType;
+    const elapsed   = Math.round((now - start) / 60);
+    const isWc      = type === 'washroom';
+    const isOverrun = isWc && elapsed > WC_SINGLE_MAX;
+
+    // Update minutes label
+    const minsEl = card.querySelector('.break-elapsed-mins');
+    if (minsEl) minsEl.textContent = elapsed;
+
+    // Flip styling if newly overrun
+    if (isOverrun && !card.classList.contains('border-red-300')) {
+      card.className = card.className
+        .replace('bg-amber-50', 'bg-red-50')
+        .replace('bg-white', 'bg-red-50');
+      card.classList.add('border', 'border-red-300');
+
+      const avatar = card.querySelector('.w-10');
+      if (avatar) {
+        avatar.className = avatar.className
+          .replace('bg-amber-200 text-amber-800', 'bg-red-200 text-red-800');
+      }
+
+      const label = card.querySelector('.break-elapsed-label');
+      if (label) {
+        label.className = label.className
+          .replace('text-amber-700 font-semibold', 'text-red-600 font-bold');
+      }
+
+      // Inject overrun badge if not already present
+      const nameEl = card.querySelector('.font-headline');
+      if (nameEl && !card.querySelector('.overrun-badge')) {
+        const badge = document.createElement('span');
+        badge.className = 'overrun-badge shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full text-[9px] font-extrabold uppercase tracking-wide';
+        badge.innerHTML = '<span class="material-symbols-outlined text-[10px]">warning</span> Overrun';
+        nameEl.parentElement.insertBefore(badge, nameEl.nextSibling);
+      }
+
+      const btn = card.querySelector('button');
+      if (btn) {
+        btn.className = btn.className
+          .replace('bg-orange-100 text-orange-700 hover:bg-orange-200', 'bg-red-100 text-red-700 hover:bg-red-200');
+      }
+    }
+  });
+}
+
+// ── AJAX board refresh ───────────────────────────────────────────────────────
+// Re-renders break cards section and updates all counter chips.
+function renderBreakCard(agent) {
+  const now     = Math.floor(Date.now() / 1000);
+  const startTs = Math.floor(new Date(agent.start).getTime() / 1000);
+  const elapsed = Math.round((now - startTs) / 60);
+  const isWc      = agent.type === 'washroom';
+  const isOverrun = isWc && elapsed > WC_SINGLE_MAX;
+
+  const cardBg    = isOverrun ? 'bg-red-50 border border-red-300' : 'bg-amber-50';
+  const avatarBg  = isOverrun ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800';
+  const elClass   = isOverrun ? 'text-red-600 font-bold' : 'text-amber-700 font-semibold';
+  const btnClass  = isOverrun ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-orange-100 text-orange-700 hover:bg-orange-200';
+  const overrun   = isOverrun ? `<span class="overrun-badge shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full text-[9px] font-extrabold uppercase tracking-wide"><span class="material-symbols-outlined text-[10px]">warning</span> Overrun</span>` : '';
+  const maxHint   = isWc ? `<span class="text-slate-400">(max ${WC_SINGLE_MAX}m)</span>` : '';
+
+  return `
+    <div class="${cardBg} rounded-xl p-4 shadow-sm flex items-center gap-4 break-card"
+         data-agent-id="${agent.id}" data-break-start="${startTs}"
+         data-break-type="${agent.type}" data-agent-name="${agent.name.replace(/"/g,'&quot;')}">
+      <div class="w-10 h-10 rounded-full ${avatarBg} flex items-center justify-center font-bold text-sm">
+        ${agent.name.charAt(0).toUpperCase()}
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-1.5">
+          <p class="font-headline font-bold text-on-surface text-sm truncate">${agent.name}</p>
+          ${overrun}
+        </div>
+        <p class="text-xs ${elClass} break-elapsed-label">
+          ${agent.type.charAt(0).toUpperCase()+agent.type.slice(1)} break ·
+          <span class="break-elapsed-mins">${elapsed}</span>m elapsed ${maxHint}
+        </p>
+      </div>
+      <button onclick="adminForceEndBreak(${agent.id}, '${agent.name.replace(/'/g,"\\'")}')"
+              class="shrink-0 px-3 py-1.5 ${btnClass} rounded-lg text-xs font-bold transition-all flex items-center gap-1">
+        <span class="material-symbols-outlined text-xs">timer_off</span> End Break
+      </button>
+    </div>`;
+}
+
 async function refreshBoard() {
   try {
     const r = await fetch('/attendance/admin/data');
     const d = await r.json();
 
-    // Update counter cards via stable IDs (5 cards now)
-    const inEl = document.getElementById('count-in');
-    const breakEl = document.getElementById('count-break');
-    const completedEl = document.getElementById('count-completed');
-    const absentEl = document.getElementById('count-absent');
-    const overrideEl = document.getElementById('count-override');
-    if (inEl) inEl.textContent = d.in_count;
-    if (breakEl) breakEl.textContent = d.break_count;
-    if (completedEl) completedEl.textContent = d.completed_count ?? 0;
-    if (absentEl) absentEl.textContent = d.absent_count;
-    if (overrideEl) overrideEl.textContent = d.pending_count;
+    // Update counter chips
+    const map = {
+      'count-in': d.in_count, 'count-break': d.break_count,
+      'count-completed': d.completed_count ?? 0,
+      'count-absent': d.absent_count, 'count-override': d.pending_count
+    };
+    Object.entries(map).forEach(([id, val]) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    });
 
-    // Check for new override requests
+    // Re-render break cards
+    const grid = document.getElementById('break-cards-grid');
+    const section = document.getElementById('section-on-break');
+    if (grid && d.break_agents) {
+      grid.innerHTML = d.break_agents.map(renderBreakCard).join('');
+    }
+    if (section) {
+      section.classList.toggle('hidden', (d.break_agents?.length ?? 0) === 0);
+    }
+
+    // Override notification
     if (d.pending_count > lastPendingCount) {
       if (Notification.permission === 'granted') {
         new Notification('New Override Request', {body: 'An agent needs your approval to clock in.'});
@@ -390,7 +517,9 @@ async function refreshBoard() {
   }
 }
 
-// Refresh every 60s via AJAX instead of full page reload
+// Tick elapsed labels every 60s; full board refresh every 60s (offset by 30s)
+tickBreakCards();
+setInterval(tickBreakCards, 60000);
 setInterval(refreshBoard, 60000);
 </script>
 
