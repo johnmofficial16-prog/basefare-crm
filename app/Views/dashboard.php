@@ -157,7 +157,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     <a href="/transactions" class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Revenue Today</p>
       <p class="text-xl font-headline font-extrabold text-primary"><?= number_format($dd['today_revenue'], 0) ?></p>
-      <p class="text-[10px] text-slate-500 mt-1">CAD charged</p>
+      <p class="text-[10px] text-slate-500 mt-1"><?= htmlspecialchars($currency) ?> charged</p>
     </a>
     <div class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Profit Today</p>
@@ -266,32 +266,32 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <div class="bg-blue-50 rounded-2xl p-4">
             <p class="text-[10px] font-bold uppercase text-blue-700 tracking-wider mb-1">Charged</p>
             <p class="text-2xl font-headline font-extrabold text-blue-900"><?= number_format($dd['week_revenue'], 0) ?></p>
-            <p class="text-[10px] text-blue-600 mt-0.5">CAD</p>
+            <p class="text-[10px] text-blue-600 mt-0.5"><?= htmlspecialchars($currency) ?></p>
           </div>
           <div class="bg-rose-50 rounded-2xl p-4">
             <p class="text-[10px] font-bold uppercase text-rose-700 tracking-wider mb-1">Cost</p>
             <p class="text-2xl font-headline font-extrabold text-rose-900"><?= number_format($dd['week_cost'], 0) ?></p>
-            <p class="text-[10px] text-rose-600 mt-0.5">CAD</p>
+            <p class="text-[10px] text-rose-600 mt-0.5"><?= htmlspecialchars($currency) ?></p>
           </div>
           <div class="<?= $dd['week_profit'] >= 0 ? 'bg-emerald-50' : 'bg-rose-50' ?> rounded-2xl p-4">
             <p class="text-[10px] font-bold uppercase <?= $dd['week_profit'] >= 0 ? 'text-emerald-700' : 'text-rose-700' ?> tracking-wider mb-1">Profit</p>
             <p class="text-2xl font-headline font-extrabold <?= $dd['week_profit'] >= 0 ? 'text-emerald-700' : 'text-rose-700' ?>">
               <?= ($dd['week_profit'] >= 0 ? '+' : '-') . number_format(abs($dd['week_profit']), 0) ?>
             </p>
-            <p class="text-[10px] <?= $dd['week_profit'] >= 0 ? 'text-emerald-600' : 'text-rose-600' ?> mt-0.5">CAD</p>
+            <p class="text-[10px] <?= $dd['week_profit'] >= 0 ? 'text-emerald-600' : 'text-rose-600' ?> mt-0.5"><?= htmlspecialchars($currency) ?></p>
           </div>
         </div>
         <div class="border-t border-slate-100 pt-4">
           <p class="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-2">All-Time Totals</p>
           <div class="flex items-center gap-6 text-sm">
             <div><p class="text-[10px] text-slate-400">Transactions</p><p class="font-headline font-extrabold text-primary"><?= number_format($dd['all_txn_count']) ?></p></div>
-            <div><p class="text-[10px] text-slate-400">Total Revenue</p><p class="font-headline font-extrabold text-blue-700">CAD <?= number_format($dd['all_revenue'], 0) ?></p></div>
-            <div><p class="text-[10px] text-slate-400">Total Profit</p><p class="font-headline font-extrabold <?= $dd['all_profit'] >= 0 ? 'text-emerald-600' : 'text-rose-600' ?>">CAD <?= number_format(abs($dd['all_profit']), 0) ?></p></div>
+            <div><p class="text-[10px] text-slate-400">Total Revenue</p><p class="font-headline font-extrabold text-blue-700"><?= htmlspecialchars($currency) ?> <?= number_format($dd['all_revenue'], 0) ?></p></div>
+            <div><p class="text-[10px] text-slate-400">Total Profit</p><p class="font-headline font-extrabold <?= $dd['all_profit'] >= 0 ? 'text-emerald-600' : 'text-rose-600' ?>"><?= htmlspecialchars($currency) ?> <?= number_format(abs($dd['all_profit']), 0) ?></p></div>
           </div>
         </div>
         <p class="mt-3 text-xs text-slate-400">
           <?= $dd['week_txn_count'] ?> transactions this week
-          <?= $dd['all_txn_count'] > 0 ? '· avg CAD '.number_format($dd['week_txn_count'] > 0 ? $dd['week_revenue']/$dd['week_txn_count'] : 0, 0).' / txn this week' : '' ?>
+          <?= $dd['all_txn_count'] > 0 ? '· avg '.htmlspecialchars($currency).' '.number_format($dd['week_txn_count'] > 0 ? $dd['week_revenue']/$dd['week_txn_count'] : 0, 0).' / txn this week' : '' ?>
         </p>
       </div>
     </div>
@@ -315,7 +315,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <p class="text-[11px] text-slate-500"><?= $row->txn_count ?> txn<?= $row->txn_count != 1 ? 's' : '' ?></p>
           </div>
           <div class="text-right flex-none">
-            <p class="text-sm font-bold text-primary">CAD <?= number_format($row->revenue, 0) ?></p>
+            <p class="text-sm font-bold text-primary"><?= htmlspecialchars($currency) ?> <?= number_format($row->revenue, 0) ?></p>
             <?php if ($row->profit > 0): ?><p class="text-[10px] text-emerald-600 font-semibold">+<?= number_format($row->profit, 0) ?> profit</p><?php endif; ?>
           </div>
         </div>
@@ -349,7 +349,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     </a>
     <div class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Team Revenue Today</p>
-      <p class="text-xl font-headline font-extrabold text-primary">CAD <?= number_format($sd['team_today_rev'], 0) ?></p>
+      <p class="text-xl font-headline font-extrabold text-primary"><?= htmlspecialchars($currency) ?> <?= number_format($sd['team_today_rev'], 0) ?></p>
     </div>
   </div>
 
@@ -453,7 +453,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     </div>
     <div class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Revenue Today</p>
-      <p class="text-xl font-headline font-extrabold text-primary">CAD <?= number_format($ad['today_revenue'], 0) ?></p>
+      <p class="text-xl font-headline font-extrabold text-primary"><?= htmlspecialchars($currency) ?> <?= number_format($ad['today_revenue'], 0) ?></p>
     </div>
     <div class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">My Auth Today</p>

@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
+use Illuminate\Database\Capsule\Manager as DB;
 use App\Services\AttendanceService;
 use App\Services\ShiftService;
 use App\Models\AttendanceSession;
@@ -268,6 +269,10 @@ class DashboardController
                 'recent_txns'        => $myRecentTxns,
             ];
         }
+
+        // ── Default currency from system_config ─────────────────────────────
+        $currencyRow = DB::table('system_config')->where('key', 'default_currency')->first();
+        $currency    = $currencyRow?->value ?? 'CAD';
 
         ob_start();
         require __DIR__ . '/../Views/dashboard.php';

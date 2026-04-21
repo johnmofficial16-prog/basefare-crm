@@ -54,6 +54,23 @@ class AdminController
             'default_grace_period_mins' => ['label' => 'Default grace period',  'min' => 0,  'max' => 120],
         ];
 
+        // ── String settings (currency) ───────────────────────────────────────
+        $allowedCurrencies = ['CAD', 'USD', 'GBP', 'EUR', 'INR', 'AED'];
+        if (isset($body['default_currency']) && in_array($body['default_currency'], $allowedCurrencies, true)) {
+            $currencyVal = $body['default_currency'];
+            $existing = DB::table('system_config')->where('key', 'default_currency')->first();
+            if ($existing) {
+                DB::table('system_config')->where('key', 'default_currency')->update([
+                    'value' => $currencyVal, 'updated_by' => $adminId, 'updated_at' => $now,
+                ]);
+            } else {
+                DB::table('system_config')->insert([
+                    'key' => 'default_currency', 'value' => $currencyVal,
+                    'updated_by' => $adminId, 'updated_at' => $now,
+                ]);
+            }
+        }
+
         foreach ($keys as $key => $rule) {
             if (!isset($body[$key])) continue;
             $val = (int) $body[$key];

@@ -145,6 +145,25 @@ tailwind.config = {
       </div>
     </div>
 
+    <!-- ── Default Currency ──────────────────────────────────────────────── -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+        <span class="material-symbols-outlined text-primary text-lg">currency_exchange</span>
+        <h2 class="font-bold text-slate-900" style="font-family:Manrope">Default Currency</h2>
+      </div>
+      <div class="p-6">
+        <div class="max-w-xs">
+          <label class="field-label" for="default_currency">Display Currency</label>
+          <select class="field-input" id="default_currency" name="default_currency">
+            <?php foreach (['CAD', 'USD', 'GBP', 'EUR', 'INR', 'AED'] as $c): ?>
+            <option value="<?= $c ?>" <?= $cfg('default_currency', 'CAD') === $c ? 'selected' : '' ?>><?= $c ?></option>
+            <?php endforeach; ?>
+          </select>
+          <p class="text-[10px] text-slate-400 mt-1">Used as the currency label across all dashboard views (agent, supervisor, admin).</p>
+        </div>
+      </div>
+    </div>
+
     <!-- ── System Info (read-only) ───────────────────────────────────────── -->
     <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
       <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
