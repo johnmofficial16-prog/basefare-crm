@@ -39,6 +39,8 @@ $app->group('/attendance', function ($group) {
     $group->get('/admin', [AttendanceController::class, 'adminPanel']);
     $group->get('/admin/data', [AttendanceController::class, 'adminBoardData']);
     $group->get('/admin/history', [AttendanceController::class, 'adminHistory']);
+    $group->get('/admin/monthly', [AttendanceController::class, 'adminMonthly']);
+    $group->get('/admin/monthly/export', [AttendanceController::class, 'exportMonthlyCsv']);
     $group->get('/admin/export',  [AttendanceController::class, 'exportCsv']);    // admin/manager/supervisor
     $group->post('/override', [AttendanceController::class, 'approveOverride']);
     $group->post('/deny', [AttendanceController::class, 'denyOverride']);

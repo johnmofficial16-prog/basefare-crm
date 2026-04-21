@@ -711,13 +711,33 @@ class AttendanceService
     /**
      * P1 #4 — Get agent's attendance history.
      */
-    public function getAgentHistory(int $userId, int $days = 30): array
+    public function getAgentHistory(int $userId, ?string $dateFrom = null, ?string $dateTo = null): array
     {
+        // Defaults: last 7 days
+        $dateFrom = $dateFrom ?? date('Y-m-d', strtotime('-6 days'));
+        $dateTo   = $dateTo   ?? date('Y-m-d');
+
         $sessions = AttendanceSession::forUser($userId)
-            ->where('date', '>=', date('Y-m-d', strtotime("-{$days} days")))
+            ->whereBetween('date', [$dateFrom, $dateTo])
             ->orderBy('date', 'desc')
             ->with('breaks')
             ->get();
+
+        // Load flagged abuse reasons from activity_log keyed by break_id
+        $allBreakIds = $sessions->flatMap(fn($s) => $s->breaks->pluck('id'))->filter()->values();
+        $abuseLogMap = [];
+        if ($allBreakIds->isNotEmpty()) {
+            $logs = Capsule::table('activity_log')
+                ->where('action', 'break_abuse_detected')
+                ->where('entity_type', 'attendance_breaks')
+                ->whereIn('entity_id', $allBreakIds->toArray())
+                ->get()
+                ->keyBy('entity_id');
+            foreach ($logs as $breakId => $log) {
+                $details = json_decode($log->details, true);
+                $abuseLogMap[$breakId] = $details['reasons'] ?? [];
+            }
+        }
 
         $summary = [
             'total_sessions'    => $sessions->count(),
@@ -732,7 +752,13 @@ class AttendanceService
             $summary['flagged_breaks'] += $s->breaks->where('flagged', 1)->count();
         }
 
-        return ['sessions' => $sessions, 'summary' => $summary];
+        return [
+            'sessions'      => $sessions,
+            'summary'       => $summary,
+            'abuse_log_map' => $abuseLogMap,
+            'date_from'     => $dateFrom,
+            'date_to'       => $dateTo,
+        ];
     }
 
     /**
@@ -749,6 +775,94 @@ class AttendanceService
         }
 
         return $query->get()->toArray();
+    }
+
+    /**
+     * Get full monthly attendance report for admin view.
+     * Period: 1st to last day of the given month.
+     *
+     * @param  string     $yearMonth  Format: 'YYYY-MM'
+     * @param  array|null $agentIds   Optional scope (for supervisor)
+     * @return array
+     */
+    public function getMonthlyReport(string $yearMonth, ?array $agentIds = null): array
+    {
+        [$year, $month] = explode('-', $yearMonth);
+        $daysInMonth    = (int) date('t', mktime(0, 0, 0, (int)$month, 1, (int)$year));
+        $dateFrom       = "{$year}-{$month}-01";
+        $dateTo         = sprintf('%s-%s-%02d', $year, $month, $daysInMonth);
+
+        // All active agents (optionally scoped)
+        $agentQuery = User::whereIn('role', [User::ROLE_AGENT, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])
+            ->where('status', User::STATUS_ACTIVE)
+            ->whereNull('deleted_at')
+            ->orderBy('name');
+
+        if ($agentIds !== null) {
+            $agentQuery->whereIn('id', $agentIds);
+        }
+        $agents = $agentQuery->get();
+
+        // All sessions in the period with breaks
+        $sessions = AttendanceSession::whereBetween('date', [$dateFrom, $dateTo])
+            ->with('breaks')
+            ->get();
+
+        // Build map: [agent_id][date] => session
+        $sessionMap = [];
+        foreach ($sessions as $s) {
+            $sessionMap[$s->user_id][$s->date] = $s;
+        }
+
+        // Build all calendar dates
+        $dates = [];
+        for ($d = 1; $d <= $daysInMonth; $d++) {
+            $dates[] = sprintf('%s-%s-%02d', $year, $month, $d);
+        }
+
+        // Build per-agent summary
+        $summary = [];
+        foreach ($agents as $agent) {
+            $agentSessions = $sessionMap[$agent->id] ?? [];
+            $workMins      = 0;
+            $breakMins     = 0;
+            $lateMins      = 0;
+            $daysPresent   = 0;
+            $flaggedCount  = 0;
+            $lateCount     = 0;
+
+            foreach ($agentSessions as $s) {
+                $workMins    += $s->total_work_mins ?? 0;
+                $breakMins   += $s->total_break_mins ?? 0;
+                $lateMins    += $s->late_minutes ?? 0;
+                $daysPresent++;
+                if (($s->late_minutes ?? 0) > 0) $lateCount++;
+                foreach ($s->breaks as $b) {
+                    if ($b->flagged) $flaggedCount++;
+                }
+            }
+
+            $summary[$agent->id] = [
+                'work_mins'    => $workMins,
+                'break_mins'   => $breakMins,
+                'late_mins'    => $lateMins,
+                'days_present' => $daysPresent,
+                'days_absent'  => $daysInMonth - $daysPresent,
+                'late_count'   => $lateCount,
+                'flagged_count'=> $flaggedCount,
+            ];
+        }
+
+        return [
+            'agents'        => $agents,
+            'dates'         => $dates,
+            'session_map'   => $sessionMap,
+            'summary'       => $summary,
+            'year_month'    => $yearMonth,
+            'date_from'     => $dateFrom,
+            'date_to'       => $dateTo,
+            'days_in_month' => $daysInMonth,
+        ];
     }
 
     // =========================================================================

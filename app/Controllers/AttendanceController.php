@@ -315,7 +315,25 @@ class AttendanceController
     public function myAttendance(Request $request, Response $response): Response
     {
         $userId = $_SESSION['user_id'];
-        $history = $this->service->getAgentHistory($userId, 30);
+        $params = $request->getQueryParams();
+
+        $preset   = $params['range']     ?? '7d';
+        $dateFrom = $params['date_from'] ?? null;
+        $dateTo   = $params['date_to']   ?? null;
+
+        // Apply preset unless explicit custom range given
+        if (!$dateFrom || !$dateTo) {
+            $dateTo = date('Y-m-d');
+            $dateFrom = match ($preset) {
+                '30d'  => date('Y-m-d', strtotime('-29 days')),
+                '90d'  => date('Y-m-d', strtotime('-89 days')),
+                default => date('Y-m-d', strtotime('-6 days')),  // 7d
+            };
+        } else {
+            $preset = 'custom';
+        }
+
+        $history = $this->service->getAgentHistory($userId, $dateFrom, $dateTo);
 
         ob_start();
         require __DIR__ . '/../Views/attendance/my_attendance.php';
@@ -344,6 +362,93 @@ class AttendanceController
         $html = ob_get_clean();
         $response->getBody()->write($html);
         return $response;
+    }
+
+    /**
+     * GET /attendance/admin/monthly — Admin monthly attendance report
+     */
+    public function adminMonthly(Request $request, Response $response): Response
+    {
+        $params    = $request->getQueryParams();
+        $month     = $params['month'] ?? date('Y-m');
+        $agentId   = isset($params['agent_id']) ? (int)$params['agent_id'] : null;
+        $activeTab = $params['tab'] ?? 'grid';
+
+        $actorId   = (int)$_SESSION['user_id'];
+        $actorRole = $_SESSION['role'] ?? 'agent';
+
+        $agentIds = null;
+        if ($actorRole === User::ROLE_SUPERVISOR) {
+            $supervisor = User::find($actorId);
+            $teamIds    = $supervisor ? $supervisor->getTeamAgentIds() : [];
+            $agentIds   = count($teamIds) ? $teamIds : [-1];
+        }
+
+        $report = $this->service->getMonthlyReport($month, $agentIds);
+        $agents = $report['agents'];
+
+        ob_start();
+        require __DIR__ . '/../Views/attendance/admin_monthly.php';
+        $html = ob_get_clean();
+        $response->getBody()->write($html);
+        return $response;
+    }
+
+    /**
+     * GET /attendance/admin/monthly/export — CSV export of full month
+     */
+    public function exportMonthlyCsv(Request $request, Response $response): Response
+    {
+        $params  = $request->getQueryParams();
+        $month   = $params['month'] ?? date('Y-m');
+
+        $actorId   = (int)$_SESSION['user_id'];
+        $actorRole = $_SESSION['role'] ?? 'agent';
+        $agentIds  = null;
+        if ($actorRole === User::ROLE_SUPERVISOR) {
+            $supervisor = User::find($actorId);
+            $teamIds    = $supervisor ? $supervisor->getTeamAgentIds() : [];
+            $agentIds   = count($teamIds) ? $teamIds : [-1];
+        }
+
+        $report = $this->service->getMonthlyReport($month, $agentIds);
+
+        $headers = ['Agent', 'Date', 'Clock In', 'Clock Out', 'Work (mins)', 'Break (mins)', 'Late (mins)', 'Status', 'Flagged Breaks'];
+        $rows    = [];
+
+        foreach ($report['agents'] as $agent) {
+            foreach ($report['dates'] as $date) {
+                $s = $report['session_map'][$agent->id][$date] ?? null;
+                if (!$s) {
+                    $rows[] = [$agent->name, $date, '—', '—', 0, 0, 0, 'Absent', 0];
+                    continue;
+                }
+                $flagCount = $s->breaks->where('flagged', 1)->count();
+                $rows[]    = [
+                    $agent->name, $date,
+                    $s->clock_in  ? date('g:i A', strtotime($s->clock_in))  : '—',
+                    $s->clock_out ? date('g:i A', strtotime($s->clock_out)) : '—',
+                    $s->total_work_mins  ?? 0,
+                    $s->total_break_mins ?? 0,
+                    $s->late_minutes     ?? 0,
+                    ucfirst(str_replace('_', ' ', $s->status ?? '')),
+                    $flagCount,
+                ];
+            }
+            // Summary row per agent
+            $sum    = $report['summary'][$agent->id];
+            $rows[] = [
+                '--- ' . $agent->name . ' TOTAL ---', '',
+                '', '',
+                $sum['work_mins'], $sum['break_mins'], $sum['late_mins'],
+                $sum['days_present'] . ' days present / ' . $sum['days_absent'] . ' absent',
+                $sum['flagged_count'],
+            ];
+            $rows[] = [];
+        }
+
+        $filename = 'attendance_' . $month . '.csv';
+        return $this->csvResponse($response, $headers, $rows, $filename);
     }
 
 
