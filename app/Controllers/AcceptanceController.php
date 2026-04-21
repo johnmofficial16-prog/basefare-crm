@@ -330,6 +330,20 @@ class AcceptanceController
             return $this->jsonResponse($response, ['error' => 'Decryption failed.'], 500);
         }
 
+        // ── Audit log: CC reveal ──────────────────────────────────────────
+        \Illuminate\Database\Capsule\Manager::table('activity_log')->insert([
+            'user_id'     => $_SESSION['user_id'] ?? null,
+            'action'      => 'cc_reveal',
+            'entity_type' => 'acceptance_requests',
+            'entity_id'   => $id,
+            'details'     => json_encode([
+                'card_last_four' => substr($cardNumber, -4),
+                'revealed_by'    => $_SESSION['user_name'] ?? 'unknown',
+            ]),
+            'ip_address'  => $_SERVER['REMOTE_ADDR'] ?? null,
+            'created_at'  => date('Y-m-d H:i:s'),
+        ]);
+
         return $this->jsonResponse($response, [
             'card_number' => $cardNumber,
             'card_expiry' => $cardExpiry,

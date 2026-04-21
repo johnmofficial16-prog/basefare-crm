@@ -54,6 +54,9 @@ $errorMiddleware = $app->addErrorMiddleware($displayErrorDetails, true, true);
 // Include routes
 require __DIR__ . '/../app/routes.php';
 
+// Add Global Security Headers Middleware
+$app->add(new \App\Middleware\SecurityHeadersMiddleware());
+
 // Add Global CSRF Middleware (must be added after routes but executes early in stack or added via app directly)
 $app->add(new \App\Middleware\CsrfMiddleware());
 

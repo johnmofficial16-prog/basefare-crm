@@ -60,9 +60,15 @@ class AuthController
             // Regenerate session ID to prevent fixation payload injections
             session_regenerate_id(true);
 
+            // Store the active session ID for concurrent login detection
+            $user->active_session_id = session_id();
+            $user->save();
+
             $_SESSION['user_id'] = $user->id;
             $_SESSION['role'] = $user->role;
             $_SESSION['user_name'] = $user->name;
+            $_SESSION['active_session_id'] = session_id(); // Cache it in session to save DB queries
+            $_SESSION['last_activity'] = time(); // Initialize inactivity timer
 
             return $response->withHeader('Location', '/dashboard')->withStatus(302);
         }

@@ -322,7 +322,7 @@ tailwind.config = {
               <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5" for="field_pnr">
                 Booking Reference (PNR) <span id="pnr_asterisk" class="text-rose-500">*</span>
               </label>
-              <input type="text" name="pnr" id="field_pnr" required maxlength="10"
+              <input type="text" name="pnr" id="field_pnr" required maxlength="20"
                      value="<?= $pre['pnr'] ?>" placeholder="e.g. ABCD12"
                      oninput="this.value=this.value.toUpperCase(); syncSummary();"
                      class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono font-bold text-slate-900 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent uppercase">
