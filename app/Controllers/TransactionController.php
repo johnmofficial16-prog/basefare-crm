@@ -143,15 +143,51 @@ class TransactionController
             $_SESSION['flash_error'] = 'Proof of sale document is missing or invalid.';
             return $response->withHeader('Location', '/transactions/create')->withStatus(302);
         }
-        
-        $proofFile = $uploadedFiles['proof_of_sale'];
-        $extension = pathinfo($proofFile->getClientFilename(), PATHINFO_EXTENSION);
-        $filename = uniqid('proof_') . '_' . bin2hex(random_bytes(8)) . '.' . $extension;
+
+        $proofFile  = $uploadedFiles['proof_of_sale'];
+        $clientName = $proofFile->getClientFilename();
+        $extension  = strtolower(pathinfo($clientName, PATHINFO_EXTENSION));
+
+        // ── Server-side format whitelist ─────────────────────────────────────
+        $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'eml', 'msg'];
+        $allowedMimes      = [
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'application/pdf',
+            'message/rfc822',                    // .eml
+            'application/vnd.ms-outlook',        // .msg
+            'application/octet-stream',          // generic fallback some servers use for .eml/.msg
+        ];
+
+        if (!in_array($extension, $allowedExtensions, true)) {
+            $_SESSION['flash_error'] = 'Invalid file type. Allowed formats: JPG, PNG, GIF, WEBP, PDF, EML, MSG.';
+            return $response->withHeader('Location', '/transactions/create')->withStatus(302);
+        }
+
+        // Write to a temp path first so we can finfo-check the real MIME
         $uploadDir = __DIR__ . '/../../storage/proofs';
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0755, true);
         }
-        $proofFile->moveTo($uploadDir . '/' . $filename);
+        $filename    = uniqid('proof_') . '_' . bin2hex(random_bytes(8)) . '.' . $extension;
+        $targetPath  = $uploadDir . '/' . $filename;
+        $proofFile->moveTo($targetPath);
+
+        // Validate actual MIME after move (prevents extension spoofing)
+        $finfo    = finfo_open(FILEINFO_MIME_TYPE);
+        $realMime = finfo_file($finfo, $targetPath);
+        finfo_close($finfo);
+
+        // .eml files often read as text/plain — allow that too
+        if ($extension === 'eml' && $realMime === 'text/plain') {
+            $realMime = 'message/rfc822';
+        }
+
+        if (!in_array($realMime, $allowedMimes, true)) {
+            @unlink($targetPath); // remove the rejected file
+            $_SESSION['flash_error'] = 'File content does not match the expected format. Allowed: JPG, PNG, PDF, EML, MSG.';
+            return $response->withHeader('Location', '/transactions/create')->withStatus(302);
+        }
+
         $body['proof_of_sale_path'] = 'storage/proofs/' . $filename;
 
         $typeData = null;

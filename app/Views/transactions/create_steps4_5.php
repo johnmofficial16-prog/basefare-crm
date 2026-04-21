@@ -275,9 +275,13 @@ Name Change : Not Allowed</textarea>
           <div id="proof-upload-section">
             <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Proof of Sale (Required) <span class="text-rose-500">*</span></p>
             <div class="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center bg-slate-50 hover:bg-slate-100 transition-colors relative cursor-pointer" onclick="document.getElementById('proof_of_sale').click()">
-              <input type="file" name="proof_of_sale" id="proof_of_sale" accept="image/*,application/pdf" class="hidden" onchange="document.getElementById('proof_filename').textContent = this.files[0] ? this.files[0].name : 'No file selected'">
+              <input type="file" name="proof_of_sale" id="proof_of_sale"
+                accept="image/*,application/pdf,message/rfc822,.eml,application/vnd.ms-outlook,.msg"
+                class="hidden"
+                onchange="document.getElementById('proof_filename').textContent = this.files[0] ? this.files[0].name : 'No file selected'">
               <span class="material-symbols-outlined text-3xl text-slate-400">add_photo_alternate</span>
-              <p class="text-sm font-bold text-slate-700 mt-2">Click to Upload Screenshot / PDF</p>
+              <p class="text-sm font-bold text-slate-700 mt-2">Click to Upload Proof of Sale</p>
+              <p class="text-[10px] text-slate-400 mt-0.5">JPG, PNG, PDF, EML, MSG accepted</p>
               <p id="proof_filename" class="text-xs text-primary-600 font-semibold mt-1">No file selected</p>
             </div>
             <div id="step5-proof-error" class="hidden mt-2 text-rose-600 text-xs font-medium flex items-center gap-1">
