@@ -93,6 +93,7 @@ $ccValidUntil  = $extraData['valid_until']     ?? null;
 $ccInstructions= $extraData['instructions']    ?? null;
 $ccEtktList    = $extraData['etkt_list']       ?? [];
 $seatNumber    = $extraData['seat_number']     ?? '';
+$seatAssignments = $extraData['seat_assignments'] ?? []; // per-passenger [{passenger, seat}]
 $baggageInfo   = $acceptance->baggage_info     ?? '';
 $isPreauth     = (bool)($acceptance->is_preauth ?? false);
 
@@ -516,15 +517,44 @@ $error = $_GET['error'] ?? null;
         </div>
         <?php endif; ?>
 
+        <!-- Assigned Seats (seat_purchase type — shown prominently) -->
+        <?php if ($acceptance->type === 'seat_purchase' && ($seatAssignments || $seatNumber)): ?>
+        <div class="section" style="border:2px solid #6366f1; border-radius:12px; padding:20px; background:linear-gradient(135deg,#eef2ff,#e0e7ff);">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+            <span style="font-size:22px;">💺</span>
+            <div>
+              <div style="font-size:12px; font-weight:800; color:#4338ca; text-transform:uppercase; letter-spacing:1px;">Assigned Seat Numbers</div>
+              <div style="font-size:11px; color:#6366f1; margin-top:2px;">Your seat assignment(s) for this booking</div>
+            </div>
+          </div>
+          <?php if (!empty($seatAssignments)): ?>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <?php foreach ($seatAssignments as $sa): ?>
+              <?php if (!empty($sa['seat'])): ?>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid #c7d2fe; border-radius:8px; padding:10px 14px;">
+                <span style="font-size:13px; color:#4b5563; font-weight:600;"><?= htmlspecialchars($sa['passenger'] ?? '') ?></span>
+                <span style="font-size:18px; font-weight:900; font-family:monospace; color:#4338ca; letter-spacing:2px; background:#eef2ff; padding:4px 14px; border-radius:6px;"><?= htmlspecialchars($sa['seat']) ?></span>
+              </div>
+              <?php endif; ?>
+            <?php endforeach; ?>
+          </div>
+          <?php elseif ($seatNumber): ?>
+          <div style="background:#fff; border:1px solid #c7d2fe; border-radius:8px; padding:12px 16px; text-align:center;">
+            <span style="font-size:20px; font-weight:900; font-family:monospace; color:#4338ca; letter-spacing:3px;"><?= htmlspecialchars($seatNumber) ?></span>
+          </div>
+          <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
         <!-- Ticket Conditions: Endorsements, Baggage, Seats -->
-        <?php if ($endorsements || $baggageInfo || $seatNumber): ?>
+        <?php if ($endorsements || $baggageInfo || ($seatNumber && $acceptance->type !== 'seat_purchase')): ?>
         <div class="section">
           <div class="section-title">Ticket Conditions</div>
           <table class="fare-table">
             <?php if ($baggageInfo): ?>
             <tr><td class="label">Baggage Info</td><td class="amt" style="font-family:Inter,sans-serif; text-align:right; font-weight:600; color:#1e293b;"><?= htmlspecialchars($baggageInfo) ?></td></tr>
             <?php endif; ?>
-            <?php if ($seatNumber): ?>
+            <?php if ($seatNumber && $acceptance->type !== 'seat_purchase'): ?>
             <tr><td class="label">Seat Number(s)</td><td class="amt" style="font-family:Inter,sans-serif; text-align:right; font-weight:600; color:#1e293b;"><?= htmlspecialchars($seatNumber) ?></td></tr>
             <?php endif; ?>
             <?php if ($endorsements): ?>

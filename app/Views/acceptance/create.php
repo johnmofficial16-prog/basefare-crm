@@ -563,7 +563,26 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Section: Other / free-form -->
+        <!-- Section: Seat Purchase Details -->
+        <div id="sec-seat-purchase" class="hidden bg-white border border-indigo-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-indigo-100 bg-indigo-50/50 flex items-center gap-2">
+            <span class="material-symbols-outlined text-indigo-500 text-base">airline_seat_recline_extra</span>
+            <div>
+              <h2 class="font-bold text-indigo-900" style="font-family:Manrope,sans-serif;">Seat Assignment Details</h2>
+              <p class="text-xs text-indigo-600 mt-0.5">Assign seat numbers per passenger — shown to the customer on the authorization form.</p>
+            </div>
+          </div>
+          <div class="p-6 space-y-3" id="seat-purchase-rows">
+            <p class="text-xs text-slate-500 italic" id="seat-purchase-hint">Add passengers first — rows will appear here automatically.</p>
+          </div>
+          <div class="px-6 pb-4">
+            <p class="text-[10px] text-indigo-500 flex items-center gap-1">
+              <span class="material-symbols-outlined text-xs">info</span>
+              Leave blank for any passenger whose seat is not yet confirmed.
+            </p>
+          </div>
+        </div>
+
         <div id="sec-other-info" class="hidden bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
             <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">Authorization Details</h2>
@@ -1454,11 +1473,14 @@ function selectType(type) {
   const cabinUpg    = ['cabin_upgrade'];
   const otherSec    = ['other'];
 
+  const seatPurch  = ['seat_purchase'];
+
   _toggleSec('sec-itinerary',      itinerary.includes(type));
   _toggleSec('sec-old-flights',    oldFlights.includes(type));
   _toggleSec('sec-new-flights',    newFlights.includes(type));
   _toggleSec('sec-name-correction',nameCorrect.includes(type));
   _toggleSec('sec-cabin-upgrade',  cabinUpg.includes(type));
+  _toggleSec('sec-seat-purchase',  seatPurch.includes(type));
   _toggleSec('sec-other-info',     otherSec.includes(type));
   _toggleSec('section-other-desc', type === 'other');
   // Show type-specific cancel sections (only in full mode)
@@ -1601,6 +1623,48 @@ const paxManager = {
     const n = state.passengers.length;
     const el = document.getElementById('sum-pax');
     if (el) el.textContent = n;
+    // Sync seat purchase rows whenever passenger count changes
+    seatPurchaseMgr.render();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEAT PURCHASE MANAGER — auto-builds per-passenger seat rows
+// ─────────────────────────────────────────────────────────────────────────────
+const seatPurchaseMgr = {
+  render: function() {
+    const container = document.getElementById('seat-purchase-rows');
+    const hint      = document.getElementById('seat-purchase-hint');
+    if (!container) return;
+
+    const filled = state.passengers.filter(p => p.name.trim());
+
+    if (!filled.length) {
+      container.innerHTML = '<p class="text-xs text-slate-500 italic" id="seat-purchase-hint">Add passengers first — rows will appear here automatically.</p>';
+      return;
+    }
+
+    // Preserve existing seat values by passenger name before re-render
+    const existing = {};
+    container.querySelectorAll('.sp-seat-input').forEach(inp => {
+      if (inp.dataset.passenger) existing[inp.dataset.passenger] = inp.value;
+    });
+
+    container.innerHTML = filled.map((p, i) => `
+      <div class="flex items-center gap-3">
+        <span class="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-mono font-semibold text-indigo-800 flex-none min-w-[160px]">
+          <span class="material-symbols-outlined text-xs text-indigo-500">person</span>
+          ${_esc(p.name.trim())}
+        </span>
+        <input type="text"
+          class="sp-seat-input flex-1 border border-indigo-200 rounded-lg px-3 py-2 text-sm font-mono font-bold text-indigo-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 uppercase"
+          placeholder="e.g. 12A"
+          maxlength="10"
+          data-passenger="${_esc(p.name.trim())}"
+          oninput="this.value = this.value.toUpperCase()"
+          value="${_esc(existing[p.name.trim()] || '')}">
+      </div>
+    `).join('');
   }
 };
 
@@ -2224,10 +2288,26 @@ const formAssembly = {
       }))
     );
 
-    // 5. Extra data (type-specific fields: other, cancel_refund, cancel_credit)
+    // 5. Extra data (type-specific fields)
     const extraData = {};
     const seatNum = (document.getElementById('field_seat_number')?.value || '').trim();
     if (seatNum) extraData.seat_number = seatNum;
+
+    // Seat Purchase: collect per-passenger seat assignments
+    if (t === 'seat_purchase') {
+      const seatRows = document.querySelectorAll('#seat-purchase-rows .sp-seat-input');
+      const assignments = [];
+      seatRows.forEach(inp => {
+        assignments.push({
+          passenger: inp.dataset.passenger || '',
+          seat: inp.value.trim().toUpperCase()
+        });
+      });
+      if (assignments.length) extraData.seat_assignments = assignments;
+      // Also set seat_number as comma-joined for backward compat
+      const allSeats = assignments.map(a => a.seat).filter(Boolean).join(', ');
+      if (allSeats) extraData.seat_number = allSeats;
+    }
 
     if (t === 'other') {
       extraData.other_title = (document.getElementById('field_other_title')?.value || '').trim();
