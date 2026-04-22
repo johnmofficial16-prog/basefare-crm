@@ -236,18 +236,24 @@ tailwind.config = {
     <!-- LEFT COLUMN -->
     <div class="space-y-5">
 
-      <!-- ── AUTHORIZATION LINK PANEL (Admin/Manager only) ── -->
+      <!-- ── AUTHORIZATION LINK PANEL (Admin/Manager only — always visible) ── -->
       <?php
       $viewerRole   = $_SESSION['role'] ?? 'agent';
       $viewerIsAdmin = in_array($viewerRole, ['admin', 'manager']);
       ?>
-      <?php if ($isPending && $viewerIsAdmin): ?>
+      <?php if ($viewerIsAdmin && !$isCancelled): ?>
       <div class="bg-white border border-primary-100 rounded-xl shadow-sm overflow-hidden">
         <div class="px-5 py-3 flex items-center gap-2" style="background:linear-gradient(135deg,#0f1e3c,#1a3a6b);">
           <span class="material-symbols-outlined text-gold text-base">link</span>
           <span class="text-white font-bold text-sm">Customer Authorization Link</span>
           <span class="ml-2 text-[10px] font-bold text-amber-300 bg-amber-400/20 px-2 py-0.5 rounded-full">Admin/Manager Only</span>
+          <?php if ($isPending): ?>
           <span class="ml-auto text-[10px] text-blue-300">Expires <?= htmlspecialchars($acceptance->expires_at->format('M j \a\t g:i A')) ?></span>
+          <?php elseif ($isApproved): ?>
+          <span class="ml-auto text-[10px] text-emerald-300">✓ Already signed</span>
+          <?php elseif ($isExpired): ?>
+          <span class="ml-auto text-[10px] text-rose-300">⚠ Link expired — resend to refresh</span>
+          <?php endif; ?>
         </div>
         <div class="p-4">
           <div class="flex items-center gap-2">

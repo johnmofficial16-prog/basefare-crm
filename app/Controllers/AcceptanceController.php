@@ -208,11 +208,15 @@ class AcceptanceController
             }
         }
 
-        // ── Send email (stub for now) ─────────────────────────────────────
+        // ── Send email ────────────────────────────────────────────────────
         $emailResult = $this->emailService->send($acceptance);
 
         $label = $acceptance->is_preauth ? 'Pre-Authorization request' : 'Acceptance request';
-        $_SESSION['flash_success'] = $label . ' created. ' . ($emailResult['note'] ?? 'Email sent.');
+        if ($emailResult['success']) {
+            $_SESSION['flash_success'] = $label . ' #' . $acceptance->id . ' created and email sent to ' . $acceptance->customer_email . '.';
+        } else {
+            $_SESSION['flash_success'] = $label . ' #' . $acceptance->id . ' created. Email delivery failed — copy the link below and send manually.';
+        }
         $_SESSION['acceptance_link'] = $acceptance->publicUrl();
 
         return $response->withHeader('Location', '/acceptance/' . $acceptance->id)->withStatus(302);
