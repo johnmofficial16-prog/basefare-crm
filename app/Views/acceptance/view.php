@@ -432,11 +432,23 @@ tailwind.config = {
                   </div>
                 </div>
               </div>
-              <?php if ($i < count($segs)-1): ?>
+              <?php if ($i < count($segs)-1):
+                  $nextSeg      = $segs[$i + 1];
+                  $thisDate     = trim($seg['date'] ?? '');
+                  $nextDate     = trim($nextSeg['date'] ?? '');
+                  $sameDay      = ($thisDate !== '' && $nextDate !== '' && $thisDate === $nextDate);
+              ?>
+              <?php if ($sameDay): ?>
               <div class="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-700">
                 <span class="material-symbols-outlined text-sm">connecting_airports</span>
                 Connection in <?= htmlspecialchars($CITIES[$to] ?? $to) ?>
               </div>
+              <?php else: ?>
+              <div class="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-semibold text-blue-700">
+                <span class="material-symbols-outlined text-sm">flight_takeoff</span>
+                Return Leg &mdash; <?= htmlspecialchars($nextDate) ?>
+              </div>
+              <?php endif; ?>
               <?php endif; ?>
           <?php endforeach;
       }
