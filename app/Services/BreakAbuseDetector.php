@@ -39,7 +39,9 @@ class BreakAbuseDetector
         $reasons = [];
 
         // 1. Single break too long
-        $duration = $break->calculateDuration();
+        // Use the already-persisted duration_mins (saved by endBreak() before analyze() is called)
+        // to ensure the detector and DB record are always consistent.
+        $duration = (int) ($break->duration_mins ?? $break->calculateDuration());
         if ($duration > $singleMax) {
             $reasons[] = "single_too_long: {$duration} mins (max {$singleMax})";
         }
@@ -56,7 +58,8 @@ class BreakAbuseDetector
         }
 
         // 3. Total washroom time too high
-        $totalMins = $washroomBreaks->sum(function ($b) { return $b->calculateDuration(); });
+        // Use persisted duration_mins for the same consistency reason as above.
+        $totalMins = (int) $washroomBreaks->sum('duration_mins');
         if ($totalMins > $totalMax) {
             $reasons[] = "total_too_long: {$totalMins} mins (max {$totalMax})";
         }

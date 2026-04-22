@@ -49,7 +49,6 @@ class AuthMiddleware
         // ── 2. Role-based access control ─────────────────────────────────
         if (!empty($this->requiredRoles)) {
             if (!in_array($userRole, $this->requiredRoles)) {
-                // Deny access
                 $response = new SlimResponse();
                 $response->getBody()->write('403 Forbidden - You do not have permission to access this page.');
                 return $response->withStatus(403);
@@ -62,8 +61,10 @@ class AuthMiddleware
             $elapsed      = time() - $lastActivity;
 
             if ($lastActivity > 0 && $elapsed > self::INACTIVITY_TIMEOUT) {
-                // Log the forced logout to activity_log with flag
-                $this->logInactivityTimeout($userId, $userRole, $elapsed);
+
+                // ── Auto clock-out before destroying session ─────────────
+                // The session data is still available here — use it before destroy.
+                $this->autoClockOutOnTimeout($userId, $userRole, $elapsed);
 
                 // Destroy session
                 session_destroy();
@@ -72,7 +73,7 @@ class AuthMiddleware
                 if (session_status() === PHP_SESSION_NONE) {
                     session_start();
                 }
-                $_SESSION['login_error'] = 'Your session expired due to inactivity (1 hour). This has been flagged for admin review.';
+                $_SESSION['login_error'] = 'Your session expired due to inactivity (1 hour). You have been automatically clocked out. This has been flagged for admin review.';
 
                 $response = new SlimResponse();
                 return $response->withHeader('Location', '/login')->withStatus(302);
@@ -101,7 +102,9 @@ class AuthMiddleware
                 // Check DB to confirm (session cache could be stale)
                 $user = User::find($userId);
                 if ($user && $user->active_session_id && $user->active_session_id !== $currentSessionId) {
-                    // This session was superseded by a newer login
+                    // This session was superseded by a newer login — auto clock-out this one too
+                    $this->autoClockOutOnTimeout($userId, $userRole, 0, 'concurrent_login_displaced');
+
                     session_destroy();
 
                     if (session_status() === PHP_SESSION_NONE) {
@@ -120,27 +123,51 @@ class AuthMiddleware
     }
 
     /**
-     * Log the inactivity timeout event to activity_log and raise admin flag.
+     * Auto clock-out an agent when their session expires (inactivity or concurrent login).
+     * Closes the active attendance session and logs the event for admin review.
      */
-    private function logInactivityTimeout(int $userId, string $role, int $elapsedSeconds): void
+    private function autoClockOutOnTimeout(int $userId, string $role, int $elapsedSeconds, string $reason = 'inactivity_timeout'): void
     {
         try {
+            $attendanceService = new \App\Services\AttendanceService();
+            $stateInfo = $attendanceService->getCurrentState($userId);
+
+            // Only clock out if the agent is actually clocked in or on a break
+            if (in_array($stateInfo['state'], [
+                \App\Services\AttendanceService::STATE_CLOCKED_IN,
+                \App\Services\AttendanceService::STATE_ON_BREAK,
+            ])) {
+                $attendanceService->clockOut($userId);
+            }
+
+            // Log the forced session end with flag for admin
+            $actionLabel = $reason === 'inactivity_timeout'
+                ? 'inactivity_timeout'
+                : 'concurrent_login_displaced';
+
             \Illuminate\Database\Capsule\Manager::table('activity_log')->insert([
                 'user_id'     => $userId,
-                'action'      => 'inactivity_timeout',
+                'action'      => $actionLabel,
                 'entity_type' => 'users',
                 'entity_id'   => $userId,
                 'details'     => json_encode([
-                    'role'            => $role,
-                    'inactive_mins'   => round($elapsedSeconds / 60),
-                    'flagged'         => true,
-                    'flag_message'    => "Agent/Supervisor session expired after " . round($elapsedSeconds / 60) . " minutes of inactivity.",
+                    'role'          => $role,
+                    'inactive_mins' => $elapsedSeconds > 0 ? round($elapsedSeconds / 60) : null,
+                    'flagged'       => true,
+                    'auto_clocked_out' => in_array($stateInfo['state'] ?? '', [
+                        \App\Services\AttendanceService::STATE_CLOCKED_IN,
+                        \App\Services\AttendanceService::STATE_ON_BREAK,
+                    ]),
+                    'flag_message' => $reason === 'inactivity_timeout'
+                        ? "Agent session expired after " . round($elapsedSeconds / 60) . " minutes of inactivity. Auto clocked out."
+                        : "Agent was logged out due to concurrent login from another location. Auto clocked out.",
                 ]),
                 'ip_address'  => $_SERVER['REMOTE_ADDR'] ?? null,
                 'created_at'  => date('Y-m-d H:i:s'),
             ]);
         } catch (\Throwable $e) {
-            error_log('AuthMiddleware: Failed to log inactivity timeout: ' . $e->getMessage());
+            // Never let a clock-out failure block the logout redirect
+            error_log('AuthMiddleware::autoClockOutOnTimeout failed: ' . $e->getMessage());
         }
     }
 }
