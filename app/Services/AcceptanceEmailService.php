@@ -4,108 +4,96 @@ namespace App\Services;
 
 use App\Models\AcceptanceRequest;
 use Carbon\Carbon;
-
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
+use PHPMailer\PHPMailer\Exception as MailerException;
 
 /**
  * AcceptanceEmailService
  *
- * Handles sending the customer authorization email with the secure token link.
- *
- * ⚠️  EMAIL SERVICE STUB — Awaiting client confirmation on provider.
- *
- * Current behaviour:
- *   - Logs the email content and link to storage/acceptance/email_log.txt
- *   - Agent can copy the link from the CRM to send manually if needed
- *
- * Once provider is confirmed (PHPMailer+SMTP / Mailgun / SendGrid), replace
- * the `send()` method body with the real implementation. Everything else stays.
+ * Sends customer authorization and confirmation emails via
+ * Google Workspace SMTP (smtp.gmail.com:587 + App Password).
  */
 class AcceptanceEmailService
 {
     // =========================================================================
-    // SEND (STUB)
+    // SEND — Authorization request email
     // =========================================================================
 
     /**
      * Send the authorization request email to the customer.
      *
      * @param AcceptanceRequest $acceptance
-     * @return array {success: bool, error: string|null}
+     * @return array {success: bool, link: string, error: string|null}
      */
     public function send(AcceptanceRequest $acceptance): array
     {
         $subject = $this->buildSubject($acceptance);
-        $body    = $this->buildPlainText($acceptance);
         $link    = $acceptance->publicUrl();
 
-        // ── STUB: Log to file ──────────────────────────────────────────────
-        $this->logEmail($acceptance, $subject, $link);
+        try {
+            $mail = $this->buildMailer();
+            $mail->addAddress($acceptance->customer_email, $acceptance->customer_name);
+            $mail->Subject = $subject;
+            $mail->isHTML(true);
+            $mail->Body    = $this->buildHtmlEmail($acceptance);
+            $mail->AltBody = $this->buildPlainText($acceptance);
+            $mail->send();
 
-        // Update email tracking on the record
-        $acceptance->increment('email_attempts');
-        $acceptance->update([
-            'email_status'   => AcceptanceRequest::EMAIL_SENT,  // Optimistic in stub
-            'last_emailed_at' => Carbon::now(),
-        ]);
+            $acceptance->increment('email_attempts');
+            $acceptance->update([
+                'email_status'    => AcceptanceRequest::EMAIL_SENT,
+                'last_emailed_at' => Carbon::now(),
+            ]);
 
-        // Return success so the agent sees the link and can copy it
-        return [
-            'success' => true,
-            'link'    => $link,
-            'note'    => 'Email service not yet configured. Link generated — copy and send manually.',
-        ];
+            $this->logEmail($acceptance, $subject, $link, 'SENT');
 
-        // ── TODO: Replace the block above with real sending once provider confirmed ──
-        //
-        // Example with PHPMailer + SMTP:
-        //
-        // $mail = new PHPMailer(true);
-        // $mail->isSMTP();
-        // $mail->Host       = $_ENV['SMTP_HOST'];
-        // $mail->Username   = $_ENV['SMTP_USER'];
-        // $mail->Password   = $_ENV['SMTP_PASS'];
-        // $mail->SMTPAuth   = true;
-        // $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        // $mail->Port       = 587;
-        // $mail->setFrom($_ENV['SMTP_FROM'], 'Lets Fly Travel DBA Base Fare');
-        // $mail->addAddress($acceptance->customer_email, $acceptance->customer_name);
-        // $mail->Subject = $subject;
-        // $mail->isHTML(true);
-        // $mail->Body    = $this->buildHtmlEmail($acceptance);
-        // $mail->AltBody = $body;
-        //
-        // try {
-        //     $mail->send();
-        //     $acceptance->increment('email_attempts');
-        //     $acceptance->update([
-        //         'email_status'    => AcceptanceRequest::EMAIL_SENT,
-        //         'last_emailed_at' => Carbon::now(),
-        //     ]);
-        //     return ['success' => true, 'link' => $link];
-        // } catch (\Exception $e) {
-        //     $acceptance->increment('email_attempts');
-        //     $acceptance->update(['email_status' => AcceptanceRequest::EMAIL_FAILED]);
-        //     return ['success' => false, 'error' => $e->getMessage(), 'link' => $link];
-        // }
+            return ['success' => true, 'link' => $link];
+
+        } catch (MailerException $e) {
+            $acceptance->increment('email_attempts');
+            $acceptance->update(['email_status' => AcceptanceRequest::EMAIL_FAILED]);
+            $this->logEmail($acceptance, $subject, $link, 'FAILED: ' . $e->getMessage());
+
+            return [
+                'success' => false,
+                'link'    => $link,
+                'error'   => $e->getMessage(),
+            ];
+        }
     }
 
     // =========================================================================
-    // CONFIRMATION EMAIL (STUB)
+    // SEND CONFIRMATION — After customer signs
     // =========================================================================
 
     /**
-     * Send the confirmation email to the customer after they have signed.
+     * Send a confirmation email to the customer after they have signed.
      */
     public function sendConfirmation(AcceptanceRequest $acceptance): array
     {
-        $subject = 'Confirmation: Authorization Received | Lets Fly Travel';
-        $link    = $acceptance->publicUrl(); // Used in stub log
-        
-        $this->logEmail($acceptance, $subject, $link);
+        $subject = 'Authorization Confirmed — ' . $acceptance->typeLabel() . ' | Lets Fly Travel';
+        $link    = $acceptance->publicUrl();
 
-        return ['success' => true];
+        try {
+            $mail = $this->buildMailer();
+            $mail->addAddress($acceptance->customer_email, $acceptance->customer_name);
+            $mail->Subject = $subject;
+            $mail->isHTML(true);
+            $mail->Body    = $this->buildConfirmationHtml($acceptance);
+            $mail->AltBody = "Hello {$acceptance->customer_name},\n\nYour authorization for {$acceptance->typeLabel()} (PNR: {$acceptance->pnr}) has been received.\n\nThank you,\nLets Fly Travel DBA Base Fare\nsupport@base-fare.com";
+            $mail->send();
+
+            $this->logEmail($acceptance, $subject, $link, 'CONFIRMATION SENT');
+
+            return ['success' => true];
+
+        } catch (MailerException $e) {
+            $this->logEmail($acceptance, $subject, $link, 'CONFIRMATION FAILED: ' . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
     }
-    
+
     // =========================================================================
     // SUBJECT LINE
     // =========================================================================
@@ -300,10 +288,114 @@ HTML;
     }
 
     // =========================================================================
-    // LOG (STUB ONLY — REMOVE ONCE SMTP IS WIRED IN)
+    // MAILER FACTORY
     // =========================================================================
 
-    private function logEmail(AcceptanceRequest $acceptance, string $subject, string $link): void
+    /**
+     * Build and return a pre-configured PHPMailer instance.
+     */
+    private function buildMailer(): PHPMailer
+    {
+        $mail = new PHPMailer(true); // true = throw exceptions
+
+        $mail->isSMTP();
+        $mail->Host       = $_ENV['SMTP_HOST']      ?? 'smtp.gmail.com';
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $_ENV['SMTP_USER']      ?? '';
+        $mail->Password   = $_ENV['SMTP_PASS']      ?? '';
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port       = (int)($_ENV['SMTP_PORT'] ?? 587);
+
+        $fromEmail = $_ENV['SMTP_FROM']      ?? 'reservation@base-fare.com';
+        $fromName  = $_ENV['SMTP_FROM_NAME'] ?? 'Lets Fly Travel DBA Base Fare';
+        $mail->setFrom($fromEmail, $fromName);
+
+        $mail->CharSet = PHPMailer::CHARSET_UTF8;
+
+        return $mail;
+    }
+
+    // =========================================================================
+    // CONFIRMATION EMAIL HTML
+    // =========================================================================
+
+    private function buildConfirmationHtml(AcceptanceRequest $acceptance): string
+    {
+        $customerName = htmlspecialchars($acceptance->customer_name);
+        $typeLabel    = htmlspecialchars($acceptance->typeLabel());
+        $pnr          = htmlspecialchars($acceptance->pnr);
+        $signedAt     = $acceptance->signed_at
+            ? Carbon::parse($acceptance->signed_at)->format('F j, Y \a\t g:i A T')
+            : Carbon::now()->format('F j, Y \a\t g:i A T');
+
+        return <<<HTML
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Authorization Confirmed</title></head>
+<body style="font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;margin:0;padding:20px;color:#333;">
+  <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#0f1e3c 0%,#1a3a6b 100%);padding:30px;text-align:center;">
+      <div style="color:#fff;font-size:22px;font-weight:800;letter-spacing:1px;">LETS FLY TRAVEL</div>
+      <div style="color:#c9a84c;font-size:12px;font-weight:600;margin-top:3px;letter-spacing:0.5px;">DBA BASE FARE</div>
+      <div style="margin-top:16px;border-top:1px solid rgba(255,255,255,0.2);padding-top:14px;">
+        <span style="color:#4ade80;font-size:28px;">✓</span>
+        <div style="color:#fff;font-size:15px;font-weight:600;margin-top:4px;">Authorization Confirmed</div>
+      </div>
+    </div>
+    <div style="padding:30px;">
+      <p style="color:#555;font-size:15px;">Hello <strong>{$customerName}</strong>,</p>
+      <p style="color:#555;font-size:15px;">Your authorization for <strong>{$typeLabel}</strong> has been successfully received and recorded.</p>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:20px;margin:20px 0;text-align:center;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#16a34a;margin-bottom:6px;">Booking Reference (PNR)</div>
+        <div style="font-size:24px;font-weight:800;font-family:monospace;color:#0f1e3c;letter-spacing:3px;">{$pnr}</div>
+        <div style="font-size:12px;color:#166534;margin-top:8px;">Signed: {$signedAt}</div>
+      </div>
+      <p style="color:#555;font-size:13px;">A copy of this authorization has been securely stored. Your travel agent will proceed with your booking shortly.</p>
+    </div>
+    <div style="background:#f8fafc;padding:20px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
+      <strong style="color:#0f1e3c;">Lets Fly Travel DBA Base Fare</strong><br>
+      Email: support@base-fare.com<br><br>
+      <span style="font-size:10px;">This is an automated confirmation. Please do not reply to this email.</span>
+    </div>
+  </div>
+</body>
+</html>
+HTML;
+    }
+
+    // =========================================================================
+    // HELPERS
+    // =========================================================================
+
+    private function formatPassengersPlain(array $passengers): string
+    {
+        if (empty($passengers)) return 'N/A';
+        $lines = [];
+        foreach ($passengers as $p) {
+            $name = $p['name'] ?? '';
+            $dob  = isset($p['dob']) && $p['dob'] ? ' (DOB: ' . $p['dob'] . ')' : '';
+            $lines[] = "  • {$name}{$dob}";
+        }
+        return implode("\n", $lines);
+    }
+
+    private function formatFarePlain(array $breakdown, float $total, string $currency): string
+    {
+        if (empty($breakdown)) return "  Total: {$currency} " . number_format($total, 2);
+        $lines = [];
+        foreach ($breakdown as $item) {
+            $lines[] = sprintf('  %-35s %s %s', $item['label'] ?? '', $currency, number_format((float)($item['amount'] ?? 0), 2));
+        }
+        $lines[] = str_repeat('─', 50);
+        $lines[] = sprintf('  %-35s %s %s', 'TOTAL', $currency, number_format($total, 2));
+        return implode("\n", $lines);
+    }
+
+    // =========================================================================
+    // EMAIL LOG — keeps an audit trail of all send attempts
+    // =========================================================================
+
+    private function logEmail(AcceptanceRequest $acceptance, string $subject, string $link, string $status = 'QUEUED'): void
     {
         $logDir = __DIR__ . '/../../storage/acceptance/';
         if (!is_dir($logDir)) {
@@ -311,11 +403,13 @@ HTML;
         }
 
         $entry = sprintf(
-            "[%s] ID:%d | TO:%s | PNR:%s | LINK:%s\n",
+            "[%s] %s | ID:%d | TO:%s | PNR:%s | SUBJ:%s | LINK:%s\n",
             Carbon::now()->format('Y-m-d H:i:s'),
+            $status,
             $acceptance->id,
             $acceptance->customer_email,
             $acceptance->pnr,
+            $subject,
             $link
         );
 
