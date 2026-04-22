@@ -349,10 +349,9 @@ class TransactionController
             return $response->withHeader('Location', '/transactions/' . $id . '/edit')->withStatus(302);
         }
 
-        // ── Handle Proof of Sale replacement (admin/manager only) ────────────
+        // ── Handle Proof of Sale replacement ────────────
         $uploadedFiles = $request->getUploadedFiles();
         if (
-            $isAdmin &&
             !empty($uploadedFiles['proof_of_sale']) &&
             $uploadedFiles['proof_of_sale']->getError() === UPLOAD_ERR_OK
         ) {

@@ -225,7 +225,10 @@ class Transaction extends Model
         if ($this->status === self::STATUS_VOIDED) {
             return false;
         }
-        return $isAdmin === true;
+        if ($isAdmin) {
+            return true;
+        }
+        return $this->status === self::STATUS_PENDING;
     }
 
     public function isImmutable(): bool

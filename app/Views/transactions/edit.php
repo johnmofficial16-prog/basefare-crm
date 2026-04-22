@@ -308,16 +308,12 @@ tailwind.config = {
       </div>
     </div>
 
-    <input type="hidden" name="type_specific_data_json" id="type_specific_data_json">
-
-    <?php if ($isAdmin): ?>
     <!-- ── Proof of Sale ───────────────────────────────────────────────── -->
     <div class="section" style="border-color:#fde68a;background:linear-gradient(135deg,#fffbeb,#fff);">
       <div class="section-head" style="background:rgba(254,243,199,.5);border-color:#fde68a;">
         <h2 style="color:#92400e;">
           <span class="msym" style="font-size:18px;color:#d97706;">receipt</span>
           Proof of Sale
-          <span style="font-size:10px;font-weight:600;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;margin-left:4px;">ADMIN ONLY</span>
         </h2>
       </div>
       <div class="section-body">
@@ -364,8 +360,6 @@ tailwind.config = {
         </div>
       </div>
     </div>
-    <?php endif; ?>
-
     <!-- ── Action Bar ────────────────────────────────────────────────────── -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 0;">
       <a href="/transactions/<?= $txn->id ?>" style="font-size:13px;font-weight:600;color:#94a3b8;text-decoration:none;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#94a3b8'">
