@@ -507,8 +507,15 @@ body {
           </div>
         </div>
       </div>
-      <?php if ($idx < count($grp['segs']) - 1): ?>
+      <?php if ($idx < count($grp['segs']) - 1):
+              $nextSegR  = $grp['segs'][$idx + 1];
+              $sameDayR  = trim($seg['date'] ?? '') !== '' && trim($seg['date'] ?? '') === trim($nextSegR['date'] ?? '');
+      ?>
+      <?php if ($sameDayR): ?>
       <div class="layover-bar">⏱ Layover in <?= rh($CITIES_R[$to] ?? $to) ?></div>
+      <?php else: ?>
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:5px 12px;font-size:10px;font-weight:700;color:#1e40af;margin-bottom:8px;display:flex;align-items:center;gap:6px;">✈ Return Leg — <?= rh(trim($nextSegR['date'] ?? '')) ?></div>
+      <?php endif; ?>
       <?php endif; ?>
       <?php endforeach; ?>
       <?php endforeach; ?>

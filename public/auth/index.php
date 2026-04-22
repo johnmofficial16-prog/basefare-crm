@@ -664,11 +664,21 @@ tailwind.config = {
                 </div>
                 <span class="text-[10px] font-bold text-slate-400 flex-none"><?= h($seg['cabin_class'] ?? '') ?></span>
               </div>
-              <?php if ($idx < count($grp['segs'])-1): ?>
+              <?php if ($idx < count($grp['segs'])-1):
+                $nextSegPub = $grp['segs'][$idx + 1];
+                $sameDayPub = trim($seg['date'] ?? '') !== '' && trim($seg['date'] ?? '') === trim($nextSegPub['date'] ?? '');
+              ?>
+              <?php if ($sameDayPub): ?>
               <div class="px-4 py-1.5 bg-amber-50 flex items-center gap-2 text-[10px] font-semibold text-amber-700">
                 <span class="material-symbols-outlined text-xs">connecting_airports</span>
                 Layover in <?= h($CITIES_PUB[$to] ?? $to) ?>
               </div>
+              <?php else: ?>
+              <div class="px-4 py-1.5 bg-blue-50 flex items-center gap-2 text-[10px] font-semibold text-blue-700">
+                <span class="material-symbols-outlined text-xs">flight_takeoff</span>
+                Return Leg &mdash; <?= h(trim($nextSegPub['date'] ?? '')) ?>
+              </div>
+              <?php endif; ?>
               <?php endif; ?>
               <?php endforeach; ?>
             </div>

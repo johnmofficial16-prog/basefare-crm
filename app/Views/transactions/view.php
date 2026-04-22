@@ -512,8 +512,15 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
                 </div>
               </div>
             </div>
-            <?php if ($idx < count($flights) - 1): ?>
+            <?php if ($idx < count($flights) - 1):
+                $nextSegTxn = $flights[$idx + 1];
+                $sameDayTxn = trim($seg['date'] ?? '') !== '' && trim($seg['date'] ?? '') === trim($nextSegTxn['date'] ?? '');
+            ?>
+            <?php if ($sameDayTxn): ?>
             <div class="text-center py-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">⏱ Layover in <?= htmlspecialchars($CITIES_R[$to] ?? $to) ?></div>
+            <?php else: ?>
+            <div class="text-center py-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg">✈ Return Leg — <?= htmlspecialchars(trim($nextSegTxn['date'] ?? '')) ?></div>
+            <?php endif; ?>
             <?php endif; ?>
             <?php endforeach; ?>
             </div>
