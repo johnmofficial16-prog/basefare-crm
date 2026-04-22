@@ -645,26 +645,37 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       </div>
 
 
-      <!-- Proof of Sale Document -->
-      <?php if (!empty($txn->proof_of_sale_path)): ?>
+      <!-- Proof of Sale Documents -->
+      <?php
+        $proofRaw   = $txn->proof_of_sale_path;
+        $proofPaths = is_array($proofRaw) ? $proofRaw : (json_decode((string)$proofRaw, true) ?: ($proofRaw ? [$proofRaw] : []));
+      ?>
+      <?php if (!empty($proofPaths)): ?>
       <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
           <h2 class="font-bold text-slate-900" style="font-family:Manrope">
-            <span class="material-symbols-outlined text-base align-text-bottom mr-1">receipt_long</span> Proof of Sale
+            <span class="material-symbols-outlined text-base align-text-bottom mr-1">receipt_long</span>
+            Proof of Sale <span class="text-slate-400 font-normal text-sm">(<?= count($proofPaths) ?> file<?= count($proofPaths) > 1 ? 's' : '' ?>)</span>
           </h2>
         </div>
-        <div class="p-6 text-center">
+        <div class="p-6">
           <?php if ($isAdmin): ?>
-          <a href="/transactions/<?= $txn->id ?>/proof" target="_blank"
-             class="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-sm">
-            <span class="material-symbols-outlined text-base">visibility</span> View Document
-          </a>
-          <p class="text-[10px] text-slate-400 mt-2">Restricted to Managers & Admins</p>
+          <div class="flex flex-wrap gap-3">
+            <?php foreach ($proofPaths as $idx => $path): ?>
+            <a href="/transactions/<?= $txn->id ?>/proof?index=<?= $idx ?>" target="_blank"
+               class="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-sm">
+              <span class="material-symbols-outlined text-base">visibility</span>
+              Proof #<?= $idx + 1 ?>
+              <span class="text-slate-400 font-normal text-[10px]"><?= htmlspecialchars(strtoupper(pathinfo($path, PATHINFO_EXTENSION))) ?></span>
+            </a>
+            <?php endforeach; ?>
+          </div>
+          <p class="text-[10px] text-slate-400 mt-2">Restricted to Managers &amp; Admins</p>
           <?php else: ?>
           <div class="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-400 text-sm font-bold rounded-lg border border-slate-200">
             <span class="material-symbols-outlined text-base">lock</span> View Restricted
           </div>
-          <p class="text-[10px] text-slate-400 mt-2">Only Managers & Admins can view this document.</p>
+          <p class="text-[10px] text-slate-400 mt-2">Only Managers &amp; Admins can view these documents.</p>
           <?php endif; ?>
         </div>
       </div>

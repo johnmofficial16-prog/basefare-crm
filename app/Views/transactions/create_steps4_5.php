@@ -275,19 +275,20 @@ Name Change : Not Allowed</textarea>
           <div id="proof-upload-section">
             <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Proof of Sale (Required) <span class="text-rose-500">*</span></p>
             <div class="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center bg-slate-50 hover:bg-slate-100 transition-colors relative cursor-pointer" onclick="document.getElementById('proof_of_sale').click()">
-              <input type="file" name="proof_of_sale" id="proof_of_sale"
+              <input type="file" name="proof_of_sale[]" id="proof_of_sale"
                 accept="image/*,application/pdf,message/rfc822,.eml,application/vnd.ms-outlook,.msg,.heic,.heif,.bmp"
                 capture="environment"
+                multiple
                 class="hidden"
                 onchange="handleProofChange(this)">
               <span class="material-symbols-outlined text-3xl text-slate-400">add_photo_alternate</span>
               <p class="text-sm font-bold text-slate-700 mt-2">Click to Upload or Capture Proof of Sale</p>
-              <p class="text-[10px] text-slate-400 mt-0.5">JPG, PNG, PDF, HEIC, EML, MSG — max 15 MB</p>
+              <p class="text-[10px] text-slate-400 mt-0.5">JPG, PNG, PDF, HEIC, EML, MSG &mdash; max 15 MB each &mdash; multiple files allowed</p>
               <p id="proof_filename" class="text-xs text-primary-600 font-semibold mt-1">No file selected</p>
             </div>
             <p class="text-[10px] text-slate-400 mt-1.5 flex items-center gap-1">
               <span class="material-symbols-outlined text-xs">info</span>
-              Files larger than 15 MB will be rejected. If your screenshot is too large, compress it or export as PDF before uploading.
+              You can select multiple files at once (e.g. screenshot + email confirmation). Each file must be under 15 MB.
             </p>
             <div id="step5-proof-error" class="hidden mt-2 text-rose-600 text-xs font-medium flex items-center gap-1">
               <span class="material-symbols-outlined text-sm">error</span> <span id="step5-proof-error-msg">Proof of sale document is mandatory.</span>

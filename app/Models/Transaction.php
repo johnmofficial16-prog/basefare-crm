@@ -148,12 +148,13 @@ class Transaction extends Model
     // Casts
     // =========================================================================
     protected $casts = [
-        'data'          => 'array',
-        'total_amount'  => 'float',
-        'cost_amount'   => 'float',
-        'profit_mco'    => 'float',
-        'acceptance_id' => 'integer',
-        'agent_id'      => 'integer',
+        'data'                => 'array',
+        'proof_of_sale_path'  => 'array',
+        'total_amount'        => 'float',
+        'cost_amount'         => 'float',
+        'profit_mco'          => 'float',
+        'acceptance_id'       => 'integer',
+        'agent_id'            => 'integer',
     ];
 
     // =========================================================================

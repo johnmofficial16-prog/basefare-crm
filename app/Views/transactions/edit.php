@@ -290,25 +290,7 @@ tailwind.config = {
           </div>
           <div>
             <label class="fl">Payment Status</label>
-            <select name="payment_status" class="fi">
-              <?php foreach (Transaction::paymentStatusOptions() as $v => $l): ?>
-              <option value="<?= $v ?>" <?= $prefill['payment_status'] === $v ? 'selected' : '' ?>><?= $l ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Notes ─────────────────────────────────────────────────────────── -->
-    <div class="section">
-      <div class="section-head"><h2><span class="msym">sticky_note_2</span> Agent Notes *</h2></div>
-      <div class="section-body">
-        <textarea name="agent_notes" rows="3" class="fi" required style="resize:vertical;"><?= htmlspecialchars($prefill['agent_notes'] ?? '') ?></textarea>
-      </div>
-    </div>
-
-    <!-- ── Proof of Sale ───────────────────────────────────────────────── -->
+             <!-- ── Proof of Sale ──────────────────────────────────────────────────── -->
     <div class="section" style="border-color:#fde68a;background:linear-gradient(135deg,#fffbeb,#fff);">
       <div class="section-head" style="background:rgba(254,243,199,.5);border-color:#fde68a;">
         <h2 style="color:#92400e;">
@@ -317,18 +299,25 @@ tailwind.config = {
         </h2>
       </div>
       <div class="section-body">
-        <?php if (!empty($txn->proof_of_sale_path)): ?>
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin-bottom:14px;">
-          <span class="msym" style="color:#16a34a;font-size:20px;">check_circle</span>
-          <div style="flex:1;min-width:0;">
-            <p style="font-size:11px;font-weight:700;color:#065f46;">Current Document</p>
-            <p style="font-size:11px;font-family:monospace;color:#166534;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= htmlspecialchars(basename($txn->proof_of_sale_path)) ?></p>
+        <?php
+          $proofRaw   = $txn->proof_of_sale_path;
+          $proofPaths = is_array($proofRaw) ? $proofRaw : (json_decode((string)$proofRaw, true) ?: ($proofRaw ? [$proofRaw] : []));
+        ?>
+        <?php if (!empty($proofPaths)): ?>
+        <div style="margin-bottom:14px;">
+          <p style="font-size:11px;font-weight:700;color:#065f46;margin-bottom:8px;">Current Documents (<?= count($proofPaths) ?>)</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <?php foreach ($proofPaths as $idx => $path): ?>
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+              <span class="msym" style="color:#16a34a;font-size:16px;">check_circle</span>
+              <span style="font-size:11px;font-family:monospace;color:#166534;"><?= htmlspecialchars(basename($path)) ?></span>
+              <a href="/transactions/<?= $txn->id ?>/proof?index=<?= $idx ?>" target="_blank"
+                 style="flex-none;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#0f1e3c;background:#fff;border:1px solid #d1fae5;padding:4px 10px;border-radius:7px;text-decoration:none;">
+                <span class="msym" style="font-size:13px;">open_in_new</span> View
+              </a>
+            </div>
+            <?php endforeach; ?>
           </div>
-          <a href="/transactions/<?= $txn->id ?>/proof" target="_blank"
-             style="flex-none;display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:#0f1e3c;background:#fff;border:1px solid #d1fae5;padding:6px 12px;border-radius:8px;text-decoration:none;transition:all .15s;"
-             onmouseover="this.style.background='#ecfdf5'" onmouseout="this.style.background='#fff'">
-            <span class="msym" style="font-size:15px;">open_in_new</span> View
-          </a>
         </div>
         <?php else: ?>
         <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;margin-bottom:14px;">
@@ -338,27 +327,27 @@ tailwind.config = {
         <?php endif; ?>
 
         <div>
-          <label class="fl" style="color:#92400e;">Replace Proof of Sale Document</label>
+          <label class="fl" style="color:#92400e;">Add More Proof of Sale Documents</label>
           <div id="proof-drop-zone" style="border:2px dashed #fcd34d;border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:#fffbeb;transition:all .15s;"
                onclick="document.getElementById('proof_of_sale_edit').click()"
                onmouseover="this.style.borderColor='#f59e0b'" onmouseout="this.style.borderColor='#fcd34d'">
-            <input type="file" name="proof_of_sale" id="proof_of_sale_edit"
+            <input type="file" name="proof_of_sale[]" id="proof_of_sale_edit"
                    accept="image/*,application/pdf,message/rfc822,.eml,application/vnd.ms-outlook,.msg,.heic,.heif,.bmp"
                    capture="environment"
+                   multiple
                    style="display:none;"
                    onchange="handleEditProof(this)">
             <span class="msym" style="font-size:28px;color:#d97706;">upload_file</span>
-            <p style="font-size:13px;font-weight:700;color:#92400e;margin-top:6px;">Click or tap to select new proof of sale</p>
-            <p style="font-size:10px;color:#b45309;margin-top:3px;">JPG, PNG, PDF, HEIC, EML, MSG &mdash; max 15 MB</p>
+            <p style="font-size:13px;font-weight:700;color:#92400e;margin-top:6px;">Click or tap to select proof file(s)</p>
+            <p style="font-size:10px;color:#b45309;margin-top:3px;">JPG, PNG, PDF, HEIC, EML, MSG &mdash; max 15 MB each &mdash; multiple files allowed</p>
             <p id="proof-edit-name" style="font-size:11px;font-weight:700;color:#059669;margin-top:6px;"></p>
           </div>
           <p style="font-size:10px;color:#94a3b8;margin-top:6px;display:flex;align-items:center;gap:4px;">
             <span class="msym" style="font-size:13px;">info</span>
-            Leave blank to keep the current document. If you upload a new file, the old one will be permanently deleted.
+            New files will be added to the existing list. Leave blank to keep current documents only.
           </p>
           <p id="proof-edit-error" style="font-size:11px;color:#dc2626;font-weight:600;margin-top:4px;display:none;"></p>
         </div>
-      </div>
     </div>
     <!-- ── Action Bar ────────────────────────────────────────────────────── -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 0;">
@@ -430,18 +419,21 @@ function handleEditProof(input) {
     if (nameEl) nameEl.textContent = '';
     return;
   }
-  const file   = input.files[0];
-  const sizeMB = file.size / (1024 * 1024);
-  if (sizeMB > MAX_MB) {
-    if (errEl)  { errEl.textContent = 'File too large (' + sizeMB.toFixed(1) + ' MB). Max 15 MB.'; errEl.style.display = 'block'; }
-    if (zone)   zone.style.borderColor = '#fca5a5';
-    input.value = '';
-    if (nameEl) nameEl.textContent = '';
-    return;
+  const names = [];
+  for (const file of input.files) {
+    const sizeMB = file.size / (1024 * 1024);
+    if (sizeMB > MAX_MB) {
+      if (errEl)  { errEl.textContent = '"' + file.name + '" is too large (' + sizeMB.toFixed(1) + ' MB). Max 15 MB per file.'; errEl.style.display = 'block'; }
+      if (zone)   zone.style.borderColor = '#fca5a5';
+      input.value = '';
+      if (nameEl) nameEl.textContent = '';
+      return;
+    }
+    names.push(file.name);
   }
   if (errEl)  { errEl.textContent = ''; errEl.style.display = 'none'; }
   if (zone)   zone.style.borderColor = '#34d399';
-  if (nameEl) nameEl.textContent = '\u2713 ' + file.name;
+  if (nameEl) nameEl.textContent = '\u2713 ' + names.length + ' file(s): ' + names.join(', ');
 }
 
 // \u2500\u2500 Init \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
