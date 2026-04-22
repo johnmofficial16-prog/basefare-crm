@@ -133,7 +133,7 @@ tailwind.config = {
   </div>
   <?php endif; ?>
 
-  <form id="txnForm" method="POST" action="/transactions/<?= $txn->id ?>/edit" style="display:flex;flex-direction:column;gap:16px;">
+  <form id="txnForm" method="POST" action="/transactions/<?= $txn->id ?>/edit" enctype="multipart/form-data" style="display:flex;flex-direction:column;gap:16px;">
     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
 
     <!-- ── Admin: Status Control ─────────────────────────────────────────── -->
@@ -310,6 +310,62 @@ tailwind.config = {
 
     <input type="hidden" name="type_specific_data_json" id="type_specific_data_json">
 
+    <?php if ($isAdmin): ?>
+    <!-- ── Proof of Sale ───────────────────────────────────────────────── -->
+    <div class="section" style="border-color:#fde68a;background:linear-gradient(135deg,#fffbeb,#fff);">
+      <div class="section-head" style="background:rgba(254,243,199,.5);border-color:#fde68a;">
+        <h2 style="color:#92400e;">
+          <span class="msym" style="font-size:18px;color:#d97706;">receipt</span>
+          Proof of Sale
+          <span style="font-size:10px;font-weight:600;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;margin-left:4px;">ADMIN ONLY</span>
+        </h2>
+      </div>
+      <div class="section-body">
+        <?php if (!empty($txn->proof_of_sale_path)): ?>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin-bottom:14px;">
+          <span class="msym" style="color:#16a34a;font-size:20px;">check_circle</span>
+          <div style="flex:1;min-width:0;">
+            <p style="font-size:11px;font-weight:700;color:#065f46;">Current Document</p>
+            <p style="font-size:11px;font-family:monospace;color:#166534;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= htmlspecialchars(basename($txn->proof_of_sale_path)) ?></p>
+          </div>
+          <a href="/transactions/<?= $txn->id ?>/proof" target="_blank"
+             style="flex-none;display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:#0f1e3c;background:#fff;border:1px solid #d1fae5;padding:6px 12px;border-radius:8px;text-decoration:none;transition:all .15s;"
+             onmouseover="this.style.background='#ecfdf5'" onmouseout="this.style.background='#fff'">
+            <span class="msym" style="font-size:15px;">open_in_new</span> View
+          </a>
+        </div>
+        <?php else: ?>
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;margin-bottom:14px;">
+          <span class="msym" style="color:#dc2626;font-size:18px;">warning</span>
+          <p style="font-size:12px;font-weight:600;color:#991b1b;">No proof of sale on file for this transaction.</p>
+        </div>
+        <?php endif; ?>
+
+        <div>
+          <label class="fl" style="color:#92400e;">Replace Proof of Sale Document</label>
+          <div id="proof-drop-zone" style="border:2px dashed #fcd34d;border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:#fffbeb;transition:all .15s;"
+               onclick="document.getElementById('proof_of_sale_edit').click()"
+               onmouseover="this.style.borderColor='#f59e0b'" onmouseout="this.style.borderColor='#fcd34d'">
+            <input type="file" name="proof_of_sale" id="proof_of_sale_edit"
+                   accept="image/*,application/pdf,message/rfc822,.eml,application/vnd.ms-outlook,.msg,.heic,.heif,.bmp"
+                   capture="environment"
+                   style="display:none;"
+                   onchange="handleEditProof(this)">
+            <span class="msym" style="font-size:28px;color:#d97706;">upload_file</span>
+            <p style="font-size:13px;font-weight:700;color:#92400e;margin-top:6px;">Click or tap to select new proof of sale</p>
+            <p style="font-size:10px;color:#b45309;margin-top:3px;">JPG, PNG, PDF, HEIC, EML, MSG &mdash; max 15 MB</p>
+            <p id="proof-edit-name" style="font-size:11px;font-weight:700;color:#059669;margin-top:6px;"></p>
+          </div>
+          <p style="font-size:10px;color:#94a3b8;margin-top:6px;display:flex;align-items:center;gap:4px;">
+            <span class="msym" style="font-size:13px;">info</span>
+            Leave blank to keep the current document. If you upload a new file, the old one will be permanently deleted.
+          </p>
+          <p id="proof-edit-error" style="font-size:11px;color:#dc2626;font-weight:600;margin-top:4px;display:none;"></p>
+        </div>
+      </div>
+    </div>
+    <?php endif; ?>
+
     <!-- ── Action Bar ────────────────────────────────────────────────────── -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 0;">
       <a href="/transactions/<?= $txn->id ?>" style="font-size:13px;font-weight:600;color:#94a3b8;text-decoration:none;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#94a3b8'">
@@ -370,7 +426,31 @@ const paxMgr = {
   _sync() { document.getElementById('passengers_json').value = JSON.stringify(this.list); }
 };
 
-// ── Init ─────────────────────────────────────────────────────────────────────
+// \u2500\u2500 Proof of sale edit: size guard \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function handleEditProof(input) {
+  const MAX_MB = 15;
+  const nameEl = document.getElementById('proof-edit-name');
+  const errEl  = document.getElementById('proof-edit-error');
+  const zone   = document.getElementById('proof-drop-zone');
+  if (!input.files.length) {
+    if (nameEl) nameEl.textContent = '';
+    return;
+  }
+  const file   = input.files[0];
+  const sizeMB = file.size / (1024 * 1024);
+  if (sizeMB > MAX_MB) {
+    if (errEl)  { errEl.textContent = 'File too large (' + sizeMB.toFixed(1) + ' MB). Max 15 MB.'; errEl.style.display = 'block'; }
+    if (zone)   zone.style.borderColor = '#fca5a5';
+    input.value = '';
+    if (nameEl) nameEl.textContent = '';
+    return;
+  }
+  if (errEl)  { errEl.textContent = ''; errEl.style.display = 'none'; }
+  if (zone)   zone.style.borderColor = '#34d399';
+  if (nameEl) nameEl.textContent = '\u2713 ' + file.name;
+}
+
+// \u2500\u2500 Init \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 (function () {
   const t = document.getElementById('field_type').value;
   if (t) selectType(t);

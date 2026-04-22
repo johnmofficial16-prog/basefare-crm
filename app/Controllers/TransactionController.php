@@ -149,9 +149,10 @@ class TransactionController
         $extension  = strtolower(pathinfo($clientName, PATHINFO_EXTENSION));
 
         // ── Server-side format whitelist ─────────────────────────────────────
-        $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'eml', 'msg'];
+        $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'pdf', 'eml', 'msg'];
         $allowedMimes      = [
-            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
+            'image/heic', 'image/heif',
             'application/pdf',
             'message/rfc822',                    // .eml
             'application/vnd.ms-outlook',        // .msg
@@ -159,7 +160,14 @@ class TransactionController
         ];
 
         if (!in_array($extension, $allowedExtensions, true)) {
-            $_SESSION['flash_error'] = 'Invalid file type. Allowed formats: JPG, PNG, GIF, WEBP, PDF, EML, MSG.';
+            $_SESSION['flash_error'] = 'Invalid file type. Allowed formats: JPG, PNG, GIF, WEBP, BMP, HEIC, PDF, EML, MSG.';
+            return $response->withHeader('Location', '/transactions/create')->withStatus(302);
+        }
+
+        // ── File size check (15 MB max) ──────────────────────────────────────
+        $maxBytes = 15 * 1024 * 1024;
+        if ($proofFile->getSize() > $maxBytes) {
+            $_SESSION['flash_error'] = 'Proof of sale file is too large. Maximum allowed size is 15 MB. Please compress or export as PDF.';
             return $response->withHeader('Location', '/transactions/create')->withStatus(302);
         }
 
@@ -181,10 +189,14 @@ class TransactionController
         if ($extension === 'eml' && $realMime === 'text/plain') {
             $realMime = 'message/rfc822';
         }
+        // .heic files may be detected as application/octet-stream on some hosts
+        if (in_array($extension, ['heic', 'heif']) && $realMime === 'application/octet-stream') {
+            $realMime = 'image/heic';
+        }
 
         if (!in_array($realMime, $allowedMimes, true)) {
             @unlink($targetPath); // remove the rejected file
-            $_SESSION['flash_error'] = 'File content does not match the expected format. Allowed: JPG, PNG, PDF, EML, MSG.';
+            $_SESSION['flash_error'] = 'File content does not match the expected format. Allowed: JPG, PNG, BMP, HEIC, PDF, EML, MSG.';
             return $response->withHeader('Location', '/transactions/create')->withStatus(302);
         }
 
@@ -328,11 +340,6 @@ class TransactionController
             ? json_decode($body['type_specific_data_json'], true)
             : null;
 
-        $data = array_merge($body, [
-            'passengers'         => $passengers,
-            'type_specific_data' => $typeData,
-        ]);
-
         $userRole = $_SESSION['role'] ?? 'agent';
         $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
 
@@ -341,6 +348,70 @@ class TransactionController
             $_SESSION['flash_error'] = 'Agent notes are required for auditing. Please describe what you changed.';
             return $response->withHeader('Location', '/transactions/' . $id . '/edit')->withStatus(302);
         }
+
+        // ── Handle Proof of Sale replacement (admin/manager only) ────────────
+        $uploadedFiles = $request->getUploadedFiles();
+        if (
+            $isAdmin &&
+            !empty($uploadedFiles['proof_of_sale']) &&
+            $uploadedFiles['proof_of_sale']->getError() === UPLOAD_ERR_OK
+        ) {
+            $proofFile  = $uploadedFiles['proof_of_sale'];
+            $clientName = $proofFile->getClientFilename();
+            $extension  = strtolower(pathinfo($clientName, PATHINFO_EXTENSION));
+
+            $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'pdf', 'eml', 'msg'];
+            $allowedMimes      = [
+                'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
+                'image/heic', 'image/heif', 'application/pdf',
+                'message/rfc822', 'application/vnd.ms-outlook', 'application/octet-stream',
+            ];
+
+            $maxBytes = 15 * 1024 * 1024;
+            if ($proofFile->getSize() > $maxBytes) {
+                $_SESSION['flash_error'] = 'Proof of sale file is too large. Maximum allowed size is 15 MB.';
+                return $response->withHeader('Location', '/transactions/' . $id . '/edit')->withStatus(302);
+            }
+
+            if (!in_array($extension, $allowedExtensions, true)) {
+                $_SESSION['flash_error'] = 'Invalid file type for proof of sale. Allowed: JPG, PNG, BMP, HEIC, PDF, EML, MSG.';
+                return $response->withHeader('Location', '/transactions/' . $id . '/edit')->withStatus(302);
+            }
+
+            $uploadDir = __DIR__ . '/../../storage/proofs';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+            $filename   = uniqid('proof_') . '_' . bin2hex(random_bytes(8)) . '.' . $extension;
+            $targetPath = $uploadDir . '/' . $filename;
+            $proofFile->moveTo($targetPath);
+
+            $finfo    = finfo_open(FILEINFO_MIME_TYPE);
+            $realMime = finfo_file($finfo, $targetPath);
+            finfo_close($finfo);
+            if ($extension === 'eml' && $realMime === 'text/plain') $realMime = 'message/rfc822';
+            if (in_array($extension, ['heic', 'heif']) && $realMime === 'application/octet-stream') $realMime = 'image/heic';
+
+            if (!in_array($realMime, $allowedMimes, true)) {
+                @unlink($targetPath);
+                $_SESSION['flash_error'] = 'Proof file content does not match the expected format.';
+                return $response->withHeader('Location', '/transactions/' . $id . '/edit')->withStatus(302);
+            }
+
+            // Delete old proof file if it exists
+            $txnOld = Transaction::find($id);
+            if ($txnOld && !empty($txnOld->proof_of_sale_path)) {
+                $oldPath = __DIR__ . '/../../' . $txnOld->proof_of_sale_path;
+                if (file_exists($oldPath)) @unlink($oldPath);
+            }
+
+            $body['proof_of_sale_path'] = 'storage/proofs/' . $filename;
+        }
+
+        $data = array_merge($body, [
+            'passengers'         => $passengers,
+            'type_specific_data' => $typeData,
+        ]);
 
         try {
             $txn = $this->service->update($id, $data, $isAdmin);

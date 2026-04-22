@@ -800,8 +800,10 @@ const formAssembly = {
     // Validate Proof of Sale
     const proofInput = document.getElementById('proof_of_sale');
     const proofError = document.getElementById('step5-proof-error');
+    const proofMsg   = document.getElementById('step5-proof-error-msg');
     if (!proofInput || proofInput.files.length === 0) {
         if (proofError) proofError.classList.remove('hidden');
+        if (proofMsg)   proofMsg.textContent = 'Proof of sale document is mandatory. Please upload a screenshot or PDF.';
         alert('Proof of sale document is mandatory. Please upload a screenshot or PDF.');
         return;
     } else {
@@ -931,3 +933,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
   syncSummary();
 });
+
+// ─── Proof of Sale: preview filename + client-side size guard ────────────────
+function handleProofChange(input) {
+  const MAX_MB = 15;
+  const nameEl  = document.getElementById('proof_filename');
+  const errEl   = document.getElementById('step5-proof-error');
+  const errMsg  = document.getElementById('step5-proof-error-msg');
+  if (!input.files.length) {
+    if (nameEl) nameEl.textContent = 'No file selected';
+    return;
+  }
+  const file = input.files[0];
+  const sizeMB = file.size / (1024 * 1024);
+  if (sizeMB > MAX_MB) {
+    if (errEl)  errEl.classList.remove('hidden');
+    if (errMsg) errMsg.textContent = 'File is too large (' + sizeMB.toFixed(1) + ' MB). Maximum allowed is 15 MB. Please compress it or export as PDF.';
+    input.value = '';
+    if (nameEl) nameEl.textContent = 'No file selected';
+    return;
+  }
+  if (errEl)  errEl.classList.add('hidden');
+  if (nameEl) nameEl.textContent = '\u2713 ' + file.name;
+}

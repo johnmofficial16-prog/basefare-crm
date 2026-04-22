@@ -236,12 +236,17 @@ tailwind.config = {
     <!-- LEFT COLUMN -->
     <div class="space-y-5">
 
-      <!-- ── AUTHORIZATION LINK PANEL ── -->
-      <?php if ($isPending): ?>
+      <!-- ── AUTHORIZATION LINK PANEL (Admin/Manager only) ── -->
+      <?php
+      $viewerRole   = $_SESSION['role'] ?? 'agent';
+      $viewerIsAdmin = in_array($viewerRole, ['admin', 'manager']);
+      ?>
+      <?php if ($isPending && $viewerIsAdmin): ?>
       <div class="bg-white border border-primary-100 rounded-xl shadow-sm overflow-hidden">
         <div class="px-5 py-3 flex items-center gap-2" style="background:linear-gradient(135deg,#0f1e3c,#1a3a6b);">
           <span class="material-symbols-outlined text-gold text-base">link</span>
           <span class="text-white font-bold text-sm">Customer Authorization Link</span>
+          <span class="ml-2 text-[10px] font-bold text-amber-300 bg-amber-400/20 px-2 py-0.5 rounded-full">Admin/Manager Only</span>
           <span class="ml-auto text-[10px] text-blue-300">Expires <?= htmlspecialchars($acceptance->expires_at->format('M j \a\t g:i A')) ?></span>
         </div>
         <div class="p-4">
@@ -253,6 +258,10 @@ tailwind.config = {
             </button>
           </div>
           <p class="text-[11px] text-slate-400 mt-2">Send this link to the customer via email or messaging. It opens a secure signing portal on base-fare.com.</p>
+          <p class="text-[10px] text-amber-600 mt-1.5 flex items-center gap-1">
+            <span class="material-symbols-outlined text-xs">warning</span>
+            Do not share with agents. Only management may access this link to prevent unauthorized self-signing.
+          </p>
         </div>
       </div>
       <?php endif; ?>

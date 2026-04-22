@@ -569,9 +569,11 @@ $error = $_GET['error'] ?? null;
           <div style="margin-bottom:12px;">
             <label style="font-size:12px; font-weight:600; color:#334155; margin-bottom:6px; display:block;">Passport / Government ID</label>
             <div class="upload-area" onclick="this.querySelector('input').click()">
-              <input type="file" name="passport_file" accept="image/*,.pdf">
+              <input type="file" name="passport_file"
+                     accept="image/*,.pdf,.heic,.heif"
+                     capture="environment">
               <span class="material-symbols-outlined icon">upload_file</span>
-              <p>Click to upload (JPG, PNG, or PDF)</p>
+              <p>Tap to take a photo or upload (JPG, PNG, HEIC, PDF)</p>
             </div>
           </div>
           <?php endif; ?>
@@ -579,9 +581,11 @@ $error = $_GET['error'] ?? null;
           <div>
             <label style="font-size:12px; font-weight:600; color:#334155; margin-bottom:6px; display:block;">Credit Card Front (masked)</label>
             <div class="upload-area" onclick="this.querySelector('input').click()">
-              <input type="file" name="card_file" accept="image/*,.pdf">
+              <input type="file" name="card_file"
+                     accept="image/*,.pdf,.heic,.heif"
+                     capture="environment">
               <span class="material-symbols-outlined icon">upload_file</span>
-              <p>Click to upload (JPG, PNG, or PDF)</p>
+              <p>Tap to take a photo or upload (JPG, PNG, HEIC, PDF)</p>
             </div>
           </div>
           <?php endif; ?>
