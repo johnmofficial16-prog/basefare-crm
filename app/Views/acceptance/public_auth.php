@@ -165,11 +165,35 @@ $error = $_GET['error'] ?? null;
   .status-banner h3 { font-size:18px; font-weight:800; margin-bottom:4px; }
   .status-banner p { font-size:13px; color:#64748b; }
   .expiry-badge { display:inline-flex; align-items:center; gap:4px; background:#fef3c7; color:#92400e; font-size:11px; font-weight:700; padding:4px 10px; border-radius:6px; }
-  .upload-area { border:2px dashed #cbd5e1; border-radius:10px; padding:16px; text-align:center; cursor:pointer; transition:border-color 0.2s; }
-  .upload-area:hover { border-color:#0f1e3c; }
-  .upload-area input { display:none; }
-  .upload-area .icon { font-size:28px; color:#94a3b8; }
-  .upload-area p { font-size:12px; color:#94a3b8; margin-top:4px; }
+  /* ── Upload Widget ─────────────────────────────────────────────────── */
+  .upload-widget { border:2px solid #e2e8f0; border-radius:12px; overflow:hidden; background:#fff; transition:border-color 0.2s; }
+  .upload-widget.has-file { border-color:#16a34a; }
+  .upload-widget.has-file .upload-prompt { display:none; }
+  .upload-widget .upload-prompt { padding:18px 16px; }
+  .upload-prompt-icon { font-size:32px; text-align:center; margin-bottom:6px; color:#94a3b8; }
+  .upload-prompt-text { font-size:12px; color:#94a3b8; text-align:center; margin-bottom:14px; }
+  .upload-btn-row { display:flex; gap:10px; }
+  .upload-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:8px; padding:13px 10px;
+    border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; border:none;
+    transition:all 0.15s ease; -webkit-tap-highlight-color:transparent; }
+  .upload-btn.camera { background:#0f1e3c; color:#fff; }
+  .upload-btn.camera:active { background:#1a3a6b; transform:scale(0.97); }
+  .upload-btn.gallery { background:#f1f5f9; color:#334155; border:1.5px solid #e2e8f0; }
+  .upload-btn.gallery:active { background:#e2e8f0; transform:scale(0.97); }
+  .upload-btn .upload-btn-icon { font-size:20px; }
+  .upload-file-preview { display:none; padding:14px 16px; align-items:center; gap:12px; }
+  .upload-widget.has-file .upload-file-preview { display:flex; }
+  .upload-thumb { width:52px; height:52px; object-fit:cover; border-radius:8px; border:1.5px solid #e2e8f0; flex-none; }
+  .upload-thumb-icon { width:52px; height:52px; background:#f1f5f9; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-none; }
+  .upload-file-info { flex:1; min-width:0; }
+  .upload-file-name { font-size:13px; font-weight:700; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .upload-file-size { font-size:11px; color:#64748b; margin-top:2px; }
+  .upload-clear-btn { background:none; border:none; cursor:pointer; color:#94a3b8; padding:6px; border-radius:6px; display:flex; align-items:center; -webkit-tap-highlight-color:transparent; }
+  .upload-clear-btn:active { background:#f1f5f9; }
+  .upload-required-badge { display:inline-block; font-size:10px; font-weight:800; color:#dc2626; background:#fef2f2; border:1px solid #fecaca; padding:2px 8px; border-radius:99px; margin-top:8px; }
+  /* hidden inputs */
+  .upload-input-camera, .upload-input-gallery { display:none; }
+
   .footer { text-align:center; padding:20px; font-size:10px; color:#94a3b8; }
 </style>
 </head>
@@ -595,32 +619,103 @@ $error = $_GET['error'] ?? null;
         <?php if ($acceptance->req_passport || $acceptance->req_cc_front): ?>
         <div class="section">
           <div class="section-title">Required Documents</div>
+
           <?php if ($acceptance->req_passport): ?>
-          <div style="margin-bottom:12px;">
-            <label style="font-size:12px; font-weight:600; color:#334155; margin-bottom:6px; display:block;">Passport / Government ID</label>
-            <div class="upload-area" onclick="this.querySelector('input').click()">
-              <input type="file" name="passport_file"
-                     accept="image/*,.pdf,.heic,.heif"
-                     capture="environment">
-              <span class="material-symbols-outlined icon">upload_file</span>
-              <p>Tap to take a photo or upload (JPG, PNG, HEIC, PDF)</p>
+          <div style="margin-bottom:16px;">
+            <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+              <span class="material-symbols-outlined" style="font-size:16px; color:#0f1e3c;">badge</span>
+              Passport / Government-Issued ID
+            </label>
+            <div class="upload-widget" id="widget-passport">
+              <!-- Hidden inputs: one for camera, one for gallery/files -->
+              <input type="file" name="passport_file" id="inp-passport-camera"
+                class="upload-input-camera"
+                accept="image/*"
+                capture="environment">
+              <input type="file" name="passport_file_gallery" id="inp-passport-gallery"
+                class="upload-input-gallery"
+                accept="image/*,.pdf,.heic,.heif">
+              <!-- Prompt -->
+              <div class="upload-prompt">
+                <div class="upload-prompt-icon">📄</div>
+                <div class="upload-prompt-text">Take a photo or choose from your gallery / files</div>
+                <div class="upload-btn-row">
+                  <button type="button" class="upload-btn camera"
+                    onclick="document.getElementById('inp-passport-camera').click()">
+                    <span class="upload-btn-icon">📷</span> Camera
+                  </button>
+                  <button type="button" class="upload-btn gallery"
+                    onclick="document.getElementById('inp-passport-gallery').click()">
+                    <span class="upload-btn-icon">🖼️</span> File / Gallery
+                  </button>
+                </div>
+              </div>
+              <!-- Preview (shown after selection) -->
+              <div class="upload-file-preview" id="preview-passport">
+                <div class="upload-thumb-icon" id="thumb-passport">
+                  <span class="material-symbols-outlined" style="color:#64748b;">description</span>
+                </div>
+                <div class="upload-file-info">
+                  <div class="upload-file-name" id="fname-passport">—</div>
+                  <div class="upload-file-size" id="fsize-passport"></div>
+                </div>
+                <button type="button" class="upload-clear-btn" onclick="clearUpload('passport')" title="Remove">
+                  <span class="material-symbols-outlined" style="font-size:20px;">close</span>
+                </button>
+              </div>
             </div>
+            <span class="upload-required-badge">Required</span>
           </div>
           <?php endif; ?>
+
           <?php if ($acceptance->req_cc_front): ?>
           <div>
-            <label style="font-size:12px; font-weight:600; color:#334155; margin-bottom:6px; display:block;">Credit Card Front (masked)</label>
-            <div class="upload-area" onclick="this.querySelector('input').click()">
-              <input type="file" name="card_file"
-                     accept="image/*,.pdf,.heic,.heif"
-                     capture="environment">
-              <span class="material-symbols-outlined icon">upload_file</span>
-              <p>Tap to take a photo or upload (JPG, PNG, HEIC, PDF)</p>
+            <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+              <span class="material-symbols-outlined" style="font-size:16px; color:#0f1e3c;">credit_card</span>
+              Credit Card Front <span style="font-size:10px; color:#64748b; font-weight:400;">(cover the CVV — show name, number &amp; expiry only)</span>
+            </label>
+            <div class="upload-widget" id="widget-card">
+              <input type="file" name="card_file" id="inp-card-camera"
+                class="upload-input-camera"
+                accept="image/*"
+                capture="environment">
+              <input type="file" name="card_file_gallery" id="inp-card-gallery"
+                class="upload-input-gallery"
+                accept="image/*,.pdf,.heic,.heif">
+              <div class="upload-prompt">
+                <div class="upload-prompt-icon">💳</div>
+                <div class="upload-prompt-text">Take a photo or choose from your gallery / files</div>
+                <div class="upload-btn-row">
+                  <button type="button" class="upload-btn camera"
+                    onclick="document.getElementById('inp-card-camera').click()">
+                    <span class="upload-btn-icon">📷</span> Camera
+                  </button>
+                  <button type="button" class="upload-btn gallery"
+                    onclick="document.getElementById('inp-card-gallery').click()">
+                    <span class="upload-btn-icon">🖼️</span> File / Gallery
+                  </button>
+                </div>
+              </div>
+              <div class="upload-file-preview" id="preview-card">
+                <div class="upload-thumb-icon" id="thumb-card">
+                  <span class="material-symbols-outlined" style="color:#64748b;">description</span>
+                </div>
+                <div class="upload-file-info">
+                  <div class="upload-file-name" id="fname-card">—</div>
+                  <div class="upload-file-size" id="fsize-card"></div>
+                </div>
+                <button type="button" class="upload-clear-btn" onclick="clearUpload('card')" title="Remove">
+                  <span class="material-symbols-outlined" style="font-size:20px;">close</span>
+                </button>
+              </div>
             </div>
+            <span class="upload-required-badge">Required</span>
           </div>
           <?php endif; ?>
+
         </div>
         <?php endif; ?>
+
 
         <!-- Digital Signature (One-Click Consent) -->
         <div class="section">
@@ -697,16 +792,72 @@ function toggleEsign() {
   }
 }
 
-// ── File upload preview ─────────────────────────────────────────────────
-document.querySelectorAll('.upload-area input[type=file]').forEach(input => {
-  input.addEventListener('change', function() {
-    const area = this.closest('.upload-area');
-    if (this.files.length) {
-      area.querySelector('p').textContent = '✓ ' + this.files[0].name;
-      area.style.borderColor = '#16a34a';
+// ── Upload widget logic ─────────────────────────────────────────────────
+function fmtBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+function handleUploadFile(file, slot) {
+  if (!file) return;
+  const widget  = document.getElementById('widget-' + slot);
+  const fnEl    = document.getElementById('fname-' + slot);
+  const fsEl    = document.getElementById('fsize-' + slot);
+  const thumbEl = document.getElementById('thumb-' + slot);
+
+  fnEl.textContent  = file.name;
+  fsEl.textContent  = fmtBytes(file.size);
+  widget.classList.add('has-file');
+
+  // Show image thumbnail if it's an image
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      thumbEl.innerHTML = `<img src="${e.target.result}" class="upload-thumb" alt="preview">`;
+    };
+    reader.readAsDataURL(file);
+  } else {
+    thumbEl.innerHTML = '<span class="material-symbols-outlined" style="color:#6366f1; font-size:28px;">picture_as_pdf</span>';
+  }
+}
+
+function clearUpload(slot) {
+  const widget = document.getElementById('widget-' + slot);
+  widget.classList.remove('has-file');
+  // Reset both inputs
+  ['camera','gallery'].forEach(t => {
+    const inp = document.getElementById('inp-' + slot + '-' + t);
+    if (inp) inp.value = '';
+  });
+  const thumbEl = document.getElementById('thumb-' + slot);
+  if (thumbEl) thumbEl.innerHTML = '<span class="material-symbols-outlined" style="color:#64748b;">description</span>';
+}
+
+// Wire up both inputs for each slot
+['passport','card'].forEach(slot => {
+  ['camera','gallery'].forEach(type => {
+    const inp = document.getElementById('inp-' + slot + '-' + type);
+    if (inp) {
+      inp.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+          // Mirror the file to the primary named input so the form submits correctly
+          // For gallery input, also update the camera input's form value via DataTransfer
+          const primaryInp = document.getElementById('inp-' + slot + '-camera');
+          if (type === 'gallery' && primaryInp && window.DataTransfer) {
+            try {
+              const dt = new DataTransfer();
+              dt.items.add(this.files[0]);
+              primaryInp.files = dt.files;
+            } catch(e) { /* fallback: both inputs submit */ }
+          }
+          handleUploadFile(this.files[0], slot);
+        }
+      });
     }
   });
 });
+
 
 // ── Submit ───────────────────────────────────────────────────────────────
 function prepareSubmit() {
