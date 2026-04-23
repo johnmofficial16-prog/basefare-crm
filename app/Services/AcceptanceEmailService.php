@@ -4,16 +4,41 @@ namespace App\Services;
 
 use App\Models\AcceptanceRequest;
 use Carbon\Carbon;
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 /**
  * AcceptanceEmailService
  *
- * STUB — Logs email to file. Real SMTP wiring pending.
- * The auth link is always generated and stored in $_SESSION['acceptance_link']
- * so agents/admins can copy and send it manually.
+ * Sends authorization requests using PHPMailer via Google Workspace SMTP.
  */
 class AcceptanceEmailService
 {
+    // =========================================================================
+    // MAILER SETUP
+    // =========================================================================
+
+    private function getMailer(): PHPMailer
+    {
+        $mail = new PHPMailer(true);
+        $mail->isSMTP();
+        $mail->Host       = $_ENV['SMTP_HOST'] ?? 'smtp.gmail.com';
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $_ENV['SMTP_USER'] ?? '';
+        $mail->Password   = $_ENV['SMTP_PASS'] ?? '';
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port       = $_ENV['SMTP_PORT'] ?? 587;
+        
+        $fromName = $_ENV['SMTP_FROM_NAME'] ?? 'Lets Fly Travel DBA Base Fare';
+        $fromEmail = $_ENV['SMTP_FROM'] ?? $_ENV['SMTP_USER'] ?? '';
+        
+        if ($fromEmail) {
+            $mail->setFrom($fromEmail, $fromName);
+        }
+
+        return $mail;
+    }
+
     // =========================================================================
     // SEND
     // =========================================================================
@@ -23,15 +48,34 @@ class AcceptanceEmailService
         $subject = $this->buildSubject($acceptance);
         $link    = $acceptance->publicUrl();
 
-        $this->logEmail($acceptance, $subject, $link, 'STUB-QUEUED');
+        try {
+            $mail = $this->getMailer();
+            $mail->addAddress($acceptance->customer_email, $acceptance->customer_name);
+            
+            // Add Agent CC if requested in the future, or generic bcc
+            // $mail->addBCC('booking@base-fare.com');
 
-        $acceptance->increment('email_attempts');
-        $acceptance->update([
-            'email_status'    => AcceptanceRequest::EMAIL_SENT,
-            'last_emailed_at' => Carbon::now(),
-        ]);
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body    = $this->buildHtmlEmail($acceptance);
+            $mail->AltBody = $this->buildPlainText($acceptance);
 
-        return ['success' => true, 'link' => $link];
+            $mail->send();
+            
+            $this->logEmail($acceptance, $subject, $link, 'SENT_OK');
+
+            $acceptance->increment('email_attempts');
+            $acceptance->update([
+                'email_status'    => AcceptanceRequest::EMAIL_SENT,
+                'last_emailed_at' => Carbon::now(),
+            ]);
+
+            return ['success' => true, 'link' => $link];
+
+        } catch (Exception $e) {
+            $this->logEmail($acceptance, $subject, $link, 'ERROR: ' . $mail->ErrorInfo);
+            return ['success' => false, 'error' => $mail->ErrorInfo];
+        }
     }
 
     // =========================================================================
@@ -43,6 +87,7 @@ class AcceptanceEmailService
         $subject = 'Authorization Confirmed — ' . $acceptance->typeLabel() . ' | Lets Fly Travel';
         $link    = $acceptance->publicUrl();
 
+        // Stubbed for now as requested. Can wire PHPMailer here later if needed.
         $this->logEmail($acceptance, $subject, $link, 'CONFIRMATION-STUB');
 
         return ['success' => true];
@@ -181,10 +226,6 @@ class AcceptanceEmailService
 </html>
 HTML;
     }
-
-    // =========================================================================
-    // HELPERS
-    // =========================================================================
 
     // =========================================================================
     // LOG
