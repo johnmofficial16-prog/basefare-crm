@@ -344,14 +344,25 @@ $error = $_GET['error'] ?? null;
           <div class="section-title"><?= !empty($newFlights) ? 'Original Flights' : 'Flight Itinerary' ?></div>
           <?php foreach ($flights as $seg): ?>
             <div class="flight-seg">
-              <?php $iata = $seg['airline_iata'] ?? ''; ?>
+              <?php 
+                $iata = $seg['airline_iata'] ?? ''; 
+                $seat = htmlspecialchars($seg['seat'] ?? '');
+                $hash = 0;
+                foreach (str_split($iata ?: 'XX') as $c) $hash = ord($c) + (($hash << 5) - $hash);
+                $hue = abs($hash) % 360;
+                $bgColor = "hsl({$hue},50%,35%)";
+              ?>
               <?php if ($iata): ?>
-                <img src="https://www.gstatic.com/flights/airline_logos/35px/<?= htmlspecialchars($iata) ?>.png"
-                     alt="<?= htmlspecialchars($iata) ?>" onerror="this.style.display='none'">
+                <img src="https://www.gstatic.com/flights/airline_logos/70px/<?= htmlspecialchars($iata) ?>.png"
+                     alt="<?= htmlspecialchars($iata) ?>" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
               <?php endif; ?>
+              <div style="display:<?= $iata?'none':'flex' ?>;width:24px;height:24px;border-radius:6px;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:#fff;background:<?= $bgColor ?>;flex-shrink:0;"><?= htmlspecialchars($iata ?: '?') ?></div>
               <span class="fno"><?= htmlspecialchars($seg['flight_no'] ?? '') ?></span>
               <span class="route"><?= htmlspecialchars($seg['from'] ?? '') ?> → <?= htmlspecialchars($seg['to'] ?? '') ?></span>
               <span class="time"><?= htmlspecialchars($seg['date'] ?? '') ?> · <?= htmlspecialchars($seg['dep_time'] ?? '') ?> → <?= htmlspecialchars($seg['arr_time'] ?? '') ?><?= !empty($seg['arr_next_day']) ? ' (+1)' : '' ?></span>
+              <?php if ($seat): ?>
+              <span style="font-size:10px; font-weight:800; color:#4f46e5; background:#e0e7ff; padding:2px 6px; border-radius:4px; margin-left:auto;">💺 <?= $seat ?></span>
+              <?php endif; ?>
             </div>
           <?php endforeach; ?>
         </div>
@@ -362,14 +373,25 @@ $error = $_GET['error'] ?? null;
           <div class="section-title" style="color:#16a34a;">New Flights (After Change)</div>
           <?php foreach ($newFlights as $seg): ?>
             <div class="flight-seg" style="border-color:#bbf7d0; background:#f0fdf4;">
-              <?php $iata = $seg['airline_iata'] ?? ''; ?>
+              <?php 
+                $iata = $seg['airline_iata'] ?? ''; 
+                $seat = htmlspecialchars($seg['seat'] ?? '');
+                $hash = 0;
+                foreach (str_split($iata ?: 'XX') as $c) $hash = ord($c) + (($hash << 5) - $hash);
+                $hue = abs($hash) % 360;
+                $bgColor = "hsl({$hue},50%,35%)";
+              ?>
               <?php if ($iata): ?>
-                <img src="https://www.gstatic.com/flights/airline_logos/35px/<?= htmlspecialchars($iata) ?>.png"
-                     alt="<?= htmlspecialchars($iata) ?>" onerror="this.style.display='none'">
+                <img src="https://www.gstatic.com/flights/airline_logos/70px/<?= htmlspecialchars($iata) ?>.png"
+                     alt="<?= htmlspecialchars($iata) ?>" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
               <?php endif; ?>
+              <div style="display:<?= $iata?'none':'flex' ?>;width:24px;height:24px;border-radius:6px;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:#fff;background:<?= $bgColor ?>;flex-shrink:0;"><?= htmlspecialchars($iata ?: '?') ?></div>
               <span class="fno"><?= htmlspecialchars($seg['flight_no'] ?? '') ?></span>
               <span class="route"><?= htmlspecialchars($seg['from'] ?? '') ?> → <?= htmlspecialchars($seg['to'] ?? '') ?></span>
               <span class="time"><?= htmlspecialchars($seg['date'] ?? '') ?> · <?= htmlspecialchars($seg['dep_time'] ?? '') ?> → <?= htmlspecialchars($seg['arr_time'] ?? '') ?><?= !empty($seg['arr_next_day']) ? ' (+1)' : '' ?></span>
+              <?php if ($seat): ?>
+              <span style="font-size:10px; font-weight:800; color:#4f46e5; background:#e0e7ff; padding:2px 6px; border-radius:4px; margin-left:auto;">💺 <?= $seat ?></span>
+              <?php endif; ?>
             </div>
           <?php endforeach; ?>
         </div>

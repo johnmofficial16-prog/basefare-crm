@@ -1222,7 +1222,18 @@ const AIRLINES = {
   'U2':'easyJet','FR':'Ryanair','W6':'Wizz Air','VY':'Vueling Airlines','DY':'Norwegian Air',
   'EI':'Aer Lingus','IB':'Iberia','AZ':'ITA Airways','SU':'Aeroflot','S7':'S7 Airlines',
   'G3':'GOL Linhas Aéreas','SA':'South African Airways','HM':'Air Seychelles','MK':'Air Mauritius',
-  'QZ':'Indonesia AirAsia','AK':'AirAsia','TR':'Scoot','5J':'Cebu Pacific'
+  'QZ':'Indonesia AirAsia','AK':'AirAsia','TR':'Scoot','5J':'Cebu Pacific',
+  // ── Added ──────────────────────────────────────────────────────────────────
+  'SK':'SAS Scandinavian Airlines','6E':'IndiGo','SG':'SpiceJet','IX':'Air India Express',
+  'PC':'Pegasus Airlines','A3':'Aegean Airlines','OA':'Olympic Air','WK':'Edelweiss Air',
+  'FZ':'flydubai','XY':'flynas','BG':'Biman Bangladesh Airlines','HR':'Hahn Air',
+  'RJ':'Royal Jordanian','ME':'Middle East Airlines','PK':'Pakistan International Airlines',
+  'UX':'Air Europa','LO':'LOT Polish Airlines','OK':'Czech Airlines','BT':'airBaltic',
+  'AY':'Finnair','WF':'Widerøe','TF':'Braathens Regional','BJ':'Nouvelair',
+  'HV':'Transavia','TO':'Transavia France','V7':'Volotea','MT':'Thomas Cook Airlines',
+  'X3':'TUI fly Germany','BY':'TUI Airways','OR':'TUI fly Netherlands',
+  'JU':'Air Serbia','JP':'Adria Airways','OU':'Croatia Airlines',
+  'TP':'TAP Air Portugal','ER':'Astar Air Cargo','WX':'CityJet',
 };
 
 const CITIES = {
@@ -1818,7 +1829,7 @@ const flightMgr = {
   addManual: function(group) {
     state.segments[group].push({
       airline_iata:'', flight_no:'', cabin_class:'Economy', date:'', from:'', to:'',
-      dep_time:'', arr_time:'', arr_next_day:false
+      dep_time:'', arr_time:'', arr_next_day:false, seat:'', _confirmed:false
     });
     this._render(group);
   },
@@ -1834,6 +1845,10 @@ const flightMgr = {
     if (field === 'airline_iata' && val.length === 2 && !state.segments[group][idx].flight_no) {
       state.segments[group][idx].flight_no = val.toUpperCase();
     }
+    // Auto-compute next-day whenever times change
+    if (field === 'dep_time' || field === 'arr_time') {
+      autoNextDay(state.segments[group][idx]);
+    }
   },
 
   _render: function(group) {
@@ -1844,110 +1859,371 @@ const flightMgr = {
 
     const self = this;
     el.innerHTML = segs.map(function(seg, i) {
-      const aName  = AIRLINES[seg.airline_iata] || seg.airline_iata || '';
-      const fCity  = CITIES[seg.from] || seg.from;
-      const tCity  = CITIES[seg.to]   || seg.to;
-      const logoUrl= seg.airline_iata ? "https://www.gstatic.com/flights/airline_logos/35px/" + seg.airline_iata + ".png" : "";
-      const parsed = !!(seg.from && seg.to && seg.dep_time);
+      const aName   = AIRLINES[seg.airline_iata] || seg.airline_iata || '';
+      const fCity   = CITIES[seg.from] || seg.from;
+      const tCity   = CITIES[seg.to]   || seg.to;
+      const logoUrl = seg.airline_iata ? `https://www.gstatic.com/flights/airline_logos/70px/${seg.airline_iata}.png` : '';
+      const bgColor = airlineInitialsBg(seg.airline_iata);
+      const parsed  = !!(seg.from && seg.to && seg.dep_time) || seg._confirmed;
 
+      // ── Parsed / confirmed read-only card ─────────────────────────────────
       const card = parsed
         ? `<div class="seg-card flex items-stretch bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
             <div class="bg-slate-900 px-3 py-3 flex flex-col items-center justify-center gap-1 min-w-[72px]">
-              ${logoUrl ? `<img src="${logoUrl}" alt="${seg.airline_iata}" class="w-8 h-8 object-contain" onerror="this.style.display='none'">` : ''}
+              ${logoUrl ? `<img src="${logoUrl}" alt="${_esc(seg.airline_iata)}" class="w-9 h-9 object-contain"
+                onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">` : ''}
+              <div style="display:${logoUrl?'none':'flex'};width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#fff;background:${bgColor};">${_esc(seg.airline_iata||'?')}</div>
               <span class="text-[11px] font-black text-white">${_esc(seg.airline_iata)}</span>
               <span class="text-[9px] text-slate-400 text-center leading-tight">${_esc(aName)}</span>
             </div>
             <div class="flex-1 p-3 grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
-              <div class="text-right"><div class="text-lg font-black text-slate-900">${_esc(seg.dep_time)}</div><div class="text-sm font-bold text-blue-700">${_esc(seg.from)}</div><div class="text-[10px] text-slate-400">${_esc(fCity)}</div></div>
-              <div class="flex flex-col items-center px-1"><div class="text-[9px] font-bold text-slate-500">${_esc(seg.flight_no)}</div><div class="w-14 h-px bg-slate-300 relative my-1.5"><div class="absolute -right-1 -top-1.5 text-blue-600 text-xs">✈</div></div><div class="text-[9px] text-slate-400">${_esc(seg.date)}</div></div>
-              <div><div class="flex items-baseline gap-1"><span class="text-lg font-black text-slate-900">${_esc(seg.arr_time)}</span>${seg.arr_next_day?'<span class="px-1 py-0.5 bg-rose-100 text-rose-700 text-[9px] font-bold rounded">+1d</span>':''}</div><div class="text-sm font-bold text-blue-700">${_esc(seg.to)}</div><div class="text-[10px] text-slate-400">${_esc(tCity)}</div></div>
+              <div class="text-right">
+                <div class="text-lg font-black text-slate-900">${_esc(seg.dep_time)}</div>
+                <div class="text-sm font-bold text-blue-700">${_esc(seg.from)}</div>
+                <div class="text-[10px] text-slate-400">${_esc(fCity)}</div>
+              </div>
+              <div class="flex flex-col items-center px-1">
+                <div class="text-[9px] font-bold text-slate-500">${_esc(seg.flight_no)}</div>
+                <div class="text-[8px] text-slate-400 bg-slate-100 px-1 py-0.5 rounded font-mono">${_esc(seg.cabin_class||'')}</div>
+                <div class="w-14 h-px bg-slate-300 relative my-1.5"><div class="absolute -right-1 -top-1.5 text-blue-600 text-xs">✈</div></div>
+                <div class="text-[9px] text-slate-400">${_esc(seg.date)}</div>
+                ${seg.seat ? `<div class="text-[8px] font-bold text-indigo-600 mt-0.5">💺 ${_esc(seg.seat)}</div>` : ''}
+              </div>
+              <div>
+                <div class="flex items-baseline gap-1">
+                  <span class="text-lg font-black text-slate-900">${_esc(seg.arr_time)}</span>
+                  ${seg.arr_next_day ? '<span class="px-1 py-0.5 bg-rose-100 text-rose-700 text-[9px] font-bold rounded">+1d</span>' : ''}
+                </div>
+                <div class="text-sm font-bold text-blue-700">${_esc(seg.to)}</div>
+                <div class="text-[10px] text-slate-400">${_esc(tCity)}</div>
+              </div>
             </div>
             <button type="button" onclick="flightMgr.removeSegment('${group}',${i})" class="px-2 bg-slate-50 border-l border-slate-200 hover:bg-rose-50 hover:text-rose-600 text-slate-400 flex items-center transition-colors"><span class="material-symbols-outlined text-sm">close</span></button>
           </div>`
-        : `<div class="seg-card p-3 bg-slate-50 border border-slate-200 rounded-xl fare-row space-y-2">
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Airline</label>
-                <input type="text" placeholder="LH or Lufthansa" value="${_esc(seg.airline_iata)}"
-                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono font-bold uppercase bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
-                  oninput="flightMgr._updateSeg('${group}',${i},'airline_iata',this.value.toUpperCase())">
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Flight No</label>
-                <input type="text" maxlength="8" placeholder="LH419" value="${_esc(seg.flight_no)}"
-                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono uppercase bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
-                  oninput="flightMgr._updateSeg('${group}',${i},'flight_no',this.value.toUpperCase())">
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Date</label>
-                <input type="text" maxlength="5" placeholder="12MAR" value="${_esc(seg.date)}"
-                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono uppercase bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
-                  oninput="flightMgr._updateSeg('${group}',${i},'date',this.value.toUpperCase())">
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Cabin</label>
-                <select class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
-                  onchange="flightMgr._updateSeg('${group}',${i},'cabin_class',this.value)">
-                  <option value="Economy" ${seg.cabin_class === 'Economy' ? 'selected' : ''}>Economy</option>
-                  <option value="Premium Economy" ${seg.cabin_class === 'Premium Economy' ? 'selected' : ''}>Premium Economy</option>
-                  <option value="Business" ${seg.cabin_class === 'Business' ? 'selected' : ''}>Business</option>
-                  <option value="First" ${seg.cabin_class === 'First' ? 'selected' : ''}>First</option>
-                </select>
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">From (IATA)</label>
-                <input type="text" maxlength="3" placeholder="JFK" value="${_esc(seg.from)}"
-                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono uppercase bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
-                  oninput="flightMgr._updateSeg('${group}',${i},'from',this.value.toUpperCase())">
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">To (IATA)</label>
-                <input type="text" maxlength="3" placeholder="FRA" value="${_esc(seg.to)}"
-                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono uppercase bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
-                  oninput="flightMgr._updateSeg('${group}',${i},'to',this.value.toUpperCase())">
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Dep Time</label>
-                <input type="text" maxlength="5" placeholder="10:40" value="${_esc(seg.dep_time)}"
-                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
-                  oninput="flightMgr._updateSeg('${group}',${i},'dep_time',this.value)">
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Arr Time</label>
-                <input type="text" maxlength="5" placeholder="06:10" value="${_esc(seg.arr_time)}"
-                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
-                  oninput="flightMgr._updateSeg('${group}',${i},'arr_time',this.value)">
-              </div>
-            </div>
-            <div class="flex items-center justify-between">
-              <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
-                <input type="checkbox" ${seg.arr_next_day?'checked':''} class="w-3.5 h-3.5 accent-rose-500"
-                  onchange="flightMgr._updateSeg('${group}',${i},'arr_next_day',this.checked)">
-                Arrives next day (+1)
-              </label>
+
+        // ── Manual edit form ─────────────────────────────────────────────────
+        : `<div class="seg-card p-3 bg-slate-50 border-2 border-indigo-200 rounded-xl space-y-3">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Segment ${i+1}</span>
               <button type="button" onclick="flightMgr.removeSegment('${group}',${i})"
-                class="inline-flex items-center gap-1 text-xs text-rose-600 font-semibold hover:text-rose-800">
+                class="ml-auto inline-flex items-center gap-1 text-xs text-rose-500 font-semibold hover:text-rose-700">
                 <span class="material-symbols-outlined text-sm">delete</span> Remove
               </button>
             </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500 uppercase mb-1">Airline IATA <span class="text-rose-500">*</span></label>
+                <input type="text" maxlength="3" placeholder="LH" value="${_esc(seg.airline_iata)}"
+                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono font-bold uppercase bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  oninput="flightMgr._updateSeg('${group}',${i},'airline_iata',this.value.toUpperCase())">
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500 uppercase mb-1">Flight No</label>
+                <input type="text" maxlength="8" placeholder="LH419" value="${_esc(seg.flight_no)}"
+                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono uppercase bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  oninput="flightMgr._updateSeg('${group}',${i},'flight_no',this.value.toUpperCase())">
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500 uppercase mb-1">Date (GDS) <span class="text-rose-500">*</span></label>
+                <input type="text" maxlength="5" placeholder="12MAR" value="${_esc(seg.date)}"
+                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono uppercase bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  oninput="flightMgr._updateSeg('${group}',${i},'date',this.value.toUpperCase())">
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500 uppercase mb-1">Cabin</label>
+                <select class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  onchange="flightMgr._updateSeg('${group}',${i},'cabin_class',this.value)">
+                  <option value="Economy" ${seg.cabin_class==='Economy'?'selected':''}>Economy</option>
+                  <option value="Premium Economy" ${seg.cabin_class==='Premium Economy'?'selected':''}>Premium Economy</option>
+                  <option value="Business" ${seg.cabin_class==='Business'?'selected':''}>Business</option>
+                  <option value="First" ${seg.cabin_class==='First'?'selected':''}>First</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500 uppercase mb-1">From (IATA) <span class="text-rose-500">*</span></label>
+                <input type="text" maxlength="3" placeholder="JFK" value="${_esc(seg.from)}"
+                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono uppercase bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  oninput="flightMgr._updateSeg('${group}',${i},'from',this.value.toUpperCase())">
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500 uppercase mb-1">To (IATA) <span class="text-rose-500">*</span></label>
+                <input type="text" maxlength="3" placeholder="FRA" value="${_esc(seg.to)}"
+                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono uppercase bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  oninput="flightMgr._updateSeg('${group}',${i},'to',this.value.toUpperCase())">
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500 uppercase mb-1">Dep Time (24h) <span class="text-rose-500">*</span></label>
+                <input type="time" value="${_esc(seg.dep_time)}"
+                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  onchange="flightMgr._updateSeg('${group}',${i},'dep_time',this.value)">
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500 uppercase mb-1">Arr Time (24h) <span class="text-rose-500">*</span></label>
+                <input type="time" value="${_esc(seg.arr_time)}"
+                  class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  onchange="flightMgr._updateSeg('${group}',${i},'arr_time',this.value)">
+              </div>
+            </div>
+            <div class="flex items-center gap-3 flex-wrap">
+              <div class="flex items-center gap-2">
+                <label class="text-[9px] font-bold text-slate-500 uppercase">Seat (optional)</label>
+                <input type="text" maxlength="5" placeholder="12A" value="${_esc(seg.seat||'')}"
+                  class="w-20 border border-indigo-200 rounded-lg px-2 py-1 text-xs font-mono font-bold uppercase bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  oninput="flightMgr._updateSeg('${group}',${i},'seat',this.value.toUpperCase())">
+              </div>
+              ${seg.arr_next_day
+                ? `<span class="inline-flex items-center gap-1 px-2 py-1 bg-rose-100 text-rose-700 text-[10px] font-bold rounded-full">
+                    <span class="material-symbols-outlined text-xs">nightlight</span> Arrives next day (+1d) — auto-detected
+                   </span>`
+                : (seg.dep_time && seg.arr_time
+                    ? `<span class="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full">✓ Same day arrival</span>`
+                    : '')
+              }
+            </div>
           </div>`;
 
-      // Layover indicator between consecutive parsed segments
-      const layover = (i < segs.length-1 && parsed && segs[i+1].from)
-        ? `<div class="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-700">
-             <span class="material-symbols-outlined text-sm">connecting_airports</span>
-             Connection in ${_esc(CITIES[seg.to] || seg.to)} · ${_esc(segs[i+1].airline_iata)}${_esc(segs[i+1].flight_no.replace(segs[i+1].airline_iata,''))}
-           </div>` : '';
+      // ── Layover badge between segments ───────────────────────────────────
+      let layover = '';
+      if (i < segs.length - 1 && parsed && segs[i+1].from) {
+        const nextSeg   = segs[i+1];
+        const layMins   = calcLayoverMins(seg, nextSeg);
+        const layStr    = fmtLayover(layMins);
+        const isTight   = layMins !== null && layMins >= 0 && layMins < 45;
+        const isImposs  = layMins !== null && layMins < 0;
+        const layColor  = isImposs ? 'bg-rose-50 border-rose-400 text-rose-700' : isTight ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-amber-50 border-amber-200 text-amber-700';
+        const layLabel  = isImposs
+          ? `⛔ Impossible — segment ${i+2} departs before segment ${i+1} arrives`
+          : (layStr ? `${layStr} connection in ${_esc(CITIES[seg.to]||seg.to)}` : `Connection in ${_esc(CITIES[seg.to]||seg.to)}`);
+        layover = `<div class="flex items-center gap-2 px-3 py-1.5 ${layColor} border rounded-lg text-xs font-semibold">
+          <span class="material-symbols-outlined text-sm">connecting_airports</span>
+          ${layLabel}
+          ${isTight && !isImposs ? '<span class="ml-1 font-bold">⚠ Very tight!</span>' : ''}
+        </div>`;
+      }
 
       return card + layover;
     }).join('');
+
+    // ── Confirm Itinerary button (shown when there are segments) ───────────
+    if (segs.length > 0) {
+      el.innerHTML += `
+        <button type="button" onclick="confirmItinerary('${group}')"
+          class="w-full mt-2 inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition-colors shadow-sm">
+          <span class="material-symbols-outlined text-base">check_circle</span>
+          Confirm Itinerary ✓
+        </button>
+        <div id="itin-preview-${group}" class="hidden space-y-2 mt-2"></div>`;
+    }
   },
 
   _renderLayovers(segs) { return ''; }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FARE MANAGER
+// FLIGHT TIME HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function timeToMins(t) {
+  if (!t) return -1;
+  const p = String(t).split(':');
+  if (p.length < 2) return -1;
+  const h = parseInt(p[0]), m = parseInt(p[1]);
+  if (isNaN(h) || isNaN(m)) return -1;
+  return h * 60 + m;
+}
+
+function autoNextDay(seg) {
+  const dep = timeToMins(seg.dep_time);
+  const arr = timeToMins(seg.arr_time);
+  if (dep < 0 || arr < 0) return;
+  seg.arr_next_day = (arr < dep);
+}
+
+const _GDS_MON = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+function parseGDSDate(d) {
+  if (!d || d.length < 5) return null;
+  const day = parseInt(d.substring(0,2));
+  const mon = _GDS_MON[d.substring(2,5).toUpperCase()];
+  if (isNaN(day) || mon === undefined) return null;
+  let year = new Date().getFullYear();
+  const dt = new Date(year, mon, day);
+  if (dt < new Date(Date.now() - 180 * 86400000)) dt.setFullYear(year + 1);
+  return dt;
+}
+
+function getDateDiffDays(dateA, dateB) {
+  const a = parseGDSDate(dateA), b = parseGDSDate(dateB);
+  if (!a || !b) return 0;
+  return Math.round((b - a) / 86400000);
+}
+
+function calcLayoverMins(segA, segB) {
+  const arrM = timeToMins(segA.arr_time);
+  const depM = timeToMins(segB.dep_time);
+  if (arrM < 0 || depM < 0) return null;
+  const arrNextDay = segA.arr_next_day ? 1440 : 0;
+  const dateDiff   = getDateDiffDays(segA.date, segB.date) * 1440;
+  return depM + dateDiff - (arrM + arrNextDay);
+}
+
+function fmtLayover(mins) {
+  if (mins === null || mins === undefined || mins < 0) return null;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h === 0) return m + 'm';
+  return m === 0 ? h + 'h' : h + 'h ' + m + 'm';
+}
+
+function airlineInitialsBg(iata) {
+  let hash = 0;
+  for (const c of (iata || 'XX')) hash = c.charCodeAt(0) + ((hash << 5) - hash);
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue},50%,35%)`;
+}
+
+// Returns array of {idx, msg} for impossible connections
+function _validateItinerary(group) {
+  const segs  = state.segments[group] || [];
+  const errors = [];
+  for (let i = 0; i < segs.length - 1; i++) {
+    const a = segs[i], b = segs[i + 1];
+    if (!a.arr_time || !b.dep_time) continue;
+    const mins = calcLayoverMins(a, b);
+    if (mins === null) continue;
+    if (mins < 0) {
+      errors.push({ idx: i, msg: `Segment ${i+2} departs before segment ${i+1} arrives — impossible connection` });
+    } else if (mins < 30 && mins >= 0) {
+      errors.push({ idx: i, msg: `Only ${fmtLayover(mins)} between segments ${i+1} and ${i+2} — very tight` });
+    }
+  }
+  return errors;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIRM ITINERARY — validates all segments, shows a read-only preview
+// ─────────────────────────────────────────────────────────────────────────────
+function confirmItinerary(group) {
+  const segs = state.segments[group] || [];
+  if (!segs.length) return;
+
+  // Step 1: auto-compute next-day for all segments
+  segs.forEach(s => autoNextDay(s));
+
+  // Step 2: validate required fields
+  const missingFields = [];
+  segs.forEach((s, i) => {
+    if (!s.from || !s.to || !s.dep_time || !s.arr_time || !s.date) {
+      missingFields.push(i + 1);
+    }
+  });
+  if (missingFields.length) {
+    alert(`Please complete all required fields for segment(s): ${missingFields.join(', ')}\n\nRequired: From, To, Date, Dep Time, Arr Time`);
+    return;
+  }
+
+  // Step 3: validate chronological order
+  const errors = _validateItinerary(group);
+  const hardErrors = errors.filter(e => e.msg.includes('impossible'));
+  if (hardErrors.length) {
+    alert('Itinerary error:\n\n' + hardErrors.map(e => '• ' + e.msg).join('\n') + '\n\nPlease fix before confirming.');
+    return;
+  }
+
+  // Step 4: mark all segments as confirmed → re-render as read-only cards
+  segs.forEach(s => { s._confirmed = true; });
+  flightMgr._render(group);
+
+  // Step 5: build and show the preview panel
+  const previewEl = document.getElementById('itin-preview-' + group);
+  if (!previewEl) return;
+
+  const warnings = errors.filter(e => !e.msg.includes('impossible'));
+  let warnHtml = '';
+  if (warnings.length) {
+    warnHtml = `<div class="flex items-start gap-2 p-3 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-800 font-medium">
+      <span class="material-symbols-outlined text-sm flex-none text-amber-600">warning</span>
+      <div>${warnings.map(e => '• ' + e.msg).join('<br>')}</div>
+    </div>`;
+  }
+
+  previewEl.innerHTML = `
+    <div class="bg-emerald-50 border-2 border-emerald-400 rounded-xl overflow-hidden">
+      <div class="px-5 py-3 bg-emerald-600 flex items-center gap-2">
+        <span class="material-symbols-outlined text-white text-base">check_circle</span>
+        <span class="text-white font-bold text-sm">Itinerary Confirmed — ${segs.length} segment${segs.length>1?'s':''}</span>
+        <button type="button" onclick="editItinerary('${group}')"
+          class="ml-auto text-xs font-bold text-emerald-100 hover:text-white underline">
+          ✏ Edit Segments
+        </button>
+      </div>
+      <div class="p-4 space-y-2">
+        ${warnHtml}
+        ${segs.map((s, i) => {
+          const aName   = AIRLINES[s.airline_iata] || s.airline_iata || '';
+          const fCity   = CITIES[s.from] || s.from;
+          const tCity   = CITIES[s.to]   || s.to;
+          const logoUrl = s.airline_iata ? `https://www.gstatic.com/flights/airline_logos/70px/${s.airline_iata}.png` : '';
+          const bgColor = airlineInitialsBg(s.airline_iata);
+          const layMins = i < segs.length-1 ? calcLayoverMins(s, segs[i+1]) : null;
+          const layStr  = fmtLayover(layMins);
+          const layWarn = layMins !== null && layMins < 45;
+          const nextSeg = segs[i+1];
+
+          const layoverBadge = i < segs.length-1 && nextSeg ? `
+            <div class="flex items-center gap-2 px-3 py-1.5 ${layWarn?'bg-rose-50 border-rose-300 text-rose-700':'bg-amber-50 border-amber-200 text-amber-700'} border rounded-lg text-xs font-semibold">
+              <span class="material-symbols-outlined text-sm">connecting_airports</span>
+              ${layStr ? layStr + ' connection in ' : 'Connection in '} ${_esc(CITIES[s.to] || s.to)}
+              ${layWarn ? '<span class="ml-1 text-rose-600 font-bold">⚠ Tight!</span>' : ''}
+            </div>` : '';
+
+          return `
+            <div class="flex items-stretch bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <div class="px-3 py-3 flex flex-col items-center justify-center gap-1 min-w-[72px]" style="background:#1e293b;">
+                ${logoUrl ? `<img src="${logoUrl}" alt="${_esc(s.airline_iata)}" class="w-9 h-9 object-contain"
+                  onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">` : ''}
+                <div style="display:${logoUrl?'none':'flex'};width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#fff;background:${bgColor};">${_esc(s.airline_iata||'?')}</div>
+                <span class="text-[11px] font-black text-white">${_esc(s.airline_iata)}</span>
+                <span class="text-[9px] text-slate-400 text-center leading-tight">${_esc(aName)}</span>
+              </div>
+              <div class="flex-1 p-3 grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+                <div class="text-right">
+                  <div class="text-lg font-black text-slate-900">${_esc(s.dep_time)}</div>
+                  <div class="text-sm font-bold text-blue-700">${_esc(s.from)}</div>
+                  <div class="text-[10px] text-slate-400">${_esc(fCity)}</div>
+                </div>
+                <div class="flex flex-col items-center px-1">
+                  <div class="text-[9px] font-bold text-slate-500">${_esc(s.flight_no)}</div>
+                  <div class="text-[8px] text-slate-400 bg-slate-100 px-1 rounded">${_esc(s.cabin_class||'')}</div>
+                  <div class="w-14 h-px bg-slate-300 relative my-1.5"><div class="absolute -right-1 -top-1.5 text-blue-600 text-xs">✈</div></div>
+                  <div class="text-[9px] text-slate-400">${_esc(s.date)}</div>
+                  ${s.seat ? `<div class="text-[8px] font-bold text-indigo-600 mt-0.5">💺 ${_esc(s.seat)}</div>` : ''}
+                </div>
+                <div>
+                  <div class="flex items-baseline gap-1">
+                    <span class="text-lg font-black text-slate-900">${_esc(s.arr_time)}</span>
+                    ${s.arr_next_day ? '<span class="px-1 py-0.5 bg-rose-100 text-rose-700 text-[9px] font-bold rounded">+1d</span>' : ''}
+                  </div>
+                  <div class="text-sm font-bold text-blue-700">${_esc(s.to)}</div>
+                  <div class="text-[10px] text-slate-400">${_esc(tCity)}</div>
+                </div>
+              </div>
+            </div>
+            ${layoverBadge}
+          `;
+        }).join('')}
+      </div>
+    </div>`;
+
+  previewEl.classList.remove('hidden');
+  previewEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function editItinerary(group) {
+  const segs = state.segments[group] || [];
+  segs.forEach(s => { s._confirmed = false; });
+  flightMgr._render(group);
+  const previewEl = document.getElementById('itin-preview-' + group);
+  if (previewEl) { previewEl.innerHTML = ''; previewEl.classList.add('hidden'); }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 const fareMgr = {
   addItem(label='', amount='') {

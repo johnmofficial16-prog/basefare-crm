@@ -397,13 +397,21 @@ tailwind.config = {
               $tCity  = $CITIES[$to] ?? $to;
               $logo   = $iata ? "https://www.gstatic.com/flights/airline_logos/70px/{$iata}.png" : '';
               $nextDay = !empty($seg['arr_next_day']);
+              $seat    = htmlspecialchars($seg['seat'] ?? '');
+              // Color for initials fallback
+              $hash = 0;
+              foreach (str_split($iata ?: 'XX') as $c) $hash = ord($c) + (($hash << 5) - $hash);
+              $hue = abs($hash) % 360;
+              $bgColor = "hsl({$hue},50%,35%)";
               ?>
               <div class="flex items-stretch bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                 <div class="<?= $accent ?> px-4 py-3 flex flex-col items-center justify-center gap-1.5 min-w-[80px]">
                   <?php if ($logo): ?>
-                  <img src="<?= htmlspecialchars($logo) ?>" alt="<?= htmlspecialchars($iata) ?>"
-                    class="w-9 h-9 object-contain" onerror="this.style.display='none'">
-                  <?php endif; ?>
+                <img src="<?= htmlspecialchars($logo) ?>" alt="<?= htmlspecialchars($iata) ?>"
+                  class="w-9 h-9 object-contain"
+                  onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <?php endif; ?>
+                <div style="display:<?= $logo?'none':'flex' ?>;width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#fff;background:<?= $bgColor ?>"><?= htmlspecialchars($iata ?: '?') ?></div>
                   <span class="text-[11px] font-black text-white"><?= htmlspecialchars($iata) ?></span>
                   <span class="text-[9px] text-slate-300 text-center leading-tight"><?= htmlspecialchars($aName) ?></span>
                 </div>
@@ -420,6 +428,9 @@ tailwind.config = {
                       <div class="absolute -right-2 -top-2 text-blue-500 text-sm">✈</div>
                     </div>
                     <div class="text-[9px] text-slate-400"><?= htmlspecialchars($seg['date'] ?? '') ?></div>
+                    <?php if ($seat): ?>
+                    <div class="text-[8px] font-bold text-indigo-600 mt-0.5">💺 <?= $seat ?></div>
+                    <?php endif; ?>
                   </div>
                   <div>
                     <div class="flex items-baseline gap-1">
@@ -434,15 +445,57 @@ tailwind.config = {
                 </div>
               </div>
               <?php if ($i < count($segs)-1):
-                  $nextSeg      = $segs[$i + 1];
-                  $thisDate     = trim($seg['date'] ?? '');
-                  $nextDate     = trim($nextSeg['date'] ?? '');
-                  $sameDay      = ($thisDate !== '' && $nextDate !== '' && $thisDate === $nextDate);
+                  $nextSeg  = $segs[$i + 1];
+                  $thisDate = trim($seg['date'] ?? '');
+                  $nextDate = trim($nextSeg['date'] ?? '');
+                  $sameDay  = ($thisDate !== '' && $nextDate !== '' && $thisDate === $nextDate);
+
+                  // Calculate actual layover duration
+                  $layStr   = '';
+                  $layClass = 'bg-amber-50 border-amber-200 text-amber-700';
+                  $layIcon  = 'connecting_airports';
+                  $arrT = $seg['arr_time'] ?? '';
+                  $depT = $nextSeg['dep_time'] ?? '';
+                  if ($arrT && $depT) {
+                      [$ah, $am] = array_map('intval', explode(':', $arrT));
+                      [$dh, $dm] = array_map('intval', explode(':', $depT));
+                      $arrM = $ah * 60 + $am + (!empty($seg['arr_next_day']) ? 1440 : 0);
+                      // Date delta
+                      $months = ['JAN'=>0,'FEB'=>1,'MAR'=>2,'APR'=>3,'MAY'=>4,'JUN'=>5,'JUL'=>6,'AUG'=>7,'SEP'=>8,'OCT'=>9,'NOV'=>10,'DEC'=>11];
+                      $dateDelta = 0;
+                      if (strlen($thisDate) >= 5 && strlen($nextDate) >= 5) {
+                          $md1 = $months[strtoupper(substr($thisDate,2,3))] ?? null;
+                          $md2 = $months[strtoupper(substr($nextDate,2,3))] ?? null;
+                          if ($md1 !== null && $md2 !== null) {
+                              $d1 = mktime(0,0,0,$md1+1,intval($thisDate),date('Y'));
+                              $d2 = mktime(0,0,0,$md2+1,intval($nextDate),date('Y'));
+                              $dateDelta = (int)round(($d2 - $d1) / 86400);
+                          }
+                      }
+                      $depM = $dh * 60 + $dm + $dateDelta * 1440;
+                      $layMins = $depM - $arrM;
+                      if ($layMins < 0) {
+                          $layStr = '⛔ Impossible connection';
+                          $layClass = 'bg-rose-50 border-rose-400 text-rose-700';
+                          $layIcon  = 'error';
+                      } elseif ($layMins < 45) {
+                          $h = intdiv($layMins,60); $m = $layMins % 60;
+                          $layStr = ($h ? $h.'h ' : '') . $m . 'm connection ⚠ Very tight';
+                          $layClass = 'bg-orange-50 border-orange-300 text-orange-700';
+                      } else {
+                          $h = intdiv($layMins,60); $m = $layMins % 60;
+                          $layStr = ($h ? $h.'h ' : '') . ($m ? $m.'m ' : '') . 'connection';
+                      }
+                  }
               ?>
-              <?php if ($sameDay): ?>
-              <div class="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-700">
-                <span class="material-symbols-outlined text-sm">connecting_airports</span>
-                Connection in <?= htmlspecialchars($CITIES[$to] ?? $to) ?>
+              <?php if ($sameDay || $layStr): ?>
+              <div class="flex items-center gap-2 px-3 py-1.5 <?= $layClass ?> border rounded-lg text-xs font-semibold">
+                <span class="material-symbols-outlined text-sm"><?= $layIcon ?></span>
+                <?php if ($layStr): ?>
+                  <?= htmlspecialchars($layStr) ?> in <?= htmlspecialchars($CITIES[$to] ?? $to) ?>
+                <?php else: ?>
+                  Connection in <?= htmlspecialchars($CITIES[$to] ?? $to) ?>
+                <?php endif; ?>
               </div>
               <?php else: ?>
               <div class="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-semibold text-blue-700">
