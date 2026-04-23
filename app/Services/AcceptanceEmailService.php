@@ -74,7 +74,8 @@ class AcceptanceEmailService
         $fareList      = $this->formatFarePlain($acceptance->fare_breakdown ?? [], $acceptance->total_amount, $acceptance->currency);
 
         $body  = "Hello {$acceptance->customer_name},\n\n";
-        $body .= "Please {$typeAction} by clicking the secure link below.\n\n";
+        $body .= "To proceed with your {$typeAction}, please review the details below and click the secure authorization link.\n";
+        $body .= "This is a secure, one-time link — no passwords or sensitive information will be requested.\n\n";
         $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
         $body .= "  AUTHORIZATION REQUIRED\n";
         $body .= "  {$acceptance->typeLabel()}\n";
@@ -82,12 +83,12 @@ class AcceptanceEmailService
         $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
         $body .= "PASSENGER(S):\n{$passengerList}\n\n";
         $body .= "FARE SUMMARY:\n{$fareList}\n\n";
+        $body .= "By clicking the link below, you'll be directed to a secure page where you can review your complete itinerary, fare breakdown, and provide your authorization.\n\n";
         $body .= "SECURE AUTHORIZATION LINK:\n{$link}\n\n";
-        $body .= "⚠  This link expires on {$expiry}.\n";
-        $body .= "   If the link has expired, please contact your travel agent.\n\n";
+        $body .= "⚠  This link expires on {$expiry}.\n\n";
         $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
         $body .= "Lets Fly Travel DBA Base Fare\n";
-        $body .= "Email: support@base-fare.com\n";
+        $body .= "Email: reservation@base-fare.com\n";
         $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
 
         return $body;
@@ -146,8 +147,8 @@ class AcceptanceEmailService
       </div>
     </div>
     <div style="padding:30px;">
-      <p style="color:#555; font-size:15px;">Hello <strong>{$customerName}</strong>,</p>
-      <p style="color:#555; font-size:15px;">Please {$typeAction} by clicking the secure link below.</p>
+      <p style="color:#374151; font-size:15px; margin:0 0 10px;">Hello <strong>{$customerName}</strong>,</p>
+      <p style="color:#555; font-size:14px; line-height:1.7; margin:0 0 20px;">To proceed with your {$typeAction}, please review the details below and authorize via the secure link. This is a secure, one-time link &mdash; no passwords or sensitive information will be requested.</p>
       <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin:20px 0; text-align:center;">
         <div style="font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#94a3b8; margin-bottom:6px;">Booking Reference (PNR)</div>
         <div style="font-size:24px; font-weight:800; font-family:monospace; color:#0f1e3c; letter-spacing:3px;">{$pnr}</div>
@@ -170,21 +171,22 @@ class AcceptanceEmailService
           </tbody>
         </table>
       </div>
-      <div style="text-align:center; margin:30px 0;">
-        <a href="{$link}" style="display:inline-block; background: linear-gradient(135deg, #0f1e3c, #1a3a6b); color:#fff; text-decoration:none; padding:16px 36px; border-radius:8px; font-weight:700; font-size:16px; letter-spacing:0.5px;">
-          Review &amp; Authorize →
+      <p style="color:#555; font-size:13px; line-height:1.7; margin:0 0 20px;">By clicking the button below, you'll be directed to a secure page where you can review your complete itinerary, fare breakdown, and provide your authorization.</p>
+      <div style="text-align:center; margin:28px 0;">
+        <a href="{$link}" style="display:inline-block; background: linear-gradient(135deg, #0f1e3c, #1a3a6b); color:#fff; text-decoration:none; padding:16px 40px; border-radius:8px; font-weight:700; font-size:16px; letter-spacing:0.5px;">
+          Review &amp; Authorize &rarr;
         </a>
       </div>
       <div style="background:#fffbeb; border:1px solid #fcd34d; border-radius:8px; padding:14px; text-align:center; margin-bottom:24px;">
         <span style="font-size:13px; color:#92400e;">⚠ This link expires on <strong>{$expiry}</strong>. Do not share this link with anyone.</span>
       </div>
-      <p style="font-size:12px; color:#94a3b8; text-align:center;">If the button above doesn't work, copy and paste this link:<br>
+      <p style="font-size:12px; color:#94a3b8; text-align:center; line-height:1.6;">If the button above doesn't work, copy and paste this link into your browser:<br>
         <a href="{$link}" style="color:#1a3a6b; word-break:break-all;">{$link}</a>
       </p>
     </div>
     <div style="background:#f8fafc; padding:20px; text-align:center; font-size:11px; color:#94a3b8; border-top:1px solid #e2e8f0;">
       <strong style="color:#0f1e3c;">Lets Fly Travel DBA Base Fare</strong><br>
-      Email: support@base-fare.com<br><br>
+      Email: reservation@base-fare.com<br><br>
       <span style="font-size:10px;">This is an official payment authorization request. Do not forward or share this email.</span>
     </div>
   </div>
