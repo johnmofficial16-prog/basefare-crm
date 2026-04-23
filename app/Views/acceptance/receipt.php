@@ -46,6 +46,29 @@ $otherTitle   = $extraData['other_title']     ?? '';
 $otherNotes   = $extraData['other_notes']     ?? '';
 $seatNumber   = $extraData['seat_number']     ?? '';
 
+// If the ticket-conditions seat field was left blank,
+// auto-build seat info from the per-segment seat fields in the flight itinerary.
+if (!$seatNumber) {
+    $allSegs = array_merge(
+        $flightData['flights']     ?? [],
+        $flightData['old_flights'] ?? [],
+        $flightData['new_flights'] ?? []
+    );
+    $segSeats = [];
+    foreach ($allSegs as $s) {
+        $sv = trim($s['seat'] ?? '');
+        if ($sv) {
+            $from = strtoupper($s['from'] ?? '');
+            $to   = strtoupper($s['to']   ?? '');
+            $segSeats[] = $sv . ($from && $to ? " ({$from}→{$to})" : '');
+        }
+    }
+    if ($segSeats) {
+        $seatNumber = implode(', ', $segSeats);
+    }
+}
+
+
 // Collect all segment groups
 $segGroups = [];
 $filterSegs = fn($arr) => is_array($arr)

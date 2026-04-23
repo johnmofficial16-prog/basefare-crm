@@ -94,6 +94,28 @@ $ccInstructions= $extraData['instructions']    ?? null;
 $ccEtktList    = $extraData['etkt_list']       ?? [];
 $seatNumber    = $extraData['seat_number']     ?? '';
 $seatAssignments = $extraData['seat_assignments'] ?? []; // per-passenger [{passenger, seat}]
+
+// If ticket-conditions seat field is blank, auto-build from per-segment seat fields
+if (!$seatNumber && empty($seatAssignments)) {
+    $allSegs = array_merge(
+        $flightData['flights']     ?? [],
+        $flightData['old_flights'] ?? [],
+        $flightData['new_flights'] ?? []
+    );
+    $segSeats = [];
+    foreach ($allSegs as $s) {
+        $sv = trim($s['seat'] ?? '');
+        if ($sv) {
+            $from = strtoupper($s['from'] ?? '');
+            $to   = strtoupper($s['to']   ?? '');
+            $segSeats[] = $sv . ($from && $to ? " ({$from}→{$to})" : '');
+        }
+    }
+    if ($segSeats) {
+        $seatNumber = implode(', ', $segSeats);
+    }
+}
+
 $baggageInfo   = $acceptance->baggage_info     ?? '';
 $isPreauth     = (bool)($acceptance->is_preauth ?? false);
 

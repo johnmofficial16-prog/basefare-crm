@@ -22,6 +22,7 @@ class AcceptanceEmailService
     {
         $mail = new PHPMailer(true);
         $mail->isSMTP();
+        $mail->CharSet    = 'UTF-8';  // Prevent em-dash / unicode corruption in subject
         $mail->Host       = $_ENV['SMTP_HOST'] ?? 'smtp.gmail.com';
         $mail->SMTPAuth   = true;
         $mail->Username   = $_ENV['SMTP_USER'] ?? '';
@@ -29,7 +30,7 @@ class AcceptanceEmailService
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = $_ENV['SMTP_PORT'] ?? 587;
         
-        $fromName = $_ENV['SMTP_FROM_NAME'] ?? 'Lets Fly Travel DBA Base Fare';
+        $fromName  = $_ENV['SMTP_FROM_NAME'] ?? 'Lets Fly Travel DBA Base Fare';
         $fromEmail = $_ENV['SMTP_FROM'] ?? $_ENV['SMTP_USER'] ?? '';
         
         if ($fromEmail) {
