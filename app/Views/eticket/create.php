@@ -351,9 +351,17 @@ function setMsg(msg, isError = false) {
     el.className = 'text-xs mt-2 ' + (isError ? 'text-red-500' : 'text-slate-400');
 }
 
-// ── FLIGHT DISPLAY ────────────────────────────────────────────────────────────
-function renderFlightDisplay(flights) {
+function renderFlightDisplay(flightData) {
     const el = document.getElementById('flight-display');
+    
+    // Extract actual flights array (it might be an array directly, or inside an object from Acceptance data)
+    let flights = [];
+    if (Array.isArray(flightData)) {
+        flights = flightData;
+    } else if (flightData && Array.isArray(flightData.flights)) {
+        flights = flightData.flights;
+    }
+
     if (!flights || !flights.length) {
         el.innerHTML = '<span class="text-slate-400 text-sm">No flight itinerary data available from this record.</span>';
         return;

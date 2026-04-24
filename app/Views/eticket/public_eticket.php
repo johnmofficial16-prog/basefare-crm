@@ -344,10 +344,19 @@ if (empty($_SESSION['csrf_token'])) {
       </div>
 
       <!-- ── FLIGHT ITINERARY ──────────────────────────────── -->
-      <?php if ($et->flight_data && count($et->flight_data) > 0): ?>
+      <?php
+      $flightDataArr = (array)$et->flight_data;
+      $flightsToRender = [];
+      if (isset($flightDataArr['flights']) && is_array($flightDataArr['flights'])) {
+          $flightsToRender = $flightDataArr['flights'];
+      } elseif (!empty($flightDataArr) && is_array(reset($flightDataArr)) && !isset($flightDataArr['flights'])) {
+          $flightsToRender = $flightDataArr; // It's already a sequential array
+      }
+      ?>
+      <?php if (!empty($flightsToRender)): ?>
       <div style="margin-bottom:28px;">
         <div class="section-title">🛫 Flight Itinerary</div>
-        <?php foreach ((array)$et->flight_data as $f): ?>
+        <?php foreach ($flightsToRender as $f): ?>
         <div class="flight-segment">
           <div class="airport-block">
             <div class="airport-iata"><?= htmlspecialchars($f['departure_airport'] ?? $f['from'] ?? '???') ?></div>

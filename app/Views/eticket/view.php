@@ -163,11 +163,20 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       </div>
 
       <!-- Flight Itinerary -->
-      <?php if ($et->flight_data && count((array)$et->flight_data) > 0): ?>
+      <?php
+      $flightDataArr = (array)$et->flight_data;
+      $flightsToRender = [];
+      if (isset($flightDataArr['flights']) && is_array($flightDataArr['flights'])) {
+          $flightsToRender = $flightDataArr['flights'];
+      } elseif (!empty($flightDataArr) && is_array(reset($flightDataArr)) && !isset($flightDataArr['flights'])) {
+          $flightsToRender = $flightDataArr; // It's already a sequential array
+      }
+      ?>
+      <?php if (!empty($flightsToRender)): ?>
       <div class="bg-white border border-slate-200 rounded-xl p-5">
         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Flight Itinerary</p>
         <div class="divide-y divide-slate-100">
-          <?php foreach ((array)$et->flight_data as $f): ?>
+          <?php foreach ($flightsToRender as $f): ?>
           <div class="flex items-center gap-6 py-4">
             <div class="text-center min-w-[64px]">
               <div class="text-2xl font-black text-primary font-mono"><?= htmlspecialchars($f['departure_airport'] ?? $f['from'] ?? '???') ?></div>
