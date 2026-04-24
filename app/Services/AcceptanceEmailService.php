@@ -183,7 +183,36 @@ class AcceptanceEmailService
                 $iataCode = $airlineUpper;
             }
         }
-        $airlineName  = htmlspecialchars($acceptance->airline ?? '');
+        $airlineRaw = trim($acceptance->airline ?? '');
+        // If the stored airline name is just an IATA code, resolve to full name
+        $iataFullNames = [
+            'AC'=>'Air Canada','WS'=>'WestJet','TS'=>'Air Transat','PD'=>'Porter Airlines','WG'=>'Sunwing',
+            'AA'=>'American Airlines','DL'=>'Delta Air Lines','UA'=>'United Airlines',
+            'WN'=>'Southwest Airlines','B6'=>'JetBlue Airways','AS'=>'Alaska Airlines',
+            'F9'=>'Frontier Airlines','NK'=>'Spirit Airlines','G4'=>'Allegiant Air','HA'=>'Hawaiian Airlines',
+            'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM',
+            'LX'=>'Swiss International','OS'=>'Austrian Airlines','SN'=>'Brussels Airlines',
+            'IB'=>'Iberia','VY'=>'Vueling','TP'=>'TAP Portugal','FR'=>'Ryanair',
+            'U2'=>'easyJet','DY'=>'Norwegian Air','TK'=>'Turkish Airlines','LO'=>'LOT Polish Airlines',
+            'EK'=>'Emirates','QR'=>'Qatar Airways','EY'=>'Etihad Airways',
+            'FZ'=>'flydubai','G9'=>'Air Arabia','WY'=>'Oman Air','GF'=>'Gulf Air',
+            'SQ'=>'Singapore Airlines','CX'=>'Cathay Pacific','JL'=>'Japan Airlines',
+            'NH'=>'All Nippon Airways','KE'=>'Korean Air','OZ'=>'Asiana Airlines',
+            'TG'=>'Thai Airways','MH'=>'Malaysia Airlines','SV'=>'Saudia',
+            '6E'=>'IndiGo','SG'=>'SpiceJet','AI'=>'Air India','UK'=>'Vistara',
+            'AM'=>'Aeromexico','LA'=>'LATAM Airlines','AV'=>'Avianca','CM'=>'Copa Airlines',
+            'QF'=>'Qantas Airways','NZ'=>'Air New Zealand',
+            'MU'=>'China Eastern','CA'=>'Air China','CZ'=>'China Southern',
+            'ET'=>'Ethiopian Airlines','KQ'=>'Kenya Airways','AT'=>'Royal Air Maroc',
+            'UL'=>'SriLankan Airlines','KU'=>'Kuwait Airways','MS'=>'EgyptAir',
+        ];
+        $airlineUpper = strtoupper(trim($airlineRaw));
+        if (preg_match('/^[A-Z0-9]{2,3}$/', $airlineUpper) && isset($iataFullNames[$airlineUpper])) {
+            $resolvedName = $iataFullNames[$airlineUpper];
+        } else {
+            $resolvedName = $airlineRaw ?: ($iataCode ? ($iataFullNames[$iataCode] ?? $iataCode) : '');
+        }
+        $airlineName  = htmlspecialchars($resolvedName);
         $logoUrl      = $iataCode ? "https://www.gstatic.com/flights/airline_logos/70px/{$iataCode}.png" : '';
         $logoHtml     = $logoUrl
             ? "<img src=\"{$logoUrl}\" alt=\"{$airlineName}\" width=\"48\" height=\"48\" style=\"border-radius:8px; background:#fff; padding:3px; object-fit:contain;\">" 
