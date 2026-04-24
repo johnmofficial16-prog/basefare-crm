@@ -291,10 +291,9 @@ $iataCode = $et->resolvedIataCode();
 $logoUrl  = $iataCode ? \App\Models\ETicket::airlineLogoUrl($iataCode) : '';
 $etId     = 'ET-' . str_pad($et->id, 6, '0', STR_PAD_LEFT);
 
-// CSRF for the acknowledge form
-if (empty($_SESSION['csrf_token'])) {
+// Guard against double session_start (Slim may have already started one)
+if (session_status() === PHP_SESSION_NONE) {
     session_start();
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 ?>
 
@@ -627,7 +626,7 @@ if (empty($_SESSION['csrf_token'])) {
           Your acknowledgment constitutes a legally binding confirmation of receipt.
         </div>
 
-        <form method="POST" action="/eticket/acknowledge" id="ack-form">
+        <form method="POST" action="/eticket/" id="ack-form">
           <input type="hidden" name="token" value="<?= htmlspecialchars($et->token) ?>">
 
           <label class="ack-checkbox-wrap" for="ack-checkbox">

@@ -195,7 +195,17 @@ class ETicket extends Model
             $base = 'https://' . ltrim($base, '/');
         }
         $base = rtrim($base, '/');
-        return $base . '/eticket?token=' . $this->token;
+        return $base . '/eticket/?token=' . $this->token;
+    }
+
+    /**
+     * Direct one-click acknowledgment URL (used in emails).
+     * Customer clicks → GET → server records acknowledgment immediately.
+     */
+    public function acknowledgeUrl(): string
+    {
+        return rtrim(preg_replace('~^(?!https?://)~i', 'https://', $_ENV['APP_URL'] ?? getenv('APP_URL') ?: 'https://crm.base-fare.com'), '/')
+             . '/eticket/?token=' . $this->token . '&action=acknowledge';
     }
 
     // =========================================================================

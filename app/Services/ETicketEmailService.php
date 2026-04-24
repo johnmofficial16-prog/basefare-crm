@@ -140,14 +140,19 @@ class ETicketEmailService
     public function buildPlainText(ETicket $eticket, string $link): string
     {
         $paxList = implode(', ', array_map(fn($p) => $p['pax_name'] ?? '', $eticket->ticket_data ?? []));
+        $ackUrl  = $eticket->acknowledgeUrl();
         $body  = "Dear {$eticket->customer_name},\n\n";
-        $body .= "Your electronic travel ticket is ready. Please review and acknowledge receipt by clicking the link below.\n\n";
-        $body .= "Booking Reference (PNR): {$eticket->pnr}\n";
-        if ($paxList) $body .= "Passenger(s): {$paxList}\n";
-        $body .= "Airline: {$eticket->airline}\n";
-        $body .= "Total Amount: {$eticket->currency} " . number_format($eticket->total_amount, 2) . "\n\n";
-        $body .= "View & Acknowledge E-Ticket:\n{$link}\n\n";
-        $body .= "By clicking the acknowledgment button on that page, you confirm receipt of your e-ticket.\n\n";
+        $body .= "Your electronic travel ticket is ready. All details are below.\n\n";
+        $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+        $body .= "BOOKING REFERENCE (PNR): {$eticket->pnr}\n";
+        if ($paxList)           $body .= "Passenger(s): {$paxList}\n";
+        if ($eticket->airline)  $body .= "Airline: {$eticket->airline}\n";
+        if ($eticket->order_id) $body .= "Confirmation: {$eticket->order_id}\n";
+        $body .= "Total Charged: {$eticket->currency} " . number_format($eticket->total_amount, 2) . "\n";
+        $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
+        $body .= "TO ACKNOWLEDGE RECEIPT — CLICK THIS LINK:\n{$ackUrl}\n\n";
+        $body .= "Clicking the link above confirms you have received your e-ticket. This is legally binding.\n\n";
+        $body .= "View full e-ticket online:\n{$link}\n\n";
         $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
         $body .= self::SUPPORT_NAME . "\n";
         $body .= "Email: " . self::SUPPORT_EMAIL . "\n";
@@ -161,97 +166,171 @@ class ETicketEmailService
 
     public function buildHtmlEmail(ETicket $eticket, string $link): string
     {
-        $name      = htmlspecialchars($eticket->customer_name);
-        $pnr       = htmlspecialchars($eticket->pnr);
-        $airline   = htmlspecialchars($eticket->airline ?? '');
-        $total     = htmlspecialchars($eticket->currency) . ' ' . number_format($eticket->total_amount, 2);
-        $safeLink  = htmlspecialchars($link);
+        $name     = htmlspecialchars($eticket->customer_name);
+        $pnr      = htmlspecialchars($eticket->pnr);
+        $airline  = htmlspecialchars($eticket->airline ?? '');
+        $orderId  = htmlspecialchars($eticket->order_id ?? '');
+        $currency = htmlspecialchars($eticket->currency);
+        $total    = $currency . ' ' . number_format($eticket->total_amount, 2);
+        $ackUrl   = htmlspecialchars($eticket->acknowledgeUrl());
+        $viewUrl  = htmlspecialchars($link);
+        $etId     = 'ET-' . str_pad($eticket->id, 6, '0', STR_PAD_LEFT);
 
+        // ── Passenger rows ────────────────────────────────────────────────────
         $paxRows = '';
-        foreach ($eticket->ticket_data ?? [] as $p) {
-            $paxName  = htmlspecialchars($p['pax_name'] ?? '');
-            $ticketNo = htmlspecialchars($p['ticket_number'] ?? '');
-            $seat     = htmlspecialchars($p['seat'] ?? '');
-            $paxRows .= "<tr>
-              <td style='padding:8px 12px;font-size:13px;color:#374151;border-bottom:1px solid #f1f5f9;'>{$paxName}</td>
-              <td style='padding:8px 12px;font-size:12px;font-family:monospace;color:#1e40af;font-weight:700;border-bottom:1px solid #f1f5f9;'>{$ticketNo}</td>
-              <td style='padding:8px 12px;font-size:12px;color:#6366f1;font-weight:600;border-bottom:1px solid #f1f5f9;'>{$seat}</td>
+        foreach ($eticket->ticketDataWithAutoNumbers() as $i => $p) {
+            $paxName  = htmlspecialchars($p['pax_name']      ?? '');
+            $ticketNo = htmlspecialchars($p['ticket_number'] ?? '—');
+            $seat     = htmlspecialchars($p['seat']          ?? '');
+            $type     = ucfirst(htmlspecialchars($p['pax_type'] ?? 'adult'));
+            $seatHtml = $seat
+                ? "<span style='background:#f5f3ff;color:#6d28d9;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;'>&#128186;&nbsp;{$seat}</span>"
+                : '<span style="color:#94a3b8;">&#8212;</span>';
+            $bg = $i % 2 === 0 ? '#ffffff' : '#f8fafc';
+            $paxRows .= "<tr style='background:{$bg};'>
+              <td style='padding:10px 12px;font-size:13px;font-weight:600;color:#1e293b;border-bottom:1px solid #f1f5f9;'>{$paxName}<br><span style='font-size:10px;color:#94a3b8;font-weight:400;'>{$type}</span></td>
+              <td style='padding:10px 12px;font-size:12px;font-family:monospace;color:#1e40af;font-weight:700;border-bottom:1px solid #f1f5f9;'>{$ticketNo}</td>
+              <td style='padding:10px 12px;border-bottom:1px solid #f1f5f9;'>{$seatHtml}</td>
             </tr>";
         }
+
+        // ── Flight itinerary rows ─────────────────────────────────────────────
+        $flightRows = '';
+        $flightData = $eticket->flight_data ?? [];
+        $segs = [];
+        if (isset($flightData['flights']) && is_array($flightData['flights'])) {
+            $segs = $flightData['flights'];
+        } elseif (!empty($flightData) && is_array(reset($flightData))) {
+            $segs = array_values($flightData);
+        }
+        foreach ($segs as $seg) {
+            $from  = strtoupper($seg['from'] ?? $seg['departure_airport'] ?? '');
+            $to    = strtoupper($seg['to']   ?? $seg['arrival_airport']   ?? '');
+            if (!$from || !$to) continue;
+            $iata  = strtoupper($seg['airline_iata'] ?? $seg['airline'] ?? '');
+            $fltNo = htmlspecialchars($seg['flight_no']   ?? $seg['flight']         ?? '');
+            $cabin = htmlspecialchars($seg['cabin_class'] ?? $seg['class']          ?? '');
+            $date  = htmlspecialchars($seg['date']        ?? $seg['departure_date'] ?? '');
+            $dep   = htmlspecialchars($seg['dep_time']    ?? $seg['time']           ?? '');
+            $arr   = htmlspecialchars($seg['arr_time']    ?? $seg['arrival_time']   ?? '');
+            $nd    = !empty($seg['arr_next_day']) ? " <span style='color:#e11d48;font-size:10px;font-weight:700;'>(+1d)</span>" : '';
+            $logo  = $iata ? "<img src='https://www.gstatic.com/flights/airline_logos/70px/{$iata}.png' width='20' height='20' style='border-radius:3px;vertical-align:middle;margin-right:5px;'>" : '';
+            $flightRows .= "<tr style='border-bottom:1px solid #f1f5f9;'>
+              <td style='padding:10px 12px;font-size:13px;'>{$logo}<strong style='color:#0f1e3c;'>{$from}</strong>&nbsp;&#8594;&nbsp;<strong style='color:#0f1e3c;'>{$to}</strong></td>
+              <td style='padding:10px 12px;font-size:11px;color:#64748b;font-family:monospace;'>{$fltNo}<br>{$cabin}</td>
+              <td style='padding:10px 12px;font-size:11px;color:#475569;'>{$date}<br><span style='font-weight:700;'>{$dep}&nbsp;&#8594;&nbsp;{$arr}{$nd}</span></td>
+            </tr>";
+        }
+
+        // ── Fare rows ─────────────────────────────────────────────────────────
+        $fareRows = '';
+        foreach ($eticket->fare_breakdown ?? [] as $item) {
+            $label  = htmlspecialchars($item['label'] ?? $item['description'] ?? '');
+            $amount = $currency . ' ' . number_format((float)($item['amount'] ?? 0), 2);
+            $fareRows .= "<tr><td style='padding:6px 0;font-size:13px;color:#64748b;'>{$label}</td><td style='padding:6px 0;font-size:13px;color:#1e293b;text-align:right;font-family:monospace;'>{$amount}</td></tr>";
+        }
+
+        $itinSection = $flightRows ? "
+      <div style='margin:0 0 24px;'>
+        <div style='font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;'>&#9992; Flight Itinerary</div>
+        <table style='width:100%;border-collapse:collapse;'><tbody>{$flightRows}</tbody></table>
+      </div>" : '';
+
+        $fareSection = $fareRows ? "
+      <div style='margin:0 0 24px;'>
+        <div style='font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;'>&#128176; Fare Summary</div>
+        <table style='width:100%;border-collapse:collapse;'><tbody>{$fareRows}</tbody></table>
+        <div style='display:flex;justify-content:space-between;padding:10px 0 0;border-top:2px solid #e2e8f0;margin-top:8px;'><span style='font-size:14px;font-weight:800;color:#065f46;'>Total Charged</span><span style='font-size:14px;font-weight:800;font-family:monospace;color:#065f46;'>{$total}</span></div>
+      </div>" : "<div style='padding:0 0 24px;text-align:right;font-size:15px;font-weight:800;color:#065f46;'>Total: {$total}</div>";
+
+        $orderLine = $orderId ? "<div style='font-size:11px;color:#94a3b8;margin-top:4px;'>Conf: {$orderId}</div>" : '';
 
         return <<<HTML
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your E-Ticket — {$pnr}</title>
-</head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your E-Ticket &mdash; {$pnr}</title></head>
 <body style="font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;margin:0;padding:20px;color:#333;">
-  <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+  <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.08);">
 
     <!-- Header -->
     <div style="background:linear-gradient(135deg,#0f1e3c 0%,#1a3a6b 100%);padding:28px 30px;text-align:center;">
       <div style="color:#fff;font-size:22px;font-weight:800;letter-spacing:1px;">LETS FLY TRAVEL</div>
-      <div style="color:#c9a84c;font-size:11px;font-weight:600;margin-top:3px;letter-spacing:0.5px;">DBA BASE FARE</div>
-      <div style="margin-top:14px;border-top:1px solid rgba(255,255,255,0.2);padding-top:12px;">
-        <span style="color:#fff;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">✈ ELECTRONIC TICKET</span>
+      <div style="color:#c9a84c;font-size:11px;font-weight:700;margin-top:3px;letter-spacing:.5px;">DBA BASE FARE</div>
+      <div style="margin-top:14px;border-top:1px solid rgba(255,255,255,.2);padding-top:12px;">
+        <span style="color:#fff;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">&#9992; ELECTRONIC TICKET</span>
       </div>
     </div>
 
     <!-- Status Banner -->
-    <div style="background:#d1fae5;border-bottom:2px solid #6ee7b7;padding:12px 30px;display:flex;align-items:center;gap:10px;">
-      <span style="font-size:20px;">✅</span>
-      <div>
-        <div style="font-size:13px;font-weight:800;color:#064e3b;">E-Ticket Ready</div>
-        <div style="font-size:11px;color:#047857;margin-top:1px;">Your booking is confirmed. Please review and acknowledge below.</div>
-      </div>
+    <div style="background:#d1fae5;border-bottom:2px solid #6ee7b7;padding:12px 30px;">
+      <div style="font-size:13px;font-weight:800;color:#064e3b;">&#10003; E-Ticket Ready &mdash; {$etId}</div>
+      <div style="font-size:11px;color:#047857;margin-top:1px;">Your booking is confirmed. Review your details and acknowledge at the bottom of this email.</div>
     </div>
 
     <!-- Body -->
     <div style="padding:28px 30px;">
       <p style="color:#1e293b;font-size:15px;margin:0 0 20px;">Dear <strong>{$name}</strong>,</p>
-      <p style="color:#555;font-size:14px;line-height:1.7;margin:0 0 24px;">
-        Your electronic ticket is ready. Please click the button below to view your full itinerary, ticket numbers, and to acknowledge receipt.
+      <p style="color:#555;font-size:13px;line-height:1.7;margin:0 0 24px;">
+        Your electronic travel ticket is ready. All booking details are included below for your records.
       </p>
 
-      <!-- Booking card -->
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin:0 0 24px;">
+      <!-- PNR Card -->
+      <div style="background:#f8fafc;border:1px solid #bae6fd;border-radius:10px;padding:16px 20px;margin:0 0 24px;">
         <table style="width:100%;border-collapse:collapse;">
           <tr>
-            <td style="padding-right:16px;white-space:nowrap;">
+            <td style="padding-right:20px;white-space:nowrap;border-right:1px solid #e2e8f0;">
               <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:4px;">Booking Ref (PNR)</div>
-              <div style="font-size:22px;font-weight:800;font-family:monospace;color:#0f1e3c;letter-spacing:3px;">{$pnr}</div>
+              <div style="font-size:26px;font-weight:800;font-family:monospace;color:#0f1e3c;letter-spacing:3px;">{$pnr}</div>
             </td>
-            <td style="border-left:1px solid #e2e8f0;padding-left:16px;">
+            <td style="padding-left:20px;">
               <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:4px;">Airline</div>
               <div style="font-size:14px;font-weight:700;color:#1e293b;">{$airline}</div>
-              <div style="font-size:11px;color:#94a3b8;margin-top:4px;">{$total}</div>
+              {$orderLine}
             </td>
           </tr>
         </table>
       </div>
 
-      <!-- Passenger / Ticket # table -->
-      {$this->passengerTableHtml($eticket)}
-
-      <!-- CTA Button -->
-      <div style="text-align:center;margin:28px 0;">
-        <a href="{$safeLink}"
-           style="display:inline-block;background:linear-gradient(135deg,#0f1e3c,#1a3a6b);color:#fff;text-decoration:none;padding:18px 56px;border-radius:10px;font-weight:800;font-size:16px;letter-spacing:0.5px;">
-          View & Acknowledge E-Ticket &rarr;
-        </a>
+      <!-- Passengers -->
+      <div style="margin:0 0 24px;">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">&#127903; Passengers &amp; Ticket Numbers</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:#f8fafc;">
+            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">Passenger</th>
+            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">E-Ticket #</th>
+            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">Seat</th>
+          </tr></thead>
+          <tbody>{$paxRows}</tbody>
+        </table>
       </div>
 
-      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;text-align:center;">
-        <span style="font-size:13px;color:#92400e;">⚠ Please review all details carefully before acknowledging. Your acknowledgment is legally binding.</span>
+      {$itinSection}
+      {$fareSection}
+
+    </div>
+
+    <!-- Acknowledge Section -->
+    <div style="background:linear-gradient(135deg,#0f1e3c,#1a3a6b);padding:32px 30px;text-align:center;">
+      <div style="color:#fff;font-size:17px;font-weight:800;margin-bottom:8px;">Ready to Acknowledge?</div>
+      <div style="color:rgba(255,255,255,.7);font-size:12px;line-height:1.7;margin-bottom:24px;">
+        By clicking the button below, you confirm that you have received<br>your e-ticket and all details are correct.
+      </div>
+      <a href="{$ackUrl}"
+         style="display:inline-block;background:linear-gradient(135deg,#c9a84c,#d4b86a);color:#0f1e3c;text-decoration:none;padding:18px 52px;border-radius:10px;font-weight:900;font-size:16px;letter-spacing:.3px;">
+        &#10003; I Acknowledge Receipt of My E-Ticket
+      </a>
+      <div style="margin-top:14px;font-size:11px;color:rgba(255,255,255,.45);">
+        This acknowledgment is legally binding and is recorded with your IP address &amp; timestamp.
+      </div>
+      <div style="margin-top:10px;">
+        <a href="{$viewUrl}" style="color:rgba(255,255,255,.45);font-size:11px;text-decoration:none;">View full e-ticket online &rarr;</a>
       </div>
     </div>
 
     <!-- Footer -->
     <div style="background:#f8fafc;padding:16px 30px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
-      <strong style="color:#0f1e3c;">Lets Fly Travel DBA Base Fare</strong> &nbsp;&middot;&nbsp; {$this->supportEmail()}<br>
-      <span style="font-size:10px;">This is an official e-ticket document. Do not forward or share this email.</span>
+      <strong style="color:#0f1e3c;">Lets Fly Travel DBA Base Fare</strong> &nbsp;&middot;&nbsp; reservation@base-fare.com<br>
+      <span style="font-size:10px;">This is an official electronic travel document. Do not forward or share this email.</span>
     </div>
 
   </div>
@@ -263,6 +342,7 @@ HTML;
     // =========================================================================
     // ACKNOWLEDGMENT NOTICE HTML (to reservation@base-fare.com)
     // =========================================================================
+
 
     public function buildAcknowledgmentHtml(ETicket $eticket): string
     {
