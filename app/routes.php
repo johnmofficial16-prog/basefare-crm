@@ -8,6 +8,7 @@ use App\Controllers\DashboardController;
 use App\Controllers\AcceptanceController;
 use App\Controllers\TransactionController;
 use App\Controllers\UserController;
+use App\Controllers\ETicketController;
 use App\Controllers\AdminController;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\AttendanceGateMiddleware;
@@ -170,3 +171,26 @@ $app->get('/', function ($request, $response) {
     return $response->withHeader('Location', '/dashboard')->withStatus(302);
 });
 
+// ==========================================================================
+// E-Ticket Module — Agent-facing (behind Auth + AttendanceGate)
+// ==========================================================================
+$app->group('/etickets', function ($group) {
+    $group->get('',                                   [ETicketController::class, 'index']);
+    $group->get('/create',                            [ETicketController::class, 'createForm']);
+    $group->post('/create',                           [ETicketController::class, 'store']);
+    $group->get('/autofill-options',                  [ETicketController::class, 'autofillOptions']);
+    $group->get('/transaction-data/{id:[0-9]+}',      [ETicketController::class, 'transactionData']);
+    $group->get('/{id:[0-9]+}',                       [ETicketController::class, 'view']);
+    $group->post('/{id:[0-9]+}/send',                 [ETicketController::class, 'sendEmail']);
+    $group->post('/{id:[0-9]+}/note',                 [ETicketController::class, 'addNote']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new AuthMiddleware());
+
+// ==========================================================================
+// E-Ticket Module — Public customer-facing (NO auth — token-based)
+// URL: https://base-fare.com/eticket?token=xxx
+// ==========================================================================
+$app->get('/eticket',             [ETicketController::class, 'publicView']);
+$app->post('/eticket/acknowledge',[ETicketController::class, 'publicAcknowledge']);
+$app->get('/eticket/confirmed',   [ETicketController::class, 'publicConfirmed']);
