@@ -231,32 +231,55 @@ $error = $_GET['error'] ?? null;
       <?php if ($airline): ?>
       <div style="margin-top:12px; display:flex; align-items:center; justify-content:center; gap:10px;">
         <?php
-          $iataMap = [
-            'Air Canada'=>'AC','WestJet'=>'WS','Air Transat'=>'TS',
-            'American Airlines'=>'AA','Delta'=>'DL','United'=>'UA',
-            'Southwest'=>'WN','JetBlue'=>'B6','Alaska Airlines'=>'AS',
-            'Frontier'=>'F9','Spirit'=>'NK','Allegiant'=>'G4',
-            'British Airways'=>'BA','Lufthansa'=>'LH','Air France'=>'AF',
-            'KLM'=>'KL','Swiss'=>'LX','Austrian'=>'OS','Brussels Airlines'=>'SN',
-            'Iberia'=>'IB','Vueling'=>'VY','TAP Portugal'=>'TP',
-            'Ryanair'=>'FR','EasyJet'=>'U2','Norwegian'=>'DY',
-            'Turkish Airlines'=>'TK','LOT'=>'LO','LOT Polish Airlines'=>'LO',
-            'Emirates'=>'EK','Qatar Airways'=>'QR','Etihad'=>'EY',
-            'Flydubai'=>'FZ','Air Arabia'=>'G9','Oman Air'=>'WY',
-            'Singapore Airlines'=>'SQ','Cathay Pacific'=>'CX',
-            'Japan Airlines'=>'JL','ANA'=>'NH','Korean Air'=>'KE',
-            'Asiana'=>'OZ','Thai Airways'=>'TG','Malaysia Airlines'=>'MH',
-            'IndiGo'=>'6E','SpiceJet'=>'SG','Air India'=>'AI',
-            'Vistara'=>'UK','Go First'=>'G8',
-            'Aeromexico'=>'AM','LATAM'=>'LA','Avianca'=>'AV','Copa'=>'CM',
-          ];
-          // If the stored value is already an IATA code (2-3 chars, all uppercase letters/digits)
-          $airlineUpper = strtoupper(trim($acceptance->airline ?? ''));
-          if (preg_match('/^[A-Z0-9]{2,3}$/', $airlineUpper)) {
-              $iataCode = $airlineUpper;
-          } else {
-              // Otherwise try to match by airline name
-              $iataCode = null;
+          // ── Priority 1: read IATA directly from flight segment data (clean 2-letter code) ──
+          $iataCode = null;
+          $allSegSources = array_merge(
+              $flightData['flights']     ?? [],
+              $flightData['old_flights'] ?? [],
+              $flightData['new_flights'] ?? []
+          );
+          foreach ($allSegSources as $seg) {
+              $candidate = strtoupper(trim($seg['airline_iata'] ?? ''));
+              if (preg_match('/^[A-Z0-9]{2,3}$/', $candidate)) {
+                  $iataCode = $candidate;
+                  break;
+              }
+          }
+
+          // ── Priority 2: if airline field is itself an IATA code (agent typed e.g. "LH") ──
+          if (!$iataCode) {
+              $airlineUpper = strtoupper(trim($acceptance->airline ?? ''));
+              if (preg_match('/^[A-Z0-9]{2,3}$/', $airlineUpper)) {
+                  $iataCode = $airlineUpper;
+              }
+          }
+
+          // ── Priority 3: last resort — reverse name→IATA lookup ──
+          if (!$iataCode) {
+              $iataMap = [
+                  'Air Canada'=>'AC','WestJet'=>'WS','Air Transat'=>'TS',
+                  'American Airlines'=>'AA','Delta Air Lines'=>'DL','Delta'=>'DL','United Airlines'=>'UA','United'=>'UA',
+                  'Southwest Airlines'=>'WN','Southwest'=>'WN','JetBlue Airways'=>'B6','JetBlue'=>'B6',
+                  'Alaska Airlines'=>'AS','Frontier Airlines'=>'F9','Spirit Airlines'=>'NK','Allegiant Air'=>'G4',
+                  'British Airways'=>'BA','Lufthansa'=>'LH','Air France'=>'AF',
+                  'KLM'=>'KL','Swiss International'=>'LX','Swiss'=>'LX','Austrian Airlines'=>'OS','Austrian'=>'OS',
+                  'Brussels Airlines'=>'SN','Iberia'=>'IB','Vueling'=>'VY','TAP Portugal'=>'TP',
+                  'Ryanair'=>'FR','EasyJet'=>'U2','Norwegian Air'=>'DY','Norwegian'=>'DY',
+                  'Turkish Airlines'=>'TK','LOT Polish Airlines'=>'LO','LOT'=>'LO',
+                  'Emirates'=>'EK','Qatar Airways'=>'QR','Etihad Airways'=>'EY','Etihad'=>'EY',
+                  'flydubai'=>'FZ','Flydubai'=>'FZ','Air Arabia'=>'G9','Oman Air'=>'WY',
+                  'Singapore Airlines'=>'SQ','Cathay Pacific'=>'CX',
+                  'Japan Airlines'=>'JL','ANA'=>'NH','All Nippon Airways'=>'NH','Korean Air'=>'KE',
+                  'Asiana Airlines'=>'OZ','Asiana'=>'OZ','Thai Airways'=>'TG','Malaysia Airlines'=>'MH',
+                  'IndiGo'=>'6E','SpiceJet'=>'SG','Air India'=>'AI','Vistara'=>'UK',
+                  'Aeromexico'=>'AM','LATAM Airlines'=>'LA','LATAM'=>'LA','Avianca'=>'AV','Copa Airlines'=>'CM','Copa'=>'CM',
+                  'Qantas'=>'QF','Qantas Airways'=>'QF','Air New Zealand'=>'NZ',
+                  'China Eastern'=>'MU','Air China'=>'CA','China Southern'=>'CZ',
+                  'Ethiopian Airlines'=>'ET','Kenya Airways'=>'KQ','Royal Air Maroc'=>'AT',
+                  'SriLankan Airlines'=>'UL','Kuwait Airways'=>'KU','Gulf Air'=>'GF','Saudia'=>'SV',
+                  'EgyptAir'=>'MS','Porter Airlines'=>'PD','Sunwing'=>'WG',
+                  'Hawaiian Airlines'=>'HA','Frontier'=>'F9','Spirit'=>'NK',
+              ];
               foreach ($iataMap as $name => $code) {
                   if (stripos($airline, $name) !== false || stripos($name, $airline) !== false) {
                       $iataCode = $code; break;
