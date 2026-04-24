@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS `etickets` (
     `token`             VARCHAR(64)         NOT NULL,   -- bin2hex(random_bytes(32)) — public URL token
     `transaction_id`    BIGINT UNSIGNED     NOT NULL,   -- FK → transactions.id (required, 1:1)
     `acceptance_id`     INT UNSIGNED        NULL,       -- FK → acceptance_requests.id (convenience link)
-    `agent_id`          INT UNSIGNED        NOT NULL,   -- FK → users.id (creator)
+    `agent_id`          INT                 NOT NULL,   -- FK → users.id (creator)
 
     -- -------------------------------------------------------------------------
     -- Customer Info (denormalized for fast display without joins)
