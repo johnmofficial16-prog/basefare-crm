@@ -867,7 +867,7 @@ tailwind.config = {
             <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">Ticket Conditions</h2>
           </div>
           <div class="p-6 space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Endorsements</label>
                 <input type="text" name="endorsements" value="NON END/NON REF/NON RRT" placeholder="e.g. NON END/NON REF/NON RRT"
@@ -876,11 +876,6 @@ tailwind.config = {
               <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Baggage Info</label>
                 <input type="text" name="baggage_info" placeholder="e.g. 1PC 23KG checked, 7KG carry-on"
-                  class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
-              </div>
-              <div>
-                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Seat Number(s)</label>
-                <input type="text" id="field_seat_number" name="seat_number" placeholder="e.g. 12A, 14C"
                   class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
               </div>
             </div>
@@ -1484,14 +1479,12 @@ function selectType(type) {
   const cabinUpg    = ['cabin_upgrade'];
   const otherSec    = ['other'];
 
-  const seatPurch  = ['seat_purchase'];
-
   _toggleSec('sec-itinerary',      itinerary.includes(type));
   _toggleSec('sec-old-flights',    oldFlights.includes(type));
   _toggleSec('sec-new-flights',    newFlights.includes(type));
   _toggleSec('sec-name-correction',nameCorrect.includes(type));
   _toggleSec('sec-cabin-upgrade',  cabinUpg.includes(type));
-  _toggleSec('sec-seat-purchase',  seatPurch.includes(type));
+  _toggleSec('sec-seat-purchase',  false); // seat now collected per-passenger
   _toggleSec('sec-other-info',     otherSec.includes(type));
   _toggleSec('section-other-desc', type === 'other');
   // Show type-specific cancel sections (only in full mode)
@@ -1601,23 +1594,33 @@ const paxManager = {
   _renderManual: function() {
     const el = document.getElementById('manual-pax-list');
     el.innerHTML = state.passengers.map(function(p, i) { return `
-      <div class="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg fare-row">
-        <input type="text" value="${_esc(p.name)}" placeholder="SMITH/JOHN MR"
-          class="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 uppercase"
-          oninput="paxManager._updatePassenger(${i},'name',this.value.toUpperCase())">
-        <input type="date" value="${_esc(p.dob)}" title="Date of Birth"
-          class="border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
-          onchange="paxManager._updatePassenger(${i},'dob',this.value)">
-        <select class="border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
-          onchange="paxManager._updatePassenger(${i},'paxType',this.value)">
-          <option value="adult" ${p.paxType==='adult'?'selected':''}>Adult</option>
-          <option value="child" ${p.paxType==='child'?'selected':''}>Child</option>
-          <option value="infant" ${p.paxType==='infant'?'selected':''}>Infant</option>
-        </select>
-        <button type="button" onclick="paxManager.removePassenger(${i})"
-          class="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg transition-colors flex-none">
-          <span class="material-symbols-outlined text-sm">delete</span>
-        </button>
+      <div class="flex flex-col gap-1.5 p-3 bg-slate-50 border border-slate-200 rounded-lg fare-row">
+        <div class="flex items-center gap-2">
+          <input type="text" value="${_esc(p.name)}" placeholder="SMITH/JOHN MR"
+            class="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 uppercase"
+            oninput="paxManager._updatePassenger(${i},'name',this.value.toUpperCase())">
+          <input type="date" value="${_esc(p.dob)}" title="Date of Birth"
+            class="border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
+            onchange="paxManager._updatePassenger(${i},'dob',this.value)">
+          <select class="border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-600"
+            onchange="paxManager._updatePassenger(${i},'paxType',this.value)">
+            <option value="adult" ${p.paxType==='adult'?'selected':''}>Adult</option>
+            <option value="child" ${p.paxType==='child'?'selected':''}>Child</option>
+            <option value="infant" ${p.paxType==='infant'?'selected':''}>Infant</option>
+          </select>
+          <button type="button" onclick="paxManager.removePassenger(${i})"
+            class="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg transition-colors flex-none">
+            <span class="material-symbols-outlined text-sm">delete</span>
+          </button>
+        </div>
+        <div class="flex items-center gap-2 pl-1">
+          <span class="material-symbols-outlined text-indigo-400 text-sm flex-none">airline_seat_recline_normal</span>
+          <input type="text" value="${_esc(p.seat||'')}" placeholder="Seat e.g. 12A (optional)"
+            maxlength="10"
+            class="w-48 border border-indigo-200 rounded-lg px-2 py-1 text-xs font-mono font-bold uppercase bg-white text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            oninput="paxManager._updatePassenger(${i},'seat',this.value.toUpperCase())">
+          <span class="text-[10px] text-slate-400">Seat number for this passenger</span>
+        </div>
       </div>`; }).join('');
   },
 
@@ -1629,7 +1632,7 @@ const paxManager = {
     if (previewEl) previewEl.classList.remove('hidden');
     if (previewList) previewList.innerHTML = filled.map(function(p) { return `
       <span class="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-mono font-semibold">
-        <span class="material-symbols-outlined text-xs text-primary-600">person</span>${_esc(p.name)}
+        <span class="material-symbols-outlined text-xs text-primary-600">person</span>${_esc(p.name)}${p.seat ? ` <span class="text-indigo-600 font-bold">&#128186;${_esc(p.seat)}</span>` : ''}
       </span>`;
     }).join('');
   },
@@ -1969,12 +1972,6 @@ const flightMgr = {
               </div>
             </div>
             <div class="flex items-center gap-3 flex-wrap">
-              <div class="flex items-center gap-2">
-                <label class="text-[9px] font-bold text-slate-500 uppercase">Seat (optional)</label>
-                <input type="text" maxlength="5" placeholder="12A" value="${_esc(seg.seat||'')}"
-                  class="w-20 border border-indigo-200 rounded-lg px-2 py-1 text-xs font-mono font-bold uppercase bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                  oninput="flightMgr._updateSeg('${group}',${i},'seat',this.value.toUpperCase())">
-              </div>
               ${seg.arr_next_day
                 ? `<span class="inline-flex items-center gap-1 px-2 py-1 bg-rose-100 text-rose-700 text-[10px] font-bold rounded-full">
                     <span class="material-symbols-outlined text-xs">nightlight</span> Arrives next day (+1d) — auto-detected
@@ -2570,24 +2567,15 @@ const formAssembly = {
 
     // 5. Extra data (type-specific fields)
     const extraData = {};
-    const seatNum = (document.getElementById('field_seat_number')?.value || '').trim();
-    if (seatNum) extraData.seat_number = seatNum;
 
-    // Seat Purchase: collect per-passenger seat assignments
-    if (t === 'seat_purchase') {
-      const seatRows = document.querySelectorAll('#seat-purchase-rows .sp-seat-input');
-      const assignments = [];
-      seatRows.forEach(inp => {
-        assignments.push({
-          passenger: inp.dataset.passenger || '',
-          seat: inp.value.trim().toUpperCase()
-        });
-      });
-      if (assignments.length) extraData.seat_assignments = assignments;
-      // Also set seat_number as comma-joined for backward compat
-      const allSeats = assignments.map(a => a.seat).filter(Boolean).join(', ');
-      if (allSeats) extraData.seat_number = allSeats;
-    }
+    // Collect per-passenger seat assignments (all types)
+    const seatAssignments = state.passengers
+      .filter(p => p.name.trim())
+      .map(p => ({ passenger: p.name.trim(), seat: (p.seat || '').trim().toUpperCase() }));
+    if (seatAssignments.length) extraData.seat_assignments = seatAssignments;
+    // Backward-compat: comma-joined seat_number for any passenger with a seat
+    const allSeats = seatAssignments.map(a => a.seat).filter(Boolean).join(', ');
+    if (allSeats) extraData.seat_number = allSeats;
 
     if (t === 'other') {
       extraData.other_title = (document.getElementById('field_other_title')?.value || '').trim();
