@@ -16,6 +16,7 @@ $navItems = [
     ['href' => '/shifts/week',             'icon' => 'calendar_month', 'label' => 'Shift Schedule',   'key' => 'shifts',        'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/acceptance',              'icon' => 'verified',       'label' => 'Acceptance',       'key' => 'acceptance',    'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',     'key' => 'transactions',  'roles' => ['admin', 'manager', 'supervisor']],
+    ['href' => '/etickets',                'icon' => 'airplane_ticket','label' => 'E-Tickets',        'key' => 'etickets',      'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/users',                   'icon' => 'manage_accounts','label' => 'Users',            'key' => 'users',         'roles' => ['admin', 'manager']],
     ['href' => '/attendance/admin/monthly',   'icon' => 'date_range',    'label' => 'Monthly Report',    'key' => 'monthly',       'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/admin/settings',          'icon' => 'settings',       'label' => 'Settings',         'key' => 'settings',      'roles' => ['admin']],
