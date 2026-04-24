@@ -1,138 +1,166 @@
 <?php
 /**
- * E-Ticket Module — List View
- *
- * @var array  $records
- * @var int    $total
- * @var int    $page
- * @var int    $per_page
- * @var int    $total_pages
- * @var array  $filters
- * @var bool   $isAdmin
- * @var string $role
+ * E-Ticket — List View
  */
 
-$layout = __DIR__ . '/../layout/base.php';
-$pageTitle = 'E-Tickets';
+use App\Models\ETicket;
+
+$userRole = $_SESSION['role'] ?? 'agent';
+$isAdmin  = in_array($userRole, ['admin', 'manager', 'supervisor']);
+$activePage = 'etickets';
 
 function etStatusBadge(string $status): string {
     return match($status) {
-        'acknowledged' => '<span style="display:inline-flex;align-items:center;gap:4px;background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:10px;font-weight:800;padding:3px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px;">✓ Acknowledged</span>',
-        'sent'         => '<span style="display:inline-flex;align-items:center;gap:4px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;font-size:10px;font-weight:800;padding:3px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px;">✉ Sent</span>',
-        'draft'        => '<span style="display:inline-flex;align-items:center;gap:4px;background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db;font-size:10px;font-weight:800;padding:3px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px;">● Draft</span>',
+        'acknowledged' => '<span class="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-700">✓ Acknowledged</span>',
+        'sent'         => '<span class="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-full bg-blue-100 text-blue-700">✉ Sent</span>',
+        'draft'        => '<span class="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-full bg-slate-100 text-slate-500">● Draft</span>',
         default        => htmlspecialchars(ucfirst($status)),
     };
 }
-
-ob_start();
 ?>
-<div class="page-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
-  <div>
-    <h1 style="font-size:22px;font-weight:800;color:#0f1e3c;margin:0;">✈ E-Tickets</h1>
-    <p style="font-size:13px;color:#64748b;margin:4px 0 0;">Issue and manage customer e-tickets</p>
-  </div>
-  <a href="/etickets/create" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#0f1e3c,#1a3a6b);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;">
-    + New E-Ticket
-  </a>
-</div>
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>E-Tickets — Base Fare CRM</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script>
+tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","primary-container":"#314a8d",background:"#f8f9fa",surface:"#f8f9fa","surface-container":"#edeeef","surface-container-low":"#f3f4f5","on-surface":"#191c1d","on-surface-variant":"#434653"},fontFamily:{headline:["Manrope"],body:["Inter"],label:["Inter"]}}}}}
+</script>
+</head>
+<body class="bg-background font-body text-on-surface antialiased min-h-screen">
 
-<!-- Filters -->
-<form method="GET" action="/etickets" style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
-  <div>
-    <label style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;display:block;margin-bottom:4px;">Status</label>
-    <select name="status" style="border:1px solid #e2e8f0;border-radius:6px;padding:7px 12px;font-size:13px;color:#1e293b;background:#fff;">
-      <option value="">All Statuses</option>
-      <?php foreach (['draft','sent','acknowledged'] as $s): ?>
-      <option value="<?= $s ?>" <?= ($filters['status'] ?? '') === $s ? 'selected' : '' ?>><?= ucfirst($s) ?></option>
-      <?php endforeach; ?>
-    </select>
-  </div>
-  <div>
-    <label style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;display:block;margin-bottom:4px;">PNR / Search</label>
-    <input type="text" name="search" value="<?= htmlspecialchars($filters['search'] ?? '') ?>" placeholder="Name, email, PNR..."
-           style="border:1px solid #e2e8f0;border-radius:6px;padding:7px 12px;font-size:13px;width:220px;">
-  </div>
-  <div>
-    <label style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;display:block;margin-bottom:4px;">From</label>
-    <input type="date" name="date_from" value="<?= htmlspecialchars($filters['date_from'] ?? '') ?>"
-           style="border:1px solid #e2e8f0;border-radius:6px;padding:7px 12px;font-size:13px;">
-  </div>
-  <div>
-    <label style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;display:block;margin-bottom:4px;">To</label>
-    <input type="date" name="date_to" value="<?= htmlspecialchars($filters['date_to'] ?? '') ?>"
-           style="border:1px solid #e2e8f0;border-radius:6px;padding:7px 12px;font-size:13px;">
-  </div>
-  <button type="submit" style="background:#0f1e3c;color:#fff;border:none;padding:8px 18px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Filter</button>
-  <a href="/etickets" style="color:#64748b;font-size:13px;padding:8px 12px;text-decoration:none;">Clear</a>
-</form>
+<?php if ($isAdmin): ?>
+<?php require __DIR__ . '/../partials/admin_sidebar.php'; ?>
+<?php else: ?>
+<?php require __DIR__ . '/../partials/agent_sidebar.php'; ?>
+<?php endif; ?>
 
-<!-- Table -->
-<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
-  <?php if ($total === 0): ?>
-  <div style="text-align:center;padding:60px 20px;color:#94a3b8;">
-    <div style="font-size:48px;margin-bottom:12px;">✈</div>
-    <div style="font-size:16px;font-weight:700;color:#475569;margin-bottom:6px;">No e-tickets found</div>
-    <p style="font-size:13px;">Create your first e-ticket by clicking "New E-Ticket" above.</p>
-  </div>
-  <?php else: ?>
-  <table style="width:100%;border-collapse:collapse;font-size:13px;">
-    <thead>
-      <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
-        <th style="padding:12px 16px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">ID</th>
-        <th style="padding:12px 16px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">Customer</th>
-        <th style="padding:12px 16px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">PNR</th>
-        <th style="padding:12px 16px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">Airline</th>
-        <th style="padding:12px 16px;text-align:right;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">Amount</th>
-        <th style="padding:12px 16px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">Status</th>
-        <?php if ($isAdmin): ?><th style="padding:12px 16px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">Agent</th><?php endif; ?>
-        <th style="padding:12px 16px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">Created</th>
-        <th style="padding:12px 16px;"></th>
-      </tr>
-    </thead>
-    <tbody>
-      <?php foreach ($records as $et): ?>
-      <tr style="border-bottom:1px solid #f1f5f9;transition:background .12s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
-        <td style="padding:14px 16px;font-family:monospace;font-weight:700;color:#0f1e3c;">ET-<?= str_pad($et->id, 6, '0', STR_PAD_LEFT) ?></td>
-        <td style="padding:14px 16px;">
-          <div style="font-weight:700;color:#1e293b;"><?= htmlspecialchars($et->customer_name) ?></div>
-          <div style="font-size:11px;color:#94a3b8;"><?= htmlspecialchars($et->customer_email) ?></div>
-        </td>
-        <td style="padding:14px 16px;font-family:monospace;font-weight:800;color:#0f1e3c;letter-spacing:1px;"><?= htmlspecialchars($et->pnr) ?></td>
-        <td style="padding:14px 16px;color:#475569;"><?= htmlspecialchars($et->airline ?? '—') ?></td>
-        <td style="padding:14px 16px;text-align:right;font-weight:700;color:#1e293b;font-family:monospace;"><?= htmlspecialchars($et->currency) ?> <?= number_format($et->total_amount, 2) ?></td>
-        <td style="padding:14px 16px;"><?= etStatusBadge($et->status) ?>
-          <?php if ($et->acknowledged_at): ?>
-          <div style="font-size:10px;color:#64748b;margin-top:3px;"><?= $et->acknowledged_at->format('M j, g:i A') ?></div>
-          <?php endif; ?>
-        </td>
-        <?php if ($isAdmin): ?>
-        <td style="padding:14px 16px;color:#64748b;font-size:12px;"><?= htmlspecialchars($et->agent?->name ?? '—') ?></td>
-        <?php endif; ?>
-        <td style="padding:14px 16px;color:#94a3b8;font-size:12px;"><?= $et->created_at->format('M j, Y') ?></td>
-        <td style="padding:14px 16px;text-align:right;">
-          <a href="/etickets/<?= $et->id ?>" style="font-size:12px;font-weight:700;color:#0f1e3c;text-decoration:none;padding:6px 14px;border:1px solid #e2e8f0;border-radius:6px;transition:background .12s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background=''">View</a>
-        </td>
-      </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
+<main class="ml-60 pt-6 pb-20 px-8">
 
-  <!-- Pagination -->
-  <?php if ($total_pages > 1): ?>
-  <div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #f1f5f9;">
-    <div style="font-size:12px;color:#94a3b8;">
-      Showing <?= (($page-1)*$per_page)+1 ?>–<?= min($page*$per_page, $total) ?> of <?= $total ?> e-tickets
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-headline font-extrabold text-primary tracking-tight flex items-center gap-2">
+        <span class="material-symbols-outlined text-2xl">airplane_ticket</span>
+        E-Tickets
+      </h1>
+      <p class="text-sm text-on-surface-variant mt-0.5"><?= number_format($total) ?> total e-tickets</p>
     </div>
-    <div style="display:flex;gap:6px;">
-      <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-      <a href="?page=<?= $i ?>&<?= http_build_query(array_filter($filters)) ?>"
-         style="padding:5px 10px;border-radius:5px;font-size:12px;font-weight:700;text-decoration:none;<?= $i === $page ? 'background:#0f1e3c;color:#fff;' : 'background:#f1f5f9;color:#475569;' ?>"><?= $i ?></a>
-      <?php endfor; ?>
-    </div>
+    <a href="/etickets/create"
+       class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary-container shadow-lg shadow-primary/20 transition-all text-sm">
+      <span class="material-symbols-outlined text-base">add</span> New E-Ticket
+    </a>
   </div>
-  <?php endif; ?>
-  <?php endif; ?>
-</div>
-<?php
-$content = ob_get_clean();
-require $layout;
+
+  <!-- Filters -->
+  <form method="GET" action="/etickets" class="mb-6 bg-white border border-slate-200 rounded-xl p-4">
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <input type="text" name="search" value="<?= htmlspecialchars($filters['search'] ?? '') ?>"
+             placeholder="Name, email, PNR…"
+             class="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-slate-50 focus:ring-2 focus:ring-primary/40 col-span-2 sm:col-span-1">
+      <select name="status" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-slate-50 focus:ring-2 focus:ring-primary/40">
+        <option value="">All Statuses</option>
+        <?php foreach (['draft','sent','acknowledged'] as $s): ?>
+        <option value="<?= $s ?>" <?= ($filters['status'] ?? '') === $s ? 'selected' : '' ?>><?= ucfirst($s) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <input type="date" name="date_from" value="<?= htmlspecialchars($filters['date_from'] ?? '') ?>"
+             class="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-slate-50 focus:ring-2 focus:ring-primary/40">
+      <input type="date" name="date_to" value="<?= htmlspecialchars($filters['date_to'] ?? '') ?>"
+             class="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-slate-50 focus:ring-2 focus:ring-primary/40">
+      <button type="submit" class="inline-flex items-center justify-center gap-1 px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-container transition-colors">
+        <span class="material-symbols-outlined text-sm">search</span> Filter
+      </button>
+    </div>
+    <?php if (!empty($filters['search']) || !empty($filters['status']) || !empty($filters['date_from']) || !empty($filters['date_to'])): ?>
+    <div class="mt-2">
+      <a href="/etickets" class="text-xs text-slate-400 hover:text-red-500 transition-colors inline-flex items-center gap-1">
+        <span class="material-symbols-outlined text-[14px]">close</span> Clear filters
+      </a>
+    </div>
+    <?php endif; ?>
+  </form>
+
+  <!-- Table -->
+  <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+    <?php if ($total === 0): ?>
+    <div class="px-4 py-16 text-center">
+      <span class="material-symbols-outlined text-4xl text-slate-300 block mb-3">airplane_ticket</span>
+      <p class="text-sm font-semibold text-slate-400">No e-tickets found</p>
+      <p class="text-xs text-slate-300 mt-1">Create your first e-ticket from an approved &amp; charged transaction.</p>
+    </div>
+    <?php else: ?>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-slate-50/80 border-b border-slate-200">
+            <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">ID</th>
+            <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Customer</th>
+            <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">PNR</th>
+            <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Airline</th>
+            <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Amount</th>
+            <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+            <?php if ($isAdmin): ?>
+            <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Agent</th>
+            <?php endif; ?>
+            <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Created</th>
+            <th class="px-4 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <?php foreach ($records as $et): ?>
+          <tr class="hover:bg-slate-50/50 cursor-pointer transition-colors" onclick="window.location='/etickets/<?= $et->id ?>'">
+            <td class="px-4 py-3 font-mono text-xs font-bold text-primary">ET-<?= str_pad($et->id, 6, '0', STR_PAD_LEFT) ?></td>
+            <td class="px-4 py-3">
+              <div class="text-xs font-semibold text-slate-900"><?= htmlspecialchars($et->customer_name) ?></div>
+              <div class="text-[10px] text-slate-400"><?= htmlspecialchars($et->customer_email) ?></div>
+            </td>
+            <td class="px-4 py-3 font-mono text-xs font-bold tracking-wider"><?= htmlspecialchars($et->pnr) ?></td>
+            <td class="px-4 py-3 text-xs text-slate-500"><?= htmlspecialchars($et->airline ?? '—') ?></td>
+            <td class="px-4 py-3 font-mono text-xs font-bold"><?= htmlspecialchars($et->currency) ?> <?= number_format($et->total_amount, 2) ?></td>
+            <td class="px-4 py-3">
+              <?= etStatusBadge($et->status) ?>
+              <?php if ($et->acknowledged_at): ?>
+              <div class="text-[10px] text-slate-400 mt-0.5"><?= $et->acknowledged_at->format('M j, g:i A') ?></div>
+              <?php endif; ?>
+            </td>
+            <?php if ($isAdmin): ?>
+            <td class="px-4 py-3 text-xs text-slate-500"><?= htmlspecialchars($et->agent?->name ?? '—') ?></td>
+            <?php endif; ?>
+            <td class="px-4 py-3 text-xs text-slate-400"><?= $et->created_at->format('M j, Y') ?></td>
+            <td class="px-4 py-3 text-right">
+              <a href="/etickets/<?= $et->id ?>"
+                 class="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                View
+              </a>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <?php if ($total_pages > 1): ?>
+    <div class="px-4 py-3 border-t border-slate-100 flex items-center justify-between">
+      <p class="text-xs text-slate-500">Page <?= $page ?> of <?= $total_pages ?></p>
+      <div class="flex items-center gap-1">
+        <?php for ($p = max(1, $page-3); $p <= min($total_pages, $page+3); $p++): ?>
+        <a href="?page=<?= $p ?>&<?= http_build_query(array_filter($filters)) ?>"
+           class="px-3 py-1 text-xs rounded-lg transition-colors <?= $p === $page ? 'bg-primary text-white font-bold' : 'text-slate-500 hover:bg-slate-100' ?>">
+          <?= $p ?>
+        </a>
+        <?php endfor; ?>
+      </div>
+    </div>
+    <?php endif; ?>
+    <?php endif; ?>
+  </div>
+
+</main>
+</body>
+</html>

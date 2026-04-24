@@ -1,330 +1,336 @@
 <?php
 /**
- * E-Ticket — Internal Agent View
- *
- * @var \App\Models\ETicket $eticket
- * @var \Illuminate\Support\Collection $notes
- * @var bool $created
- * @var bool $sent
+ * E-Ticket — Agent Detail View
  */
 
 use App\Models\ETicket;
 
-$layout    = __DIR__ . '/../layout/base.php';
-$pageTitle = 'E-Ticket — ' . $eticket->pnr;
+$userRole = $_SESSION['role'] ?? 'agent';
+$isAdmin  = in_array($userRole, ['admin', 'manager', 'supervisor']);
+$activePage = 'etickets';
+$et  = $eticket;
+$etId = 'ET-' . str_pad($et->id, 6, '0', STR_PAD_LEFT);
+$pax = $et->ticketDataWithAutoNumbers();
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
-$csrf   = $_SESSION['csrf_token'];
-$et     = $eticket;
-$etId   = 'ET-' . str_pad($et->id, 6, '0', STR_PAD_LEFT);
-$pax    = $et->ticketDataWithAutoNumbers();
+$csrf = $_SESSION['csrf_token'];
 
-ob_start();
+[$statusLabel, $statusClass] = match($et->status) {
+    ETicket::STATUS_ACKNOWLEDGED => ['✓ Acknowledged', 'bg-emerald-100 text-emerald-700'],
+    ETicket::STATUS_SENT         => ['✉ Sent',         'bg-blue-100 text-blue-700'],
+    default                      => ['● Draft',         'bg-slate-100 text-slate-500'],
+};
 ?>
-<style>
-.et-detail-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:24px 28px; margin-bottom:20px; }
-.et-detail-title { font-size:11px; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:1px; margin:0 0 14px; }
-.et-kv { display:flex; flex-direction:column; gap:2px; margin-bottom:14px; }
-.et-kv-label { font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px; font-weight:700; }
-.et-kv-value { font-size:14px; color:#1e293b; font-weight:600; }
-.status-badge-lg { display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:800; padding:8px 20px; border-radius:999px; text-transform:uppercase; letter-spacing:.5px; }
-.note-bubble { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 16px; margin-bottom:10px; }
-</style>
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title><?= $etId ?> — Base Fare CRM</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script>
+tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","primary-container":"#314a8d",background:"#f8f9fa",surface:"#f8f9fa","surface-container":"#edeeef","surface-container-low":"#f3f4f5","on-surface":"#191c1d","on-surface-variant":"#434653"},fontFamily:{headline:["Manrope"],body:["Inter"],label:["Inter"]}}}}}
+</script>
+</head>
+<body class="bg-background font-body text-on-surface antialiased min-h-screen">
 
-<!-- Back + ID -->
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-  <div style="display:flex;align-items:center;gap:16px;">
-    <a href="/etickets" style="color:#64748b;font-size:13px;text-decoration:none;padding:7px 14px;border:1px solid #e2e8f0;border-radius:7px;">← Back</a>
-    <div>
-      <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;">E-Ticket</div>
-      <div style="font-size:22px;font-weight:800;color:#0f1e3c;font-family:monospace;"><?= $etId ?></div>
-    </div>
-  </div>
+<?php if ($isAdmin): ?>
+<?php require __DIR__ . '/../partials/admin_sidebar.php'; ?>
+<?php else: ?>
+<?php require __DIR__ . '/../partials/agent_sidebar.php'; ?>
+<?php endif; ?>
 
-  <!-- Status Badge -->
-  <div>
-    <?php
-    $badgeStyle = match($et->status) {
-        ETicket::STATUS_ACKNOWLEDGED => 'background:#dcfce7;color:#15803d;border:2px solid #86efac;',
-        ETicket::STATUS_SENT         => 'background:#dbeafe;color:#1d4ed8;border:2px solid #93c5fd;',
-        default                      => 'background:#f3f4f6;color:#6b7280;border:2px solid #d1d5db;',
-    };
-    $badgeIcon = match($et->status) {
-        ETicket::STATUS_ACKNOWLEDGED => '✅',
-        ETicket::STATUS_SENT         => '✉',
-        default                      => '●',
-    };
-    ?>
-    <span class="status-badge-lg" style="<?= $badgeStyle ?>"><?= $badgeIcon ?> <?= $et->statusLabel() ?></span>
-  </div>
-</div>
+<main class="ml-60 pt-6 pb-20 px-8">
 
-<!-- Alert Banners -->
-<?php if ($created): ?><div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:12px 18px;margin-bottom:16px;font-size:13px;color:#065f46;font-weight:600;">✅ E-Ticket created successfully.</div><?php endif; ?>
-<?php if ($sent): ?><div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:12px 18px;margin-bottom:16px;font-size:13px;color:#1d4ed8;font-weight:600;">✉ E-Ticket emailed successfully.</div><?php endif; ?>
-<?php if (isset($_GET['send_error'])): ?><div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:12px 18px;margin-bottom:16px;font-size:13px;color:#991b1b;font-weight:600;">⚠ Email failed to send. Please check SMTP settings and try again.</div><?php endif; ?>
-
-<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;">
-
-  <!-- LEFT COLUMN -->
-  <div>
-
-    <!-- Customer + Booking -->
-    <div class="et-detail-card">
-      <div class="et-detail-title">Customer & Booking</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
-        <div class="et-kv">
-          <span class="et-kv-label">Customer Name</span>
-          <span class="et-kv-value"><?= htmlspecialchars($et->customer_name) ?></span>
-        </div>
-        <div class="et-kv">
-          <span class="et-kv-label">Email</span>
-          <span class="et-kv-value" style="font-size:12px;"><?= htmlspecialchars($et->customer_email) ?></span>
-        </div>
-        <div class="et-kv">
-          <span class="et-kv-label">Phone</span>
-          <span class="et-kv-value"><?= htmlspecialchars($et->customer_phone ?: '—') ?></span>
-        </div>
-        <div class="et-kv">
-          <span class="et-kv-label">PNR</span>
-          <span class="et-kv-value" style="font-family:monospace;font-size:18px;letter-spacing:2px;color:#0f1e3c;"><?= htmlspecialchars($et->pnr) ?></span>
-        </div>
-        <div class="et-kv">
-          <span class="et-kv-label">Airline</span>
-          <span class="et-kv-value"><?= htmlspecialchars($et->airline ?: '—') ?></span>
-        </div>
-        <div class="et-kv">
-          <span class="et-kv-label">Order #</span>
-          <span class="et-kv-value"><?= htmlspecialchars($et->order_id ?: '—') ?></span>
-        </div>
-        <div class="et-kv">
-          <span class="et-kv-label">Total Amount</span>
-          <span class="et-kv-value" style="font-size:18px;color:#065f46;"><?= htmlspecialchars($et->currency) ?> <?= number_format($et->total_amount, 2) ?></span>
-        </div>
-        <div class="et-kv">
-          <span class="et-kv-label">Transaction #</span>
-          <a href="/transactions/<?= $et->transaction_id ?>" style="font-size:13px;color:#1a3a6b;font-weight:700;text-decoration:none;">TXN-<?= $et->transaction_id ?> ↗</a>
-        </div>
-        <?php if ($et->acceptance_id): ?>
-        <div class="et-kv">
-          <span class="et-kv-label">Acceptance #</span>
-          <a href="/acceptance/<?= $et->acceptance_id ?>" style="font-size:13px;color:#1a3a6b;font-weight:700;text-decoration:none;">ACC-<?= $et->acceptance_id ?> ↗</a>
-        </div>
-        <?php endif; ?>
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-4">
+      <a href="/etickets" class="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-500 hover:bg-slate-50 transition-colors">← Back</a>
+      <div>
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">E-Ticket</p>
+        <h1 class="text-2xl font-headline font-extrabold text-primary font-mono"><?= $etId ?></h1>
       </div>
     </div>
+    <span class="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-extrabold <?= $statusClass ?>">
+      <?= $statusLabel ?>
+    </span>
+  </div>
 
-    <!-- Passengers -->
-    <div class="et-detail-card">
-      <div class="et-detail-title">Passengers & E-Ticket Numbers</div>
-      <table style="width:100%;border-collapse:collapse;">
-        <thead>
-          <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
-            <th style="padding:8px 14px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;color:#94a3b8;">#</th>
-            <th style="padding:8px 14px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;color:#94a3b8;">Passenger</th>
-            <th style="padding:8px 14px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;color:#94a3b8;">Type</th>
-            <th style="padding:8px 14px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;color:#94a3b8;">E-Ticket #</th>
-            <th style="padding:8px 14px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;color:#94a3b8;">Seat</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php foreach ($pax as $i => $p): ?>
-          <tr style="border-bottom:1px solid #f1f5f9;">
-            <td style="padding:10px 14px;font-size:12px;color:#94a3b8;"><?= $i+1 ?></td>
-            <td style="padding:10px 14px;font-weight:700;color:#1e293b;"><?= htmlspecialchars($p['pax_name'] ?? '') ?></td>
-            <td style="padding:10px 14px;color:#64748b;font-size:12px;text-transform:capitalize;"><?= htmlspecialchars($p['pax_type'] ?? 'adult') ?></td>
-            <td style="padding:10px 14px;font-family:monospace;font-weight:800;font-size:13px;color:#1e40af;"><?= htmlspecialchars($p['ticket_number'] ?? '—') ?></td>
-            <td style="padding:10px 14px;font-weight:600;color:#6366f1;"><?= htmlspecialchars($p['seat'] ?? '—') ?></td>
-          </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
+  <!-- Alert Banners -->
+  <?php if ($created): ?>
+  <div class="mb-4 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm font-semibold text-emerald-700 flex items-center gap-2">
+    <span class="material-symbols-outlined text-base">check_circle</span> E-Ticket created successfully.
+  </div>
+  <?php endif; ?>
+  <?php if ($sent): ?>
+  <div class="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm font-semibold text-blue-700 flex items-center gap-2">
+    <span class="material-symbols-outlined text-base">mail</span> E-Ticket emailed successfully.
+  </div>
+  <?php endif; ?>
+  <?php if (isset($_GET['send_error'])): ?>
+  <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm font-semibold text-red-700 flex items-center gap-2">
+    <span class="material-symbols-outlined text-base">error</span> Email failed to send. Check SMTP settings.
+  </div>
+  <?php endif; ?>
 
-    <!-- Flight Itinerary -->
-    <?php if ($et->flight_data): ?>
-    <div class="et-detail-card">
-      <div class="et-detail-title">Flight Itinerary</div>
-      <?php foreach ((array)$et->flight_data as $i => $f): ?>
-      <div style="display:flex;align-items:center;gap:16px;padding:16px 0;<?= $i > 0 ? 'border-top:1px solid #f1f5f9;' : '' ?>">
-        <div style="text-align:center;min-width:64px;">
-          <div style="font-size:22px;font-weight:900;color:#0f1e3c;font-family:monospace;"><?= htmlspecialchars($f['departure_airport'] ?? $f['from'] ?? '???') ?></div>
-          <div style="font-size:11px;color:#94a3b8;"><?= htmlspecialchars($f['departure_date'] ?? $f['date'] ?? '') ?></div>
-          <div style="font-size:12px;font-weight:700;color:#475569;"><?= htmlspecialchars($f['departure_time'] ?? $f['time'] ?? '') ?></div>
-        </div>
-        <div style="flex:1;text-align:center;">
-          <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">
-            <?= htmlspecialchars($f['flight_number'] ?? $f['flight'] ?? '') ?>
-            <?php if (!empty($f['cabin_class'] ?? $f['class'] ?? '')): ?>&nbsp;·&nbsp;<?= htmlspecialchars($f['cabin_class'] ?? $f['class'] ?? '') ?><?php endif; ?>
+  <div class="grid grid-cols-3 gap-6">
+
+    <!-- LEFT (2/3) -->
+    <div class="col-span-2 space-y-5">
+
+      <!-- Customer & Booking -->
+      <div class="bg-white border border-slate-200 rounded-xl p-5">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">Customer &amp; Booking</p>
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Customer</p>
+            <p class="text-sm font-bold text-slate-800 mt-0.5"><?= htmlspecialchars($et->customer_name) ?></p>
           </div>
-          <div style="display:flex;align-items:center;gap:4px;">
-            <div style="flex:1;height:1px;background:#cbd5e1;"></div>
-            <span style="font-size:16px;color:#94a3b8;">✈</span>
-            <div style="flex:1;height:1px;background:#cbd5e1;"></div>
+          <div>
+            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Email</p>
+            <p class="text-xs font-semibold text-slate-700 mt-0.5"><?= htmlspecialchars($et->customer_email) ?></p>
           </div>
-          <?php if (!empty($f['duration'])): ?>
-          <div style="font-size:10px;color:#94a3b8;margin-top:2px;"><?= htmlspecialchars($f['duration']) ?></div>
+          <div>
+            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Phone</p>
+            <p class="text-sm font-semibold text-slate-700 mt-0.5"><?= htmlspecialchars($et->customer_phone ?: '—') ?></p>
+          </div>
+          <div>
+            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">PNR</p>
+            <p class="text-2xl font-black text-primary font-mono tracking-widest mt-0.5"><?= htmlspecialchars($et->pnr) ?></p>
+          </div>
+          <div>
+            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Airline</p>
+            <p class="text-sm font-semibold text-slate-700 mt-0.5"><?= htmlspecialchars($et->airline ?: '—') ?></p>
+          </div>
+          <div>
+            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Amount</p>
+            <p class="text-xl font-extrabold text-emerald-600 mt-0.5"><?= htmlspecialchars($et->currency) ?> <?= number_format($et->total_amount, 2) ?></p>
+          </div>
+          <div>
+            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Transaction</p>
+            <a href="/transactions/<?= $et->transaction_id ?>" class="text-sm font-bold text-primary hover:underline">TXN-<?= $et->transaction_id ?> ↗</a>
+          </div>
+          <?php if ($et->acceptance_id): ?>
+          <div>
+            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Acceptance</p>
+            <a href="/acceptance/<?= $et->acceptance_id ?>" class="text-sm font-bold text-primary hover:underline">ACC-<?= $et->acceptance_id ?> ↗</a>
+          </div>
+          <?php endif; ?>
+          <?php if ($et->order_id): ?>
+          <div>
+            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Order #</p>
+            <p class="text-sm font-semibold text-slate-700 mt-0.5"><?= htmlspecialchars($et->order_id) ?></p>
+          </div>
           <?php endif; ?>
         </div>
-        <div style="text-align:center;min-width:64px;">
-          <div style="font-size:22px;font-weight:900;color:#0f1e3c;font-family:monospace;"><?= htmlspecialchars($f['arrival_airport'] ?? $f['to'] ?? '???') ?></div>
-          <div style="font-size:11px;color:#94a3b8;"><?= htmlspecialchars($f['arrival_date'] ?? '') ?></div>
-          <div style="font-size:12px;font-weight:700;color:#475569;"><?= htmlspecialchars($f['arrival_time'] ?? '') ?></div>
+      </div>
+
+      <!-- Passengers -->
+      <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div class="px-5 py-3 border-b border-slate-100">
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Passengers &amp; E-Ticket Numbers</p>
+        </div>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-slate-50/80 border-b border-slate-100">
+              <th class="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">#</th>
+              <th class="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Passenger</th>
+              <th class="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Type</th>
+              <th class="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">E-Ticket #</th>
+              <th class="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Seat</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <?php foreach ($pax as $i => $p): ?>
+            <tr>
+              <td class="px-4 py-3 text-xs text-slate-400"><?= $i+1 ?></td>
+              <td class="px-4 py-3 text-sm font-bold text-slate-800"><?= htmlspecialchars($p['pax_name'] ?? '') ?></td>
+              <td class="px-4 py-3 text-xs text-slate-500 capitalize"><?= htmlspecialchars($p['pax_type'] ?? 'adult') ?></td>
+              <td class="px-4 py-3 font-mono font-bold text-sm text-blue-700"><?= htmlspecialchars($p['ticket_number'] ?? '—') ?></td>
+              <td class="px-4 py-3">
+                <?php if (!empty($p['seat'])): ?>
+                <span class="inline-block px-2 py-0.5 bg-violet-100 text-violet-700 text-xs font-bold rounded"><?= htmlspecialchars($p['seat']) ?></span>
+                <?php else: ?>—<?php endif; ?>
+              </td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Flight Itinerary -->
+      <?php if ($et->flight_data && count((array)$et->flight_data) > 0): ?>
+      <div class="bg-white border border-slate-200 rounded-xl p-5">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Flight Itinerary</p>
+        <div class="divide-y divide-slate-100">
+          <?php foreach ((array)$et->flight_data as $f): ?>
+          <div class="flex items-center gap-6 py-4">
+            <div class="text-center min-w-[64px]">
+              <div class="text-2xl font-black text-primary font-mono"><?= htmlspecialchars($f['departure_airport'] ?? $f['from'] ?? '???') ?></div>
+              <div class="text-[10px] text-slate-400"><?= htmlspecialchars($f['departure_date'] ?? $f['date'] ?? '') ?></div>
+              <div class="text-xs font-bold text-slate-500"><?= htmlspecialchars($f['departure_time'] ?? $f['time'] ?? '') ?></div>
+            </div>
+            <div class="flex-1 text-center">
+              <div class="text-[10px] text-slate-400 mb-1">
+                <?= htmlspecialchars($f['flight_number'] ?? $f['flight'] ?? '') ?>
+                <?php if (!empty($f['cabin_class'] ?? $f['class'] ?? '')): ?>&nbsp;·&nbsp;<?= htmlspecialchars($f['cabin_class'] ?? $f['class']) ?><?php endif; ?>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="flex-1 h-px bg-slate-200"></div>
+                <span class="material-symbols-outlined text-base text-slate-300">flight</span>
+                <div class="flex-1 h-px bg-slate-200"></div>
+              </div>
+              <?php if (!empty($f['duration'])): ?><div class="text-[10px] text-slate-400 mt-1"><?= htmlspecialchars($f['duration']) ?></div><?php endif; ?>
+            </div>
+            <div class="text-center min-w-[64px]">
+              <div class="text-2xl font-black text-primary font-mono"><?= htmlspecialchars($f['arrival_airport'] ?? $f['to'] ?? '???') ?></div>
+              <div class="text-[10px] text-slate-400"><?= htmlspecialchars($f['arrival_date'] ?? '') ?></div>
+              <div class="text-xs font-bold text-slate-500"><?= htmlspecialchars($f['arrival_time'] ?? '') ?></div>
+            </div>
+          </div>
+          <?php endforeach; ?>
         </div>
       </div>
-      <?php endforeach; ?>
-    </div>
-    <?php endif; ?>
+      <?php endif; ?>
 
-    <!-- Conditions -->
-    <?php if ($et->endorsements || $et->baggage_info || $et->fare_rules): ?>
-    <div class="et-detail-card">
-      <div class="et-detail-title">Ticket Conditions</div>
-      <?php if ($et->endorsements): ?>
-      <div class="et-kv" style="margin-bottom:16px;">
-        <span class="et-kv-label">Endorsements / Restrictions</span>
-        <span class="et-kv-value" style="font-size:13px;font-family:monospace;"><?= nl2br(htmlspecialchars($et->endorsements)) ?></span>
+      <!-- Conditions -->
+      <?php if ($et->endorsements || $et->baggage_info || $et->fare_rules): ?>
+      <div class="bg-white border border-slate-200 rounded-xl p-5">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Ticket Conditions</p>
+        <?php if ($et->endorsements): ?>
+        <div class="mb-3"><p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Endorsements</p><p class="text-xs font-mono text-slate-700"><?= nl2br(htmlspecialchars($et->endorsements)) ?></p></div>
+        <?php endif; ?>
+        <?php if ($et->baggage_info): ?>
+        <div class="mb-3"><p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Baggage</p><p class="text-xs text-slate-700"><?= nl2br(htmlspecialchars($et->baggage_info)) ?></p></div>
+        <?php endif; ?>
+        <?php if ($et->fare_rules): ?>
+        <div><p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Fare Rules</p><p class="text-xs text-slate-700"><?= nl2br(htmlspecialchars($et->fare_rules)) ?></p></div>
+        <?php endif; ?>
       </div>
       <?php endif; ?>
-      <?php if ($et->baggage_info): ?>
-      <div class="et-kv" style="margin-bottom:16px;">
-        <span class="et-kv-label">Baggage Allowance</span>
-        <span class="et-kv-value" style="font-size:13px;"><?= nl2br(htmlspecialchars($et->baggage_info)) ?></span>
-      </div>
-      <?php endif; ?>
-      <?php if ($et->fare_rules): ?>
-      <div class="et-kv">
-        <span class="et-kv-label">Fare Rules</span>
-        <span class="et-kv-value" style="font-size:13px;"><?= nl2br(htmlspecialchars($et->fare_rules)) ?></span>
-      </div>
-      <?php endif; ?>
-    </div>
-    <?php endif; ?>
 
-    <!-- Notes -->
-    <div class="et-detail-card">
-      <div class="et-detail-title">Activity Log</div>
-      <?php if ($notes->isEmpty()): ?>
-      <p style="color:#94a3b8;font-size:13px;">No notes yet.</p>
-      <?php else: ?>
-      <?php foreach ($notes as $note): ?>
-      <div class="note-bubble">
-        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-          <span style="font-size:12px;font-weight:700;color:#475569;"><?= htmlspecialchars($note->user?->name ?? ($note->user_id == 0 ? 'Customer' : 'System')) ?></span>
-          <span style="font-size:11px;color:#94a3b8;"><?= $note->created_at->format('M j, Y g:i A') ?></span>
+      <!-- Notes -->
+      <div class="bg-white border border-slate-200 rounded-xl p-5">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Activity Log</p>
+        <?php if ($notes->isEmpty()): ?>
+        <p class="text-sm text-slate-400">No notes yet.</p>
+        <?php else: ?>
+        <div class="space-y-2 mb-4">
+          <?php foreach ($notes as $note): ?>
+          <div class="bg-slate-50 border border-slate-100 rounded-lg p-3">
+            <div class="flex justify-between mb-1">
+              <span class="text-xs font-bold text-slate-600"><?= htmlspecialchars($note->user?->name ?? ($note->user_id == 0 ? 'Customer' : 'System')) ?></span>
+              <span class="text-[10px] text-slate-400"><?= $note->created_at->format('M j, Y g:i A') ?></span>
+            </div>
+            <p class="text-xs text-slate-700"><?= nl2br(htmlspecialchars($note->note ?? '')) ?></p>
+          </div>
+          <?php endforeach; ?>
         </div>
-        <p style="font-size:13px;color:#1e293b;margin:0;"><?= nl2br(htmlspecialchars($note->content ?? $note->note ?? '')) ?></p>
+        <?php endif; ?>
+        <form method="POST" action="/etickets/<?= $et->id ?>/note" class="flex gap-2">
+          <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+          <input type="text" name="note" placeholder="Add internal note…" required
+                 class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/40">
+          <button type="submit" class="px-4 py-2 bg-primary text-white text-sm font-bold rounded-lg hover:bg-primary-container transition-colors">Add</button>
+        </form>
       </div>
-      <?php endforeach; ?>
-      <?php endif; ?>
 
-      <!-- Add Note -->
-      <form method="POST" action="/etickets/<?= $et->id ?>/note" style="margin-top:14px;display:flex;gap:10px;">
-        <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
-        <input type="text" name="note" placeholder="Add internal note..." required
-               style="flex:1;border:1px solid #e2e8f0;border-radius:7px;padding:9px 13px;font-size:13px;font-family:inherit;">
-        <button type="submit" style="background:#0f1e3c;color:#fff;border:none;padding:9px 18px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">Add</button>
-      </form>
-    </div>
+    </div><!-- /left col -->
 
-  </div>
-
-  <!-- RIGHT COLUMN -->
-  <div>
-
-    <!-- Actions -->
-    <div class="et-detail-card">
-      <div class="et-detail-title">Actions</div>
+    <!-- RIGHT (1/3) -->
+    <div class="space-y-4">
 
       <!-- Send E-Ticket -->
-      <div style="margin-bottom:16px;">
-        <div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:8px;">✉ Send E-Ticket</div>
-        <form method="POST" action="/etickets/<?= $et->id ?>/send">
+      <div class="bg-white border border-slate-200 rounded-xl p-5">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Send E-Ticket</p>
+
+        <!-- Send to customer email -->
+        <form method="POST" action="/etickets/<?= $et->id ?>/send" class="mb-4">
           <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
-          <button type="submit" style="width:100%;background:linear-gradient(135deg,#0f1e3c,#1a3a6b);color:#fff;border:none;padding:12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px;">
-            <?= $et->isSent() ? '✉ Resend E-Ticket' : '✉ Send E-Ticket' ?>
+          <button type="submit"
+                  class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-container transition-all text-sm shadow-lg shadow-primary/20">
+            <span class="material-symbols-outlined text-base">send</span>
+            <?= $et->isSent() ? 'Resend E-Ticket' : 'Send E-Ticket' ?>
           </button>
           <?php if ($et->last_emailed_at): ?>
-          <div style="font-size:11px;color:#94a3b8;text-align:center;">Last sent: <?= $et->last_emailed_at->format('M j, g:i A') ?> to <?= htmlspecialchars($et->sent_to_email ?? $et->customer_email) ?></div>
+          <p class="text-[10px] text-slate-400 text-center mt-1.5">
+            Last sent <?= $et->last_emailed_at->format('M j, g:i A') ?>
+            <?php if ($et->sent_to_email): ?>to <?= htmlspecialchars($et->sent_to_email) ?><?php endif; ?>
+          </p>
           <?php endif; ?>
         </form>
+
+        <!-- Resend to alternate email -->
+        <div class="border-t border-slate-100 pt-4">
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Resend to Different Email</p>
+          <form method="POST" action="/etickets/<?= $et->id ?>/send" class="space-y-2">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <input type="email" name="resend_email" placeholder="Alternate email address" required
+                   class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/40">
+            <button type="submit"
+                    class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-slate-200 bg-slate-50 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-colors text-sm">
+              <span class="material-symbols-outlined text-base">forward_to_inbox</span> Send to This Address
+            </button>
+          </form>
+        </div>
       </div>
 
-      <!-- Resend to Different Email -->
-      <div style="border-top:1px solid #f1f5f9;padding-top:14px;">
-        <div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:8px;">↪ Resend to Different Email</div>
-        <form method="POST" action="/etickets/<?= $et->id ?>/send">
-          <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
-          <input type="email" name="resend_email" placeholder="Alternate email address" required
-                 style="width:100%;border:1px solid #e2e8f0;border-radius:7px;padding:9px 13px;font-size:13px;margin-bottom:8px;box-sizing:border-box;font-family:inherit;">
-          <button type="submit" style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;padding:10px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
-            Send to This Address
-          </button>
-        </form>
+      <!-- Acknowledgment -->
+      <div class="bg-white border border-slate-200 rounded-xl p-5">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Acknowledgment</p>
+        <?php if ($et->isAcknowledged()): ?>
+        <div class="text-center bg-emerald-50 border border-emerald-100 rounded-xl p-4 mb-3">
+          <span class="material-symbols-outlined text-3xl text-emerald-500 block mb-1">verified</span>
+          <p class="text-sm font-extrabold text-emerald-700">Acknowledged</p>
+          <p class="text-[10px] text-emerald-600 mt-0.5"><?= $et->acknowledged_at->format('F j, Y \a\t g:i A') ?></p>
+        </div>
+        <p class="text-[10px] text-slate-400">IP: <?= htmlspecialchars($et->acknowledged_ip ?? 'N/A') ?></p>
+        <?php else: ?>
+        <div class="text-center bg-slate-50 border border-slate-100 rounded-xl p-4">
+          <p class="text-sm text-slate-400">Awaiting customer acknowledgment</p>
+        </div>
+        <?php endif; ?>
+        <div class="mt-3 pt-3 border-t border-slate-100">
+          <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Public Link</p>
+          <a href="<?= htmlspecialchars($et->publicUrl()) ?>" target="_blank"
+             class="text-[10px] text-primary break-all hover:underline"><?= htmlspecialchars($et->publicUrl()) ?></a>
+        </div>
       </div>
-    </div>
 
-    <!-- Acknowledgment Info -->
-    <div class="et-detail-card">
-      <div class="et-detail-title">Acknowledgment</div>
-      <?php if ($et->isAcknowledged()): ?>
-      <div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:14px;margin-bottom:14px;text-align:center;">
-        <div style="font-size:24px;margin-bottom:4px;">✅</div>
-        <div style="font-size:13px;font-weight:800;color:#15803d;">Acknowledged</div>
-        <div style="font-size:11px;color:#16a34a;margin-top:2px;"><?= $et->acknowledged_at->format('F j, Y \a\t g:i:s A') ?></div>
-      </div>
-      <div style="font-size:11px;color:#64748b;line-height:1.6;">
-        <div><strong>IP:</strong> <?= htmlspecialchars($et->acknowledged_ip ?? 'N/A') ?></div>
-      </div>
-      <?php else: ?>
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;text-align:center;margin-bottom:12px;">
-        <div style="font-size:13px;color:#94a3b8;">Awaiting customer acknowledgment</div>
-      </div>
-      <?php endif; ?>
-      <div style="font-size:10px;color:#94a3b8;word-break:break-all;margin-top:8px;">
-        <div style="font-weight:700;margin-bottom:2px;">Public Link:</div>
-        <a href="<?= htmlspecialchars($et->publicUrl()) ?>" target="_blank" style="color:#1a3a6b;text-decoration:none;"><?= htmlspecialchars($et->publicUrl()) ?></a>
-      </div>
-    </div>
-
-    <!-- Email Status -->
-    <div class="et-detail-card">
-      <div class="et-detail-title">Email Status</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <!-- Email Status -->
+      <div class="bg-white border border-slate-200 rounded-xl p-5">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Email Status</p>
         <?php
-        $emailIcon = match($et->email_status) {
-            'SENT','RESENT' => '✅', 'FAILED' => '❌', default => '⏳',
-        };
-        $emailColor = match($et->email_status) {
-            'SENT','RESENT' => '#15803d', 'FAILED' => '#991b1b', default => '#94a3b8',
-        };
+        $emailIcon  = match($et->email_status) { 'SENT','RESENT' => 'check_circle', 'FAILED' => 'error', default => 'schedule' };
+        $emailColor = match($et->email_status) { 'SENT','RESENT' => 'text-emerald-600', 'FAILED' => 'text-red-600', default => 'text-slate-400' };
         ?>
-        <span style="font-size:20px;"><?= $emailIcon ?></span>
-        <span style="font-size:13px;font-weight:700;color:<?= $emailColor ?>;"><?= htmlspecialchars($et->email_status) ?></span>
-      </div>
-      <div style="font-size:11px;color:#94a3b8;line-height:1.8;">
-        <div>Attempts: <strong><?= $et->email_attempts ?></strong></div>
+        <div class="flex items-center gap-2 mb-2">
+          <span class="material-symbols-outlined text-xl <?= $emailColor ?>"><?= $emailIcon ?></span>
+          <span class="text-sm font-bold <?= $emailColor ?>"><?= htmlspecialchars($et->email_status) ?></span>
+        </div>
+        <p class="text-[10px] text-slate-400">Attempts: <strong class="text-slate-600"><?= $et->email_attempts ?></strong></p>
         <?php if ($et->sent_to_email): ?>
-        <div>Last to: <strong><?= htmlspecialchars($et->sent_to_email) ?></strong></div>
+        <p class="text-[10px] text-slate-400 mt-0.5">Last to: <strong class="text-slate-600"><?= htmlspecialchars($et->sent_to_email) ?></strong></p>
         <?php endif; ?>
       </div>
-    </div>
 
-    <!-- Meta -->
-    <div class="et-detail-card">
-      <div class="et-detail-title">Record Info</div>
-      <div style="font-size:11px;color:#94a3b8;line-height:2;">
-        <div>Agent: <strong style="color:#475569;"><?= htmlspecialchars($et->agent?->name ?? '—') ?></strong></div>
-        <div>Created: <strong style="color:#475569;"><?= $et->created_at->format('M j, Y g:i A') ?></strong></div>
-        <div>Updated: <strong style="color:#475569;"><?= $et->updated_at->format('M j, Y g:i A') ?></strong></div>
+      <!-- Meta -->
+      <div class="bg-white border border-slate-200 rounded-xl p-5">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Record Info</p>
+        <div class="space-y-1.5 text-xs text-slate-500">
+          <div>Agent: <strong class="text-slate-700"><?= htmlspecialchars($et->agent?->name ?? '—') ?></strong></div>
+          <div>Created: <strong class="text-slate-700"><?= $et->created_at->format('M j, Y g:i A') ?></strong></div>
+          <div>Updated: <strong class="text-slate-700"><?= $et->updated_at->format('M j, Y g:i A') ?></strong></div>
+        </div>
       </div>
-    </div>
 
-  </div><!-- end right col -->
-</div>
+    </div><!-- /right col -->
+  </div><!-- /grid -->
 
-<?php
-$content = ob_get_clean();
-require $layout;
+</main>
+</body>
+</html>
