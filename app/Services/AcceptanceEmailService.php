@@ -30,7 +30,7 @@ class AcceptanceEmailService
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = $_ENV['SMTP_PORT'] ?? 587;
         
-        $fromName  = $_ENV['SMTP_FROM_NAME'] ?? 'Lets Fly Travel DBA Base Fare';
+        $fromName  = 'Reservation Desk';
         $fromEmail = $_ENV['SMTP_FROM'] ?? $_ENV['SMTP_USER'] ?? '';
         
         if ($fromEmail) {
@@ -161,6 +161,43 @@ class AcceptanceEmailService
         $pnr          = htmlspecialchars($acceptance->pnr);
         $expiry       = $acceptance->expires_at->format('F j, Y \a\t g:i A');
 
+        // ── Resolve airline IATA from flight segments (most reliable) ──────────
+        $flightData   = $acceptance->flight_data ?? [];
+        $allSegs      = array_merge(
+            $flightData['flights']     ?? [],
+            $flightData['old_flights'] ?? [],
+            $flightData['new_flights'] ?? []
+        );
+        $iataCode = null;
+        foreach ($allSegs as $seg) {
+            $candidate = strtoupper(trim($seg['airline_iata'] ?? ''));
+            if (preg_match('/^[A-Z0-9]{2,3}$/', $candidate)) {
+                $iataCode = $candidate;
+                break;
+            }
+        }
+        // Fallback: airline field itself might be an IATA code
+        if (!$iataCode) {
+            $airlineUpper = strtoupper(trim($acceptance->airline ?? ''));
+            if (preg_match('/^[A-Z0-9]{2,3}$/', $airlineUpper)) {
+                $iataCode = $airlineUpper;
+            }
+        }
+        $airlineName  = htmlspecialchars($acceptance->airline ?? '');
+        $logoUrl      = $iataCode ? "https://www.gstatic.com/flights/airline_logos/70px/{$iataCode}.png" : '';
+        $logoHtml     = $logoUrl
+            ? "<img src=\"{$logoUrl}\" alt=\"{$airlineName}\" width=\"48\" height=\"48\" style=\"border-radius:8px; background:#fff; padding:3px; object-fit:contain;\">" 
+            : '';
+
+        // Build airline header block
+        $airlineHeaderHtml = '';
+        if ($airlineName) {
+            $airlineHeaderHtml = "<div style='margin-top:14px; display:flex; align-items:center; justify-content:center; gap:10px;'>"
+                . $logoHtml
+                . "<span style='color:rgba(255,255,255,0.92); font-size:15px; font-weight:700; letter-spacing:0.5px;'>{$airlineName}</span>"
+                . "</div>";
+        }
+
         $passengerRows = '';
         foreach ($acceptance->passengers ?? [] as $p) {
             $name = htmlspecialchars($p['name'] ?? '');
@@ -205,10 +242,9 @@ class AcceptanceEmailService
 <body style="font-family:'Segoe UI',Arial,sans-serif; background:#f0f4f8; margin:0; padding:20px; color:#333;">
   <div style="max-width:520px; margin:0 auto; background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.08);">
 
-    <!-- Header -->
+    <!-- Header: Airline logo + name + type badge -->
     <div style="background:linear-gradient(135deg,#0f1e3c 0%,#1a3a6b 100%); padding:26px 30px; text-align:center;">
-      <div style="color:#fff; font-size:21px; font-weight:800; letter-spacing:1px;">LETS FLY TRAVEL</div>
-      <div style="color:#c9a84c; font-size:11px; font-weight:600; margin-top:3px; letter-spacing:0.5px;">DBA BASE FARE</div>
+      {$airlineHeaderHtml}
       <div style="margin-top:14px; border-top:1px solid rgba(255,255,255,0.2); padding-top:12px;">
         <span style="color:#fff; font-size:13px; font-weight:600; letter-spacing:2px; text-transform:uppercase;">{$typeLabel}</span>
       </div>

@@ -56,7 +56,6 @@ if ($acceptance) {
 
 <div class="card">
   <div class="card-header">
-    <div class="logo-text"><?= htmlspecialchars(strtoupper($dbaName)) ?></div>
   </div>
   <div class="card-body">
     <div class="check-circle">
