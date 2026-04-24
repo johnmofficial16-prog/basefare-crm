@@ -214,16 +214,21 @@ class AcceptanceEmailService
         }
         $airlineName  = htmlspecialchars($resolvedName);
         $logoUrl      = $iataCode ? "https://www.gstatic.com/flights/airline_logos/70px/{$iataCode}.png" : '';
-        $logoHtml     = $logoUrl
-            ? "<img src=\"{$logoUrl}\" alt=\"{$airlineName}\" width=\"48\" height=\"48\" style=\"border-radius:8px; background:#fff; padding:3px; object-fit:contain;\">" 
-            : '';
 
-        // Build airline header block
+        // Build airline header block — table layout (flexbox ignored by Gmail)
         $airlineHeaderHtml = '';
         if ($airlineName) {
-            $airlineHeaderHtml = "<div style='margin-top:14px; display:flex; align-items:center; justify-content:center; gap:10px;'>"
-                . $logoHtml
-                . "<span style='color:rgba(255,255,255,0.92); font-size:15px; font-weight:700; letter-spacing:0.5px;'>{$airlineName}</span>"
+            $logoCell = $logoUrl
+                ? "<td style='padding:0 8px 0 0; vertical-align:middle;'>"
+                  . "<img src=\"{$logoUrl}\" alt=\"{$airlineName}\" width=\"40\" height=\"40\" style=\"display:block; border-radius:6px; background:#fff; padding:2px;\">"
+                  . "</td>"
+                : '';
+            $airlineHeaderHtml = "<div style='margin-top:14px; text-align:center;'>"
+                . "<table cellpadding='0' cellspacing='0' border='0' style='display:inline-table; margin:0 auto;'><tr>"
+                . $logoCell
+                . "<td style='vertical-align:middle;'>"
+                . "<span style='color:rgba(255,255,255,0.95); font-size:16px; font-weight:700; letter-spacing:0.5px;'>{$airlineName}</span>"
+                . "</td></tr></table>"
                 . "</div>";
         }
 
