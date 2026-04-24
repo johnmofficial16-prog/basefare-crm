@@ -33,10 +33,21 @@ $csrf = $_SESSION['csrf_token'];
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
 <script>
-tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","primary-container":"#314a8d",background:"#f8f9fa",surface:"#f8f9fa","surface-container":"#edeeef","surface-container-low":"#f3f4f5","on-surface":"#191c1d","on-surface-variant":"#434653"},fontFamily:{headline:["Manrope"],body:["Inter"],label:["Inter"]}}}}
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      fontFamily: { sans: ['Inter', 'Manrope', 'sans-serif'] },
+      colors: {
+        primary: { DEFAULT: '#0f1e3c', 50: '#f0f4ff', 100: '#dde8ff', 500: '#1a3a6b', 600: '#0f1e3c' },
+        gold:    { DEFAULT: '#c9a84c', light: '#f5e6c0' }
+      }
+    }
+  }
+}
 </script>
 </head>
-<body class="bg-background font-body text-on-surface antialiased min-h-screen">
+<body class="bg-slate-50 font-sans min-h-screen">
 
 <?php if ($isAdmin): ?>
 <?php require __DIR__ . '/../partials/admin_sidebar.php'; ?>
@@ -175,33 +186,170 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <?php if (!empty($flightsToRender)): ?>
       <div class="bg-white border border-slate-200 rounded-xl p-5">
         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Flight Itinerary</p>
-        <div class="divide-y divide-slate-100">
-          <?php foreach ($flightsToRender as $f): ?>
-          <div class="flex items-center gap-6 py-4">
-            <div class="text-center min-w-[64px]">
-              <div class="text-2xl font-black text-primary font-mono"><?= htmlspecialchars($f['departure_airport'] ?? $f['from'] ?? '???') ?></div>
-              <div class="text-[10px] text-slate-400"><?= htmlspecialchars($f['departure_date'] ?? $f['date'] ?? '') ?></div>
-              <div class="text-xs font-bold text-slate-500"><?= htmlspecialchars($f['departure_time'] ?? $f['time'] ?? '') ?></div>
-            </div>
-            <div class="flex-1 text-center">
-              <div class="text-[10px] text-slate-400 mb-1">
-                <?= htmlspecialchars($f['flight_number'] ?? $f['flight'] ?? '') ?>
-                <?php if (!empty($f['cabin_class'] ?? $f['class'] ?? '')): ?>&nbsp;·&nbsp;<?= htmlspecialchars($f['cabin_class'] ?? $f['class']) ?><?php endif; ?>
-              </div>
-              <div class="flex items-center gap-1">
-                <div class="flex-1 h-px bg-slate-200"></div>
-                <span class="material-symbols-outlined text-base text-slate-300">flight</span>
-                <div class="flex-1 h-px bg-slate-200"></div>
-              </div>
-              <?php if (!empty($f['duration'])): ?><div class="text-[10px] text-slate-400 mt-1"><?= htmlspecialchars($f['duration']) ?></div><?php endif; ?>
-            </div>
-            <div class="text-center min-w-[64px]">
-              <div class="text-2xl font-black text-primary font-mono"><?= htmlspecialchars($f['arrival_airport'] ?? $f['to'] ?? '???') ?></div>
-              <div class="text-[10px] text-slate-400"><?= htmlspecialchars($f['arrival_date'] ?? '') ?></div>
-              <div class="text-xs font-bold text-slate-500"><?= htmlspecialchars($f['arrival_time'] ?? '') ?></div>
-            </div>
-          </div>
-          <?php endforeach; ?>
+        <div class="space-y-3">
+          <?php 
+          if (!function_exists('renderSegsET')) {
+            function renderSegsET(array $segs, string $theme = 'blue'): void {
+              $segs = array_values(array_filter($segs, fn($s) => (!empty($s['from']) || !empty($s['departure_airport'])) && (!empty($s['to']) || !empty($s['arrival_airport']))));
+              static $AIRLINES = [
+                  'AC'=>'Air Canada','WS'=>'WestJet','AA'=>'American Airlines','DL'=>'Delta Air Lines','UA'=>'United Airlines',
+                  'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM Royal Dutch','EK'=>'Emirates',
+                  'QR'=>'Qatar Airways','SQ'=>'Singapore Airlines','CX'=>'Cathay Pacific','JL'=>'Japan Airlines',
+                  'NH'=>'All Nippon Airways','TK'=>'Turkish Airlines','EY'=>'Etihad Airways','LX'=>'Swiss International','OS'=>'Austrian Airlines',
+                  'AI'=>'Air India','TP'=>'TAP Air Portugal','VS'=>'Virgin Atlantic','AM'=>'Aeromexico',
+                  'KE'=>'Korean Air','QF'=>'Qantas Airways','BR'=>'EVA Air','CI'=>'China Airlines',
+                  'CZ'=>'China Southern','MU'=>'China Eastern','CA'=>'Air China','HU'=>'Hainan Airlines',
+                  'TG'=>'Thai Airways','VN'=>'Vietnam Airlines','MH'=>'Malaysia Airlines','SV'=>'Saudia',
+                  'MS'=>'EgyptAir','ET'=>'Ethiopian Airlines','AT'=>'Royal Air Maroc',
+                  'F9'=>'Frontier Airlines','NK'=>'Spirit Airlines','B6'=>'JetBlue Airways','WN'=>'Southwest Airlines','AS'=>'Alaska Airlines',
+                  'CM'=>'Copa Airlines','AV'=>'Avianca','LA'=>'LATAM Airlines','NZ'=>'Air New Zealand',
+                  'GA'=>'Garuda Indonesia','PR'=>'Philippine Airlines','UL'=>'SriLankan Airlines',
+                  'HA'=>'Hawaiian Airlines','G4'=>'Allegiant Air','AD'=>'Azul Brazilian Airlines',
+              ];
+              static $CITIES = [
+                  'YYZ'=>'Toronto','YVR'=>'Vancouver','YUL'=>'Montreal','YYC'=>'Calgary',
+                  'LHR'=>'London Heathrow','LGW'=>'London Gatwick','CDG'=>'Paris CDG','FRA'=>'Frankfurt',
+                  'AMS'=>'Amsterdam','MAD'=>'Madrid','FCO'=>'Rome','MXP'=>'Milan','ZRH'=>'Zurich',
+                  'IST'=>'Istanbul','DXB'=>'Dubai','DOH'=>'Doha','AUH'=>'Abu Dhabi',
+                  'BOM'=>'Mumbai','DEL'=>'Delhi','BLR'=>'Bangalore','MAA'=>'Chennai','HYD'=>'Hyderabad',
+                  'JFK'=>'New York JFK','EWR'=>'Newark','LAX'=>'Los Angeles','SFO'=>'San Francisco',
+                  'ORD'=>'Chicago','MIA'=>'Miami','DFW'=>'Dallas','SEA'=>'Seattle','BOS'=>'Boston',
+                  'ATL'=>'Atlanta','DEN'=>'Denver','SIN'=>'Singapore','HKG'=>'Hong Kong','BKK'=>'Bangkok',
+                  'NRT'=>'Tokyo Narita','HND'=>'Tokyo Haneda','ICN'=>'Seoul','SYD'=>'Sydney','MEL'=>'Melbourne',
+              ];
+              if (empty($segs)) {
+                  echo '<p class="text-xs text-slate-400 italic">No segments recorded.</p>';
+                  return;
+              }
+              $accent = $theme === 'rose' ? 'bg-rose-700' : ($theme === 'emerald' ? 'bg-emerald-700' : 'bg-slate-800');
+              foreach ($segs as $i => $seg):
+                  $iata   = strtoupper($seg['airline_iata'] ?? $seg['airline'] ?? '');
+                  $aName  = $AIRLINES[$iata] ?? $iata;
+                  $from   = strtoupper($seg['from'] ?? $seg['departure_airport'] ?? '');
+                  $to     = strtoupper($seg['to'] ?? $seg['arrival_airport'] ?? '');
+                  $fCity  = $CITIES[$from] ?? $from;
+                  $tCity  = $CITIES[$to] ?? $to;
+                  $logo   = $iata ? "https://www.gstatic.com/flights/airline_logos/70px/{$iata}.png" : '';
+                  $nextDay = !empty($seg['arr_next_day']);
+                  $seat    = htmlspecialchars($seg['seat'] ?? '');
+                  $flightNo = htmlspecialchars($seg['flight_no'] ?? $seg['flight'] ?? '');
+                  $cabin    = htmlspecialchars($seg['cabin_class'] ?? $seg['class'] ?? '');
+                  $date     = htmlspecialchars($seg['date'] ?? $seg['departure_date'] ?? '');
+                  $arrDate  = htmlspecialchars($seg['arrival_date'] ?? '');
+                  $depTime  = htmlspecialchars($seg['dep_time'] ?? $seg['time'] ?? $seg['departure_time'] ?? '');
+                  $arrTime  = htmlspecialchars($seg['arr_time'] ?? $seg['arrival_time'] ?? '');
+                  
+                  // Color for initials fallback
+                  $hash = 0;
+                  foreach (str_split($iata ?: 'XX') as $c) $hash = ord($c) + (($hash << 5) - $hash);
+                  $hue = abs($hash) % 360;
+                  $bgColor = "hsl({$hue},50%,35%)";
+                  ?>
+                  <div class="flex items-stretch bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div class="<?= $accent ?> px-4 py-3 flex flex-col items-center justify-center gap-1.5 min-w-[80px]">
+                      <?php if ($logo): ?>
+                    <img src="<?= htmlspecialchars($logo) ?>" alt="<?= htmlspecialchars($iata) ?>"
+                      class="w-9 h-9 object-contain"
+                      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                    <?php endif; ?>
+                    <div style="display:<?= $logo?'none':'flex' ?>;width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#fff;background:<?= $bgColor ?>"><?= htmlspecialchars($iata ?: '?') ?></div>
+                      <span class="text-[11px] font-black text-white"><?= htmlspecialchars($iata) ?></span>
+                      <span class="text-[9px] text-slate-300 text-center leading-tight"><?= htmlspecialchars($aName) ?></span>
+                    </div>
+                    <div class="flex-1 p-4 grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+                      <div class="text-right">
+                        <div class="text-xl font-black text-slate-900"><?= $depTime ?></div>
+                        <div class="text-sm font-bold text-primary-600"><?= htmlspecialchars($from) ?></div>
+                        <div class="text-[10px] text-slate-400"><?= htmlspecialchars($fCity) ?></div>
+                      </div>
+                      <div class="flex flex-col items-center px-2 gap-0.5">
+                        <div class="text-[10px] font-bold text-slate-500"><?= $flightNo ?></div>
+                        <div class="text-[9px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono"><?= $cabin ?></div>
+                        <div class="w-16 h-px bg-slate-300 relative my-1">
+                          <div class="absolute -right-2 -top-2 text-blue-500 text-sm">✈</div>
+                        </div>
+                        <div class="text-[9px] text-slate-400"><?= $date ?></div>
+                        <?php if ($seat): ?>
+                        <div class="text-[8px] font-bold text-indigo-600 mt-0.5">💺 <?= $seat ?></div>
+                        <?php endif; ?>
+                      </div>
+                      <div>
+                        <div class="flex items-baseline gap-1">
+                          <span class="text-xl font-black text-slate-900"><?= $arrTime ?></span>
+                          <?php if ($nextDay || ($arrDate && $arrDate !== $date)): ?>
+                          <span class="px-1 py-0.5 bg-rose-100 text-rose-700 text-[9px] font-bold rounded">+1d</span>
+                          <?php endif; ?>
+                        </div>
+                        <div class="text-sm font-bold text-primary-600"><?= htmlspecialchars($to) ?></div>
+                        <div class="text-[10px] text-slate-400"><?= htmlspecialchars($tCity) ?></div>
+                      </div>
+                    </div>
+                  </div>
+                  <?php if ($i < count($segs)-1):
+                      $nextSeg  = $segs[$i + 1];
+                      $thisDate = trim($date);
+                      $nextDate = trim($nextSeg['date'] ?? $nextSeg['departure_date'] ?? '');
+                      $sameDay  = ($thisDate !== '' && $nextDate !== '' && $thisDate === $nextDate);
+    
+                      // Calculate actual layover duration
+                      $layStr   = '';
+                      $layClass = 'bg-amber-50 border-amber-200 text-amber-700';
+                      $layIcon  = 'connecting_airports';
+                      $arrT = $arrTime;
+                      $depT = $nextSeg['dep_time'] ?? $nextSeg['time'] ?? $nextSeg['departure_time'] ?? '';
+                      if ($arrT && $depT && strpos($arrT, ':') !== false && strpos($depT, ':') !== false) {
+                          [$ah, $am] = array_map('intval', explode(':', $arrT));
+                          [$dh, $dm] = array_map('intval', explode(':', $depT));
+                          $arrM = $ah * 60 + $am + (!empty($seg['arr_next_day']) || ($arrDate && $arrDate !== $date) ? 1440 : 0);
+                          // Date delta
+                          $months = ['JAN'=>0,'FEB'=>1,'MAR'=>2,'APR'=>3,'MAY'=>4,'JUN'=>5,'JUL'=>6,'AUG'=>7,'SEP'=>8,'OCT'=>9,'NOV'=>10,'DEC'=>11];
+                          $dateDelta = 0;
+                          if (strlen($thisDate) >= 5 && strlen($nextDate) >= 5) {
+                              $md1 = $months[strtoupper(substr($thisDate,2,3))] ?? null;
+                              $md2 = $months[strtoupper(substr($nextDate,2,3))] ?? null;
+                              if ($md1 !== null && $md2 !== null) {
+                                  $d1 = mktime(0,0,0,$md1+1,intval($thisDate),date('Y'));
+                                  $d2 = mktime(0,0,0,$md2+1,intval($nextDate),date('Y'));
+                                  $dateDelta = (int)round(($d2 - $d1) / 86400);
+                              }
+                          }
+                          $depM = $dh * 60 + $dm + $dateDelta * 1440;
+                          $layMins = $depM - $arrM;
+                          if ($layMins < 0) {
+                              $layStr = '⛔ Impossible connection';
+                              $layClass = 'bg-rose-50 border-rose-400 text-rose-700';
+                              $layIcon  = 'error';
+                          } elseif ($layMins < 45) {
+                              $h = intdiv($layMins,60); $m = $layMins % 60;
+                              $layStr = ($h ? $h.'h ' : '') . $m . 'm connection ⚠ Very tight';
+                              $layClass = 'bg-orange-50 border-orange-300 text-orange-700';
+                          } else {
+                              $h = intdiv($layMins,60); $m = $layMins % 60;
+                              $layStr = ($h ? $h.'h ' : '') . ($m ? $m.'m ' : '') . 'connection';
+                          }
+                      }
+                  ?>
+                  <?php if ($sameDay || $layStr): ?>
+                  <div class="flex items-center gap-2 px-3 py-1.5 <?= $layClass ?> border rounded-lg text-xs font-semibold">
+                    <span class="material-symbols-outlined text-sm"><?= $layIcon ?></span>
+                    <?php if ($layStr): ?>
+                      <?= htmlspecialchars($layStr) ?> in <?= htmlspecialchars($CITIES[$to] ?? $to) ?>
+                    <?php else: ?>
+                      Connection in <?= htmlspecialchars($CITIES[$to] ?? $to) ?>
+                    <?php endif; ?>
+                  </div>
+                  <?php else: ?>
+                  <div class="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-semibold text-blue-700">
+                    <span class="material-symbols-outlined text-sm">flight_takeoff</span>
+                    Return Leg &mdash; <?= htmlspecialchars($nextDate) ?>
+                  </div>
+                  <?php endif; ?>
+                  <?php endif; ?>
+              <?php endforeach;
+            }
+          }
+          renderSegsET($flightsToRender);
+          ?>
         </div>
       </div>
       <?php endif; ?>

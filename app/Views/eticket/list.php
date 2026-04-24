@@ -28,10 +28,21 @@ function etStatusBadge(string $status): string {
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
 <script>
-tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","primary-container":"#314a8d",background:"#f8f9fa",surface:"#f8f9fa","surface-container":"#edeeef","surface-container-low":"#f3f4f5","on-surface":"#191c1d","on-surface-variant":"#434653"},fontFamily:{headline:["Manrope"],body:["Inter"],label:["Inter"]}}}}
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      fontFamily: { sans: ['Inter', 'Manrope', 'sans-serif'] },
+      colors: {
+        primary: { DEFAULT: '#0f1e3c', 50: '#f0f4ff', 100: '#dde8ff', 500: '#1a3a6b', 600: '#0f1e3c' },
+        gold:    { DEFAULT: '#c9a84c', light: '#f5e6c0' }
+      }
+    }
+  }
+}
 </script>
 </head>
-<body class="bg-background font-body text-on-surface antialiased min-h-screen">
+<body class="bg-slate-50 font-sans min-h-screen">
 
 <?php if ($isAdmin): ?>
 <?php require __DIR__ . '/../partials/admin_sidebar.php'; ?>

@@ -356,32 +356,173 @@ if (empty($_SESSION['csrf_token'])) {
       <?php if (!empty($flightsToRender)): ?>
       <div style="margin-bottom:28px;">
         <div class="section-title">🛫 Flight Itinerary</div>
-        <?php foreach ($flightsToRender as $f): ?>
-        <div class="flight-segment">
-          <div class="airport-block">
-            <div class="airport-iata"><?= htmlspecialchars($f['departure_airport'] ?? $f['from'] ?? '???') ?></div>
-            <div class="airport-date"><?= htmlspecialchars($f['departure_date'] ?? $f['date'] ?? '') ?></div>
-            <div class="airport-time"><?= htmlspecialchars($f['departure_time'] ?? $f['time'] ?? '') ?></div>
-          </div>
-          <div class="flight-connector">
-            <div class="flight-line">
-              <div></div>
-              <span>✈</span>
-              <div></div>
-            </div>
-            <div class="flight-info">
-              <?= htmlspecialchars($f['flight_number'] ?? $f['flight'] ?? '') ?>
-              <?php if (!empty($f['cabin_class'] ?? $f['class'] ?? '')): ?>&nbsp;·&nbsp;<?= htmlspecialchars($f['cabin_class'] ?? $f['class'] ?? '') ?><?php endif; ?>
-              <?php if (!empty($f['duration'])): ?>&nbsp;·&nbsp;<?= htmlspecialchars($f['duration']) ?><?php endif; ?>
-            </div>
-          </div>
-          <div class="airport-block">
-            <div class="airport-iata"><?= htmlspecialchars($f['arrival_airport'] ?? $f['to'] ?? '???') ?></div>
-            <div class="airport-date"><?= htmlspecialchars($f['arrival_date'] ?? '') ?></div>
-            <div class="airport-time"><?= htmlspecialchars($f['arrival_time'] ?? '') ?></div>
-          </div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <?php 
+          if (!function_exists('renderSegsETPublic')) {
+            function renderSegsETPublic(array $segs): void {
+              $segs = array_values(array_filter($segs, fn($s) => (!empty($s['from']) || !empty($s['departure_airport'])) && (!empty($s['to']) || !empty($s['arrival_airport']))));
+              static $AIRLINES = [
+                  'AC'=>'Air Canada','WS'=>'WestJet','AA'=>'American Airlines','DL'=>'Delta Air Lines','UA'=>'United Airlines',
+                  'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM Royal Dutch','EK'=>'Emirates',
+                  'QR'=>'Qatar Airways','SQ'=>'Singapore Airlines','CX'=>'Cathay Pacific','JL'=>'Japan Airlines',
+                  'NH'=>'All Nippon Airways','TK'=>'Turkish Airlines','EY'=>'Etihad Airways','LX'=>'Swiss International','OS'=>'Austrian Airlines',
+                  'AI'=>'Air India','TP'=>'TAP Air Portugal','VS'=>'Virgin Atlantic','AM'=>'Aeromexico',
+                  'KE'=>'Korean Air','QF'=>'Qantas Airways','BR'=>'EVA Air','CI'=>'China Airlines',
+                  'CZ'=>'China Southern','MU'=>'China Eastern','CA'=>'Air China','HU'=>'Hainan Airlines',
+                  'TG'=>'Thai Airways','VN'=>'Vietnam Airlines','MH'=>'Malaysia Airlines','SV'=>'Saudia',
+                  'MS'=>'EgyptAir','ET'=>'Ethiopian Airlines','AT'=>'Royal Air Maroc',
+                  'F9'=>'Frontier Airlines','NK'=>'Spirit Airlines','B6'=>'JetBlue Airways','WN'=>'Southwest Airlines','AS'=>'Alaska Airlines',
+                  'CM'=>'Copa Airlines','AV'=>'Avianca','LA'=>'LATAM Airlines','NZ'=>'Air New Zealand',
+                  'GA'=>'Garuda Indonesia','PR'=>'Philippine Airlines','UL'=>'SriLankan Airlines',
+                  'HA'=>'Hawaiian Airlines','G4'=>'Allegiant Air','AD'=>'Azul Brazilian Airlines',
+              ];
+              static $CITIES = [
+                  'YYZ'=>'Toronto','YVR'=>'Vancouver','YUL'=>'Montreal','YYC'=>'Calgary',
+                  'LHR'=>'London Heathrow','LGW'=>'London Gatwick','CDG'=>'Paris CDG','FRA'=>'Frankfurt',
+                  'AMS'=>'Amsterdam','MAD'=>'Madrid','FCO'=>'Rome','MXP'=>'Milan','ZRH'=>'Zurich',
+                  'IST'=>'Istanbul','DXB'=>'Dubai','DOH'=>'Doha','AUH'=>'Abu Dhabi',
+                  'BOM'=>'Mumbai','DEL'=>'Delhi','BLR'=>'Bangalore','MAA'=>'Chennai','HYD'=>'Hyderabad',
+                  'JFK'=>'New York JFK','EWR'=>'Newark','LAX'=>'Los Angeles','SFO'=>'San Francisco',
+                  'ORD'=>'Chicago','MIA'=>'Miami','DFW'=>'Dallas','SEA'=>'Seattle','BOS'=>'Boston',
+                  'ATL'=>'Atlanta','DEN'=>'Denver','SIN'=>'Singapore','HKG'=>'Hong Kong','BKK'=>'Bangkok',
+                  'NRT'=>'Tokyo Narita','HND'=>'Tokyo Haneda','ICN'=>'Seoul','SYD'=>'Sydney','MEL'=>'Melbourne',
+              ];
+              if (empty($segs)) {
+                  echo '<p style="font-size:12px;color:#94a3b8;font-style:italic;">No segments recorded.</p>';
+                  return;
+              }
+              
+              foreach ($segs as $i => $seg):
+                  $iata   = strtoupper($seg['airline_iata'] ?? $seg['airline'] ?? '');
+                  $aName  = $AIRLINES[$iata] ?? $iata;
+                  $from   = strtoupper($seg['from'] ?? $seg['departure_airport'] ?? '');
+                  $to     = strtoupper($seg['to'] ?? $seg['arrival_airport'] ?? '');
+                  $fCity  = $CITIES[$from] ?? $from;
+                  $tCity  = $CITIES[$to] ?? $to;
+                  $logo   = $iata ? "https://www.gstatic.com/flights/airline_logos/70px/{$iata}.png" : '';
+                  $nextDay = !empty($seg['arr_next_day']);
+                  $seat    = htmlspecialchars($seg['seat'] ?? '');
+                  $flightNo = htmlspecialchars($seg['flight_no'] ?? $seg['flight'] ?? '');
+                  $cabin    = htmlspecialchars($seg['cabin_class'] ?? $seg['class'] ?? '');
+                  $date     = htmlspecialchars($seg['date'] ?? $seg['departure_date'] ?? '');
+                  $arrDate  = htmlspecialchars($seg['arrival_date'] ?? '');
+                  $depTime  = htmlspecialchars($seg['dep_time'] ?? $seg['time'] ?? $seg['departure_time'] ?? '');
+                  $arrTime  = htmlspecialchars($seg['arr_time'] ?? $seg['arrival_time'] ?? '');
+                  
+                  // Color for initials fallback
+                  $hash = 0;
+                  foreach (str_split($iata ?: 'XX') as $c) $hash = ord($c) + (($hash << 5) - $hash);
+                  $hue = abs($hash) % 360;
+                  $bgColor = "hsl({$hue},50%,35%)";
+                  ?>
+                  <div style="display:flex;align-items:stretch;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+                    <div style="background:#1e293b;padding:12px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-width:80px;">
+                      <?php if ($logo): ?>
+                      <img src="<?= htmlspecialchars($logo) ?>" alt="<?= htmlspecialchars($iata) ?>"
+                        style="width:36px;height:36px;object-fit:contain;"
+                        onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                      <?php endif; ?>
+                      <div style="display:<?= $logo?'none':'flex' ?>;width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#fff;background:<?= $bgColor ?>"><?= htmlspecialchars($iata ?: '?') ?></div>
+                      <span style="font-size:11px;font-weight:900;color:#fff;"><?= htmlspecialchars($iata) ?></span>
+                      <span style="font-size:9px;color:#94a3b8;text-align:center;line-height:1.2;"><?= htmlspecialchars($aName) ?></span>
+                    </div>
+                    
+                    <div style="flex:1;padding:16px;display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;">
+                      <div style="text-align:right;">
+                        <div style="font-size:20px;font-weight:900;color:#0f1e3c;"><?= $depTime ?></div>
+                        <div style="font-size:14px;font-weight:700;color:#1d4ed8;"><?= htmlspecialchars($from) ?></div>
+                        <div style="font-size:10px;color:#94a3b8;"><?= htmlspecialchars($fCity) ?></div>
+                      </div>
+                      
+                      <div style="display:flex;flex-direction:column;align-items:center;padding:0 8px;gap:2px;">
+                        <div style="font-size:10px;font-weight:700;color:#64748b;"><?= $flightNo ?></div>
+                        <div style="font-size:9px;color:#94a3b8;background:#f1f5f9;padding:2px 6px;border-radius:4px;font-family:monospace;"><?= $cabin ?></div>
+                        <div style="width:64px;height:1px;background:#cbd5e1;position:relative;margin:4px 0;">
+                          <div style="position:absolute;right:-8px;top:-10px;color:#3b82f6;font-size:14px;">✈</div>
+                        </div>
+                        <div style="font-size:9px;color:#94a3b8;"><?= $date ?></div>
+                        <?php if ($seat): ?>
+                        <div style="font-size:8px;font-weight:700;color:#4f46e5;margin-top:2px;">💺 <?= $seat ?></div>
+                        <?php endif; ?>
+                      </div>
+                      
+                      <div>
+                        <div style="display:flex;align-items:baseline;gap:4px;">
+                          <span style="font-size:20px;font-weight:900;color:#0f1e3c;"><?= $arrTime ?></span>
+                          <?php if ($nextDay || ($arrDate && $arrDate !== $date)): ?>
+                          <span style="padding:2px 4px;background:#ffe4e6;color:#e11d48;font-size:9px;font-weight:700;border-radius:4px;">+1d</span>
+                          <?php endif; ?>
+                        </div>
+                        <div style="font-size:14px;font-weight:700;color:#1d4ed8;"><?= htmlspecialchars($to) ?></div>
+                        <div style="font-size:10px;color:#94a3b8;"><?= htmlspecialchars($tCity) ?></div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <?php if ($i < count($segs)-1):
+                      $nextSeg  = $segs[$i + 1];
+                      $thisDate = trim($date);
+                      $nextDate = trim($nextSeg['date'] ?? $nextSeg['departure_date'] ?? '');
+                      $sameDay  = ($thisDate !== '' && $nextDate !== '' && $thisDate === $nextDate);
+    
+                      // Calculate actual layover duration
+                      $layStr   = '';
+                      $layColor = '#b45309'; $layBg = '#fffbeb'; $layBorder = '#fde68a';
+                      $arrT = $arrTime;
+                      $depT = $nextSeg['dep_time'] ?? $nextSeg['time'] ?? $nextSeg['departure_time'] ?? '';
+                      if ($arrT && $depT && strpos($arrT, ':') !== false && strpos($depT, ':') !== false) {
+                          [$ah, $am] = array_map('intval', explode(':', $arrT));
+                          [$dh, $dm] = array_map('intval', explode(':', $depT));
+                          $arrM = $ah * 60 + $am + (!empty($seg['arr_next_day']) || ($arrDate && $arrDate !== $date) ? 1440 : 0);
+                          
+                          $months = ['JAN'=>0,'FEB'=>1,'MAR'=>2,'APR'=>3,'MAY'=>4,'JUN'=>5,'JUL'=>6,'AUG'=>7,'SEP'=>8,'OCT'=>9,'NOV'=>10,'DEC'=>11];
+                          $dateDelta = 0;
+                          if (strlen($thisDate) >= 5 && strlen($nextDate) >= 5) {
+                              $md1 = $months[strtoupper(substr($thisDate,2,3))] ?? null;
+                              $md2 = $months[strtoupper(substr($nextDate,2,3))] ?? null;
+                              if ($md1 !== null && $md2 !== null) {
+                                  $d1 = mktime(0,0,0,$md1+1,intval($thisDate),date('Y'));
+                                  $d2 = mktime(0,0,0,$md2+1,intval($nextDate),date('Y'));
+                                  $dateDelta = (int)round(($d2 - $d1) / 86400);
+                              }
+                          }
+                          $depM = $dh * 60 + $dm + $dateDelta * 1440;
+                          $layMins = $depM - $arrM;
+                          if ($layMins < 0) {
+                              $layStr = '⛔ Impossible connection';
+                              $layColor = '#be123c'; $layBg = '#fff1f2'; $layBorder = '#fecdd3';
+                          } elseif ($layMins < 45) {
+                              $h = intdiv($layMins,60); $m = $layMins % 60;
+                              $layStr = ($h ? $h.'h ' : '') . $m . 'm connection ⚠ Very tight';
+                              $layColor = '#c2410c'; $layBg = '#fff7ed'; $layBorder = '#fed7aa';
+                          } else {
+                              $h = intdiv($layMins,60); $m = $layMins % 60;
+                              $layStr = ($h ? $h.'h ' : '') . ($m ? $m.'m ' : '') . 'connection';
+                          }
+                      }
+                  ?>
+                  <?php if ($sameDay || $layStr): ?>
+                  <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:<?= $layBg ?>;border:1px solid <?= $layBorder ?>;border-radius:8px;font-size:12px;font-weight:600;color:<?= $layColor ?>;">
+                    <span style="font-size:16px;">⏱</span>
+                    <?php if ($layStr): ?>
+                      <?= htmlspecialchars($layStr) ?> in <?= htmlspecialchars($CITIES[$to] ?? $to) ?>
+                    <?php else: ?>
+                      Connection in <?= htmlspecialchars($CITIES[$to] ?? $to) ?>
+                    <?php endif; ?>
+                  </div>
+                  <?php else: ?>
+                  <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:12px;font-weight:600;color:#1d4ed8;">
+                    <span style="font-size:16px;">🛫</span>
+                    Return Leg &mdash; <?= htmlspecialchars($nextDate) ?>
+                  </div>
+                  <?php endif; ?>
+                  <?php endif; ?>
+              <?php endforeach;
+            }
+          }
+          renderSegsETPublic($flightsToRender);
+          ?>
         </div>
-        <?php endforeach; ?>
       </div>
       <?php endif; ?>
 
