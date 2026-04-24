@@ -118,11 +118,25 @@ class AcceptanceEmailService
         $expiry     = $acceptance->expires_at->format('F j, Y \a\t g:i A T');
         $paxList    = implode(', ', array_map(fn($p) => $p['name'] ?? '', $acceptance->passengers ?? []));
 
+        $extraData    = $acceptance->extra_data ?? [];
+        $seatNumber   = $extraData['seat_number']      ?? '';
+        $seatAssigns  = $extraData['seat_assignments'] ?? [];
+
         $body  = "Hello {$acceptance->customer_name},\n\n";
         $body .= "To proceed with your {$typeAction}, kindly click the link below to review and authorize your booking.\n\n";
         $body .= "Booking Reference (PNR): {$acceptance->pnr}\n";
         if ($paxList) {
             $body .= "Passenger(s): {$paxList}\n";
+        }
+        if (!empty($seatAssigns)) {
+            $body .= "Seat Assignments:\n";
+            foreach ($seatAssigns as $sa) {
+                $paxName = $sa['passenger'] ?? '';
+                $seatVal = $sa['seat']      ?? '—';
+                $body .= "  • {$paxName}: Seat {$seatVal}\n";
+            }
+        } elseif ($seatNumber) {
+            $body .= "Seat Number(s): {$seatNumber}\n";
         }
         $body .= "\nAuthorization Link:\n{$link}\n\n";
         $body .= "This link expires on {$expiry}.\n\n";
@@ -155,6 +169,31 @@ class AcceptanceEmailService
             }
         }
 
+        // Seat data
+        $extraData    = $acceptance->extra_data ?? [];
+        $seatNumber   = $extraData['seat_number']      ?? '';
+        $seatAssigns  = $extraData['seat_assignments'] ?? [];
+        $seatCardHtml = '';
+        if (!empty($seatAssigns)) {
+            $rows = '';
+            foreach ($seatAssigns as $sa) {
+                $paxHtml  = htmlspecialchars($sa['passenger'] ?? '');
+                $seatHtml = htmlspecialchars($sa['seat']      ?? '—');
+                $rows .= "<tr><td style='padding:4px 8px; font-size:12px; font-family:monospace; color:#312e81; background:#ede9fe; border-radius:4px; white-space:nowrap;'>{$paxHtml}</td>"
+                       . "<td style='padding:4px 8px 4px 14px; font-size:14px; font-weight:800; font-family:monospace; color:#1e1b4b;'>&#128186; {$seatHtml}</td></tr>";
+            }
+            $seatCardHtml = "<div style='background:#f5f3ff; border:1px solid #c4b5fd; border-radius:8px; padding:12px 16px; margin:0 0 20px;'>"
+                          . "<div style='font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#7c3aed; margin-bottom:8px; font-weight:700;'>&#9992; Seat Assignments</div>"
+                          . "<table style='border-collapse:separate; border-spacing:4px;'>{$rows}</table>"
+                          . "</div>";
+        } elseif ($seatNumber) {
+            $seatHtml     = htmlspecialchars($seatNumber);
+            $seatCardHtml = "<div style='background:#f5f3ff; border:1px solid #c4b5fd; border-radius:8px; padding:12px 16px; margin:0 0 20px;'>"
+                          . "<div style='font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#7c3aed; margin-bottom:4px; font-weight:700;'>&#9992; Seat Number(s)</div>"
+                          . "<div style='font-size:16px; font-weight:800; font-family:monospace; color:#1e1b4b;'>&#128186; {$seatHtml}</div>"
+                          . "</div>";
+        }
+
         return <<<HTML
 <!DOCTYPE html>
 <html>
@@ -184,7 +223,7 @@ class AcceptanceEmailService
       </p>
 
       <!-- PNR + Passengers card -->
-      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px 18px; margin:0 0 26px;">
+      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px 18px; margin:0 0 20px;">
         <table style="width:100%; border-collapse:collapse;">
           <tr>
             <td style="vertical-align:top; padding-right:16px; white-space:nowrap;">
@@ -200,6 +239,8 @@ class AcceptanceEmailService
           </tr>
         </table>
       </div>
+
+      {$seatCardHtml}
 
       <!-- CTA Button -->
       <div style="text-align:center; margin:0 0 22px;">

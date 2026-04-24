@@ -44,7 +44,7 @@ if (!empty($fareBreakdown) && is_array($fareBreakdown)) {
 $passengers   = $acceptance->passengers    ?? [];
 $additionalCards = $acceptance->additional_cards ?? [];
 
-// Extra data — cancel/refund and cancel/credit fields
+// Extra data — cancel/refund, cancel/credit, seat, and other fields
 $extraData    = $acceptance->extra_data ?? [];
 if (is_string($extraData)) $extraData = json_decode($extraData, true) ?: [];
 $crRefundAmt  = $extraData['refund_amount']   ?? null;
@@ -55,6 +55,8 @@ $ccCreditAmt  = $extraData['credit_amount']   ?? null;
 $ccValidUntil = $extraData['valid_until']     ?? null;
 $ccInstructions= $extraData['instructions']   ?? null;
 $ccEtktList   = $extraData['etkt_list']       ?? [];
+$seatNumber   = $extraData['seat_number']     ?? '';
+$seatAssigns  = $extraData['seat_assignments'] ?? []; // [{passenger, seat}]
 
 // Primary airline IATA (from first flight segment, if available)
 $primaryIata = '';
@@ -587,14 +589,23 @@ tailwind.config = {
       <?php endif; ?>
 
       <!-- ── OTHER / FREE-FORM ── -->
-      <?php if ($acceptance->type === 'other' && !empty($acceptance->extra_data['description'])): ?>
+      <?php
+      $otherTitle = $extraData['other_title'] ?? '';
+      $otherNotes = $extraData['other_notes'] ?? '';
+      ?>
+      <?php if ($acceptance->type === 'other' && ($otherTitle || $otherNotes)): ?>
       <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div class="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
           <span class="material-symbols-outlined text-slate-500 text-base">edit_document</span>
           <h2 class="font-bold text-slate-900 text-sm" style="font-family:Manrope,sans-serif;">Authorization Details</h2>
         </div>
         <div class="p-5">
-          <p class="text-sm text-slate-700 whitespace-pre-wrap"><?= htmlspecialchars($acceptance->extra_data['description']) ?></p>
+          <?php if ($otherTitle): ?>
+          <p class="text-sm font-bold text-slate-800 mb-1"><?= htmlspecialchars($otherTitle) ?></p>
+          <?php endif; ?>
+          <?php if ($otherNotes): ?>
+          <p class="text-sm text-slate-700 whitespace-pre-wrap"><?= htmlspecialchars($otherNotes) ?></p>
+          <?php endif; ?>
         </div>
       </div>
       <?php endif; ?>
@@ -768,7 +779,7 @@ tailwind.config = {
       </div>
 
       <!-- ── TICKET CONDITIONS ── -->
-      <?php if ($acceptance->endorsements || $acceptance->baggage_info || $acceptance->fare_rules): ?>
+      <?php if ($acceptance->endorsements || $acceptance->baggage_info || $acceptance->fare_rules || $seatNumber || !empty($seatAssigns)): ?>
       <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div class="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
           <span class="material-symbols-outlined text-slate-500 text-base">rule</span>
@@ -791,6 +802,28 @@ tailwind.config = {
           <div>
             <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fare Rules</p>
             <p class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed"><?= htmlspecialchars(str_ireplace(['Lets Fly Travel LLC DBA Base Fare', 'Lets Fly Travel DBA Base Fare'], $dbaName, $acceptance->fare_rules)) ?></p>
+          </div>
+          <?php endif; ?>
+          <?php if (!empty($seatAssigns)): ?>
+          <div class="p-3 bg-indigo-50 border border-indigo-200 rounded-xl">
+            <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <span class="material-symbols-outlined text-sm">airline_seat_recline_normal</span> Seat Assignments
+            </p>
+            <div class="space-y-1.5">
+              <?php foreach ($seatAssigns as $sa): ?>
+              <div class="flex items-center gap-3">
+                <span class="text-xs font-mono font-semibold text-indigo-800 bg-indigo-100 px-2 py-0.5 rounded"><?= htmlspecialchars($sa['passenger'] ?? '') ?></span>
+                <span class="text-sm font-black text-indigo-900 font-mono">💺 <?= htmlspecialchars($sa['seat'] ?? '—') ?></span>
+              </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+          <?php elseif ($seatNumber): ?>
+          <div class="p-3 bg-indigo-50 border border-indigo-200 rounded-xl">
+            <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+              <span class="material-symbols-outlined text-sm">airline_seat_recline_normal</span> Seat Number(s)
+            </p>
+            <p class="text-sm font-black text-indigo-900 font-mono">💺 <?= htmlspecialchars($seatNumber) ?></p>
           </div>
           <?php endif; ?>
         </div>

@@ -807,18 +807,44 @@ tailwind.config = {
         <?php endif; ?>
 
         <!-- Ticket conditions -->
-        <?php if ($acceptance->endorsements || $acceptance->baggage_info): ?>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <?php if ($acceptance->endorsements): ?>
-          <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-            <p class="text-[9px] font-bold text-slate-400 uppercase mb-1">Endorsements</p>
-            <p class="text-xs font-mono text-slate-800"><?= h($acceptance->endorsements) ?></p>
+        <?php
+          $authSeatNumber  = $acceptance->extra_data['seat_number']      ?? '';
+          $authSeatAssigns = $acceptance->extra_data['seat_assignments']  ?? [];
+        ?>
+        <?php if ($acceptance->endorsements || $acceptance->baggage_info || $authSeatNumber || !empty($authSeatAssigns)): ?>
+        <div class="space-y-2">
+          <?php if ($acceptance->endorsements || $acceptance->baggage_info): ?>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <?php if ($acceptance->endorsements): ?>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+              <p class="text-[9px] font-bold text-slate-400 uppercase mb-1">Endorsements</p>
+              <p class="text-xs font-mono text-slate-800"><?= h($acceptance->endorsements) ?></p>
+            </div>
+            <?php endif; ?>
+            <?php if ($acceptance->baggage_info): ?>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+              <p class="text-[9px] font-bold text-slate-400 uppercase mb-1">Baggage</p>
+              <p class="text-xs text-slate-700"><?= h($acceptance->baggage_info) ?></p>
+            </div>
+            <?php endif; ?>
           </div>
           <?php endif; ?>
-          <?php if ($acceptance->baggage_info): ?>
-          <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-            <p class="text-[9px] font-bold text-slate-400 uppercase mb-1">Baggage</p>
-            <p class="text-xs text-slate-700"><?= h($acceptance->baggage_info) ?></p>
+          <?php if (!empty($authSeatAssigns)): ?>
+          <div class="p-3 bg-indigo-50 border border-indigo-200 rounded-xl">
+            <p class="text-[9px] font-bold text-indigo-500 uppercase mb-2">✈ Seat Assignments</p>
+            <div class="space-y-1.5">
+              <?php foreach ($authSeatAssigns as $sa): ?>
+              <div class="flex items-center gap-3">
+                <span class="text-xs font-mono font-semibold text-indigo-800 bg-indigo-100 px-2 py-0.5 rounded"><?= h($sa['passenger'] ?? '') ?></span>
+                <span class="text-sm font-black text-indigo-900 font-mono">💺 <?= h($sa['seat'] ?? '—') ?></span>
+              </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+          <?php elseif ($authSeatNumber): ?>
+          <div class="p-3 bg-indigo-50 border border-indigo-200 rounded-xl">
+            <p class="text-[9px] font-bold text-indigo-500 uppercase mb-1">✈ Seat Number(s)</p>
+            <p class="text-sm font-black text-indigo-900 font-mono">💺 <?= h($authSeatNumber) ?></p>
           </div>
           <?php endif; ?>
         </div>
