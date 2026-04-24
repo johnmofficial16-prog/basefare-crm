@@ -348,9 +348,6 @@ tailwind.config = {
     <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
       <span class="material-symbols-outlined text-4xl text-emerald-600">verified</span>
     </div>
-    <div class="mb-4">
-      <span class="text-xs font-bold text-slate-500"><?= h($dbaName) ?></span>
-    </div>
     <?php if ($airlineDisplayName): ?>
     <div class="flex items-center justify-center gap-3 mb-1">
       <?php if ($headerLogoUrl): ?>
