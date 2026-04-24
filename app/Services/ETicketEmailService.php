@@ -426,28 +426,34 @@ class ETicketEmailService
 
     </div>
 
-    <!-- Acknowledge Section -->
-    <div style="background:linear-gradient(135deg,#0f1e3c,#1a3a6b);padding:32px 30px;text-align:center;">
-      <div style="color:#fff;font-size:17px;font-weight:800;margin-bottom:8px;">Ready to Acknowledge?</div>
-      <div style="color:rgba(255,255,255,.7);font-size:12px;line-height:1.7;margin-bottom:24px;">
-        By clicking the button below, you confirm that you have received<br>your e-ticket and all details are correct.
+    <!-- Closing Note -->
+    <div style="background:linear-gradient(135deg,#0f1e3c,#1a3a6b);padding:28px 30px;text-align:center;">
+      <div style="color:#c9a84c;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">&#10003; Your Documents Are Ready</div>
+      <div style="color:rgba(255,255,255,0.85);font-size:13px;line-height:1.8;margin-bottom:20px;">
+        Please review all details carefully. If you have any questions or notice<br>any discrepancies, contact us immediately at the address below.
       </div>
-      <a href="{$ackUrl}"
-         style="display:inline-block;background:linear-gradient(135deg,#c9a84c,#d4b86a);color:#0f1e3c;text-decoration:none;padding:18px 52px;border-radius:10px;font-weight:900;font-size:16px;letter-spacing:.3px;">
-        &#10003; I Acknowledge Receipt of My E-Ticket
-      </a>
-      <div style="margin-top:14px;font-size:11px;color:rgba(255,255,255,.45);">
-        This acknowledgment is legally binding and is recorded with your IP address &amp; timestamp.
-      </div>
-      <div style="margin-top:10px;">
-        <a href="{$viewUrl}" style="color:rgba(255,255,255,.45);font-size:11px;text-decoration:none;">View full e-ticket online &rarr;</a>
-      </div>
+      <table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+        <tr>
+          <td style="padding:0 8px;">
+            <a href="mailto:reservation@base-fare.com"
+               style="display:inline-block;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;text-decoration:none;padding:11px 28px;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:0.3px;">
+              &#9993;&nbsp; Contact Us
+            </a>
+          </td>
+          <td style="padding:0 8px;">
+            <a href="{$viewUrl}"
+               style="display:inline-block;background:linear-gradient(135deg,#c9a84c,#d4b86a);color:#0f1e3c;text-decoration:none;padding:11px 28px;border-radius:8px;font-weight:800;font-size:13px;letter-spacing:0.3px;">
+              View Online &rarr;
+            </a>
+          </td>
+        </tr>
+      </table>
     </div>
 
     <!-- Footer -->
-    <div style="background:#f8fafc;padding:16px 30px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
-      <strong style="color:#0f1e3c;">Lets Fly Travel DBA Base Fare</strong> &nbsp;&middot;&nbsp; reservation@base-fare.com<br>
-      <span style="font-size:10px;">This is an official electronic travel document. Do not forward or share this email.</span>
+    <div style="background:#f8fafc;padding:18px 30px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
+      <strong style="color:#0f1e3c;">Reservation Desk</strong> &nbsp;&middot;&nbsp; reservation@base-fare.com<br>
+      <span style="font-size:10px;">This is an official travel confirmation. Please retain this email for your records.</span>
     </div>
 
   </div>
