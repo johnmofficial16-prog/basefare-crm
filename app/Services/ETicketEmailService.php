@@ -248,7 +248,23 @@ class ETicketEmailService
             </tr>";
         }
 
-        // ── Flight itinerary rows ─────────────────────────────────────────────
+        // ── City name lookup ──────────────────────────────────────────────────
+        $cityNames = [
+            'YYZ'=>'Toronto','YVR'=>'Vancouver','YUL'=>'Montreal','YYC'=>'Calgary','YEG'=>'Edmonton','YOW'=>'Ottawa',
+            'LHR'=>'London Heathrow','LGW'=>'London Gatwick','CDG'=>'Paris CDG','ORY'=>'Paris Orly',
+            'FRA'=>'Frankfurt','MUC'=>'Munich','AMS'=>'Amsterdam','MAD'=>'Madrid','BCN'=>'Barcelona',
+            'FCO'=>'Rome','MXP'=>'Milan','ZRH'=>'Zurich','VIE'=>'Vienna','BRU'=>'Brussels',
+            'IST'=>'Istanbul','DXB'=>'Dubai','DOH'=>'Doha','AUH'=>'Abu Dhabi','MCT'=>'Muscat','BAH'=>'Bahrain',
+            'BOM'=>'Mumbai','DEL'=>'Delhi','BLR'=>'Bangalore','MAA'=>'Chennai','HYD'=>'Hyderabad','CCU'=>'Kolkata','COK'=>'Kochi',
+            'JFK'=>'New York JFK','EWR'=>'Newark','LAX'=>'Los Angeles','SFO'=>'San Francisco',
+            'ORD'=>'Chicago','MIA'=>'Miami','DFW'=>'Dallas','SEA'=>'Seattle','BOS'=>'Boston',
+            'ATL'=>'Atlanta','DEN'=>'Denver','IAH'=>'Houston','PHX'=>'Phoenix','LAS'=>'Las Vegas',
+            'SIN'=>'Singapore','HKG'=>'Hong Kong','BKK'=>'Bangkok','KUL'=>'Kuala Lumpur',
+            'NRT'=>'Tokyo Narita','HND'=>'Tokyo Haneda','ICN'=>'Seoul','PVG'=>'Shanghai',
+            'SYD'=>'Sydney','MEL'=>'Melbourne','AKL'=>'Auckland',
+            'JNB'=>'Johannesburg','NBO'=>'Nairobi','CMN'=>'Casablanca','CAI'=>'Cairo','ADD'=>'Addis Ababa',
+        ];
+
         $flightRows = '';
         $flightData = $eticket->flight_data ?? [];
         $segs = [];
@@ -257,24 +273,89 @@ class ETicketEmailService
         } elseif (!empty($flightData) && is_array(reset($flightData))) {
             $segs = array_values($flightData);
         }
-        foreach ($segs as $seg) {
-            $from  = strtoupper($seg['from'] ?? $seg['departure_airport'] ?? '');
-            $to    = strtoupper($seg['to']   ?? $seg['arrival_airport']   ?? '');
-            if (!$from || !$to) continue;
-            $iata  = strtoupper($seg['airline_iata'] ?? $seg['airline'] ?? '');
-            $fltNo = htmlspecialchars($seg['flight_no']   ?? $seg['flight']         ?? '');
-            $cabin = htmlspecialchars($seg['cabin_class'] ?? $seg['class']          ?? '');
-            $date  = htmlspecialchars($seg['date']        ?? $seg['departure_date'] ?? '');
-            $dep   = htmlspecialchars($seg['dep_time']    ?? $seg['time']           ?? '');
-            $arr   = htmlspecialchars($seg['arr_time']    ?? $seg['arrival_time']   ?? '');
-            $nd    = !empty($seg['arr_next_day']) ? " <span style='color:#e11d48;font-size:10px;font-weight:700;'>(+1d)</span>" : '';
-            $logo  = $iata ? "<img src='https://www.gstatic.com/flights/airline_logos/70px/{$iata}.png' width='20' height='20' style='border-radius:3px;vertical-align:middle;margin-right:5px;'>" : '';
-            $flightRows .= "<tr style='border-bottom:1px solid #f1f5f9;'>
-              <td style='padding:10px 12px;font-size:13px;'>{$logo}<strong style='color:#0f1e3c;'>{$from}</strong>&nbsp;&#8594;&nbsp;<strong style='color:#0f1e3c;'>{$to}</strong></td>
-              <td style='padding:10px 12px;font-size:11px;color:#64748b;font-family:monospace;'>{$fltNo}<br>{$cabin}</td>
-              <td style='padding:10px 12px;font-size:11px;color:#475569;'>{$date}<br><span style='font-weight:700;'>{$dep}&nbsp;&#8594;&nbsp;{$arr}{$nd}</span></td>
-            </tr>";
+        $segs = array_values(array_filter($segs, fn($s) =>
+            (!empty($s['from']) || !empty($s['departure_airport'])) &&
+            (!empty($s['to'])   || !empty($s['arrival_airport']))
+        ));
+        $segCount = count($segs);
+        foreach ($segs as $idx => $seg) {
+            $from    = strtoupper($seg['from']   ?? $seg['departure_airport'] ?? '');
+            $to      = strtoupper($seg['to']     ?? $seg['arrival_airport']   ?? '');
+            $iata    = strtoupper($seg['airline_iata'] ?? $seg['airline']     ?? '');
+            $fltNo   = htmlspecialchars($seg['flight_no']   ?? $seg['flight']         ?? '');
+            $cabin   = htmlspecialchars($seg['cabin_class'] ?? $seg['class']          ?? '');
+            $date    = htmlspecialchars($seg['date']        ?? $seg['departure_date'] ?? '');
+            $arrDate = htmlspecialchars($seg['arrival_date'] ?? '');
+            $dep     = htmlspecialchars($seg['dep_time']    ?? $seg['time']           ?? '');
+            $arr     = htmlspecialchars($seg['arr_time']    ?? $seg['arrival_time']   ?? '');
+            $nd      = !empty($seg['arr_next_day']) || ($arrDate && $arrDate !== $date);
+            $ndBadge = $nd ? "<span style='background:#fee2e2;color:#b91c1c;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:4px;'>+1d</span>" : '';
+            $fromCity = htmlspecialchars($cityNames[$from] ?? '');
+            $toCity   = htmlspecialchars($cityNames[$to]   ?? '');
+            $logoTag  = $iata ? "<img src='https://www.gstatic.com/flights/airline_logos/70px/{$iata}.png' width='18' height='18' style='border-radius:3px;vertical-align:middle;margin-right:5px;' onerror=\"this.style.display='none'\">" : '';
+
+            $flightRows .= "<tr style='border-bottom:1px solid #f1f5f9;'>"
+                . "<td style='padding:10px 12px;font-size:13px;'>"
+                .   "<div style='font-weight:800;color:#0f1e3c;'>{$from}</div>"
+                .   ($fromCity ? "<div style='font-size:10px;color:#94a3b8;'>{$fromCity}</div>" : '')
+                . "</td>"
+                . "<td style='padding:10px 8px;text-align:center;font-size:11px;color:#64748b;'>"
+                .   "{$logoTag}<span style='font-family:monospace;font-weight:700;'>{$fltNo}</span>"
+                .   ($cabin ? "<br><span style='font-size:9px;background:#f1f5f9;color:#475569;padding:1px 4px;border-radius:3px;'>{$cabin}</span>" : '')
+                .   "<br><span style='font-size:9px;color:#94a3b8;'>{$date}</span>"
+                . "</td>"
+                . "<td style='padding:10px 8px;text-align:center;font-size:11px;color:#64748b;'>"
+                .   ($dep ? "<strong style='color:#1e293b;'>" . $dep . "</strong> &rarr; <strong style='color:#1e293b;'>" . $arr . "</strong>" . $ndBadge : '&mdash;')
+                . "</td>"
+                . "<td style='padding:10px 12px;font-size:13px;text-align:right;'>"
+                .   "<div style='font-weight:800;color:#0f1e3c;'>{$to}</div>"
+                .   ($toCity ? "<div style='font-size:10px;color:#94a3b8;'>{$toCity}</div>" : '')
+                . "</td>"
+                . "</tr>";
+
+            // Layover indicator
+            if ($idx < $segCount - 1) {
+                $nextSeg  = $segs[$idx + 1];
+                $arrT = $arr;
+                $depT = htmlspecialchars($nextSeg['dep_time'] ?? $nextSeg['time'] ?? $nextSeg['departure_time'] ?? '');
+                $layStr   = 'Connection in ' . ($cityNames[$to] ?? $to);
+                $layColor = '#fffbeb'; $layBorder = '#fde68a'; $layText = '#92400e';
+                if ($arrT && $depT && strpos($arrT,':') !== false && strpos($depT,':') !== false) {
+                    [$ah,$am] = array_map('intval', explode(':',$arrT));
+                    [$dh,$dm] = array_map('intval', explode(':',$depT));
+                    $arrM = $ah*60+$am + ($nd ? 1440 : 0);
+                    $depM = $dh*60+$dm;
+                    if ($depM < $arrM && !$nd) $depM += 1440;
+                    $layMins = $depM - $arrM;
+                    if ($layMins < 0) {
+                        $layStr = '⛔ Impossible connection at ' . ($cityNames[$to] ?? $to);
+                        $layColor='#fff1f2';$layBorder='#fca5a5';$layText='#b91c1c';
+                    } elseif ($layMins < 45) {
+                        $h=intdiv($layMins,60);$m=$layMins%60;
+                        $layStr = ($h?"{$h}h ":'') . "{$m}m connection ⚠ Very tight — " . ($cityNames[$to] ?? $to);
+                        $layColor='#fff7ed';$layBorder='#fdba74';$layText='#c2410c';
+                    } else {
+                        $h=intdiv($layMins,60);$m=$layMins%60;
+                        $layStr = ($h?"{$h}h ":'') . ($m?"{$m}m ":'') . 'connection — ' . ($cityNames[$to] ?? $to);
+                    }
+                }
+                $flightRows .= "<tr style='background:{$layColor};'>"
+                    . "<td colspan='4' style='padding:6px 12px;font-size:10px;font-weight:700;color:{$layText};border-bottom:1px solid {$layBorder};border-top:1px solid {$layBorder};'>"
+                    . "✈&nbsp; {$layStr}"
+                    . "</td></tr>";
+            }
         }
+
+        $itinSection = $flightRows ? "
+      <div style='margin:0 0 24px;'>
+        <div style='font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;'>&#9992; Flight Itinerary</div>
+        <table style='width:100%;border-collapse:collapse;border:1px solid #f1f5f9;border-radius:8px;overflow:hidden;'><thead><tr style='background:#f8fafc;'>
+          <th style='padding:8px 12px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;'>From</th>
+          <th style='padding:8px 8px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;'>Flight</th>
+          <th style='padding:8px 8px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;'>Times</th>
+          <th style='padding:8px 12px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;'>To</th>
+        </tr></thead><tbody>{$flightRows}</tbody></table>
+      </div>" : '';
 
         // ── Fare rows ─────────────────────────────────────────────────────────
         $fareRows = '';
@@ -294,8 +375,31 @@ class ETicketEmailService
       <div style='margin:0 0 24px;'>
         <div style='font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;'>&#128176; Fare Summary</div>
         <table style='width:100%;border-collapse:collapse;'><tbody>{$fareRows}</tbody></table>
-        <div style='display:flex;justify-content:space-between;padding:10px 0 0;border-top:2px solid #e2e8f0;margin-top:8px;'><span style='font-size:14px;font-weight:800;color:#065f46;'>Total Charged</span><span style='font-size:14px;font-weight:800;font-family:monospace;color:#065f46;'>{$total}</span></div>
+        <table style='width:100%;border-collapse:collapse;margin-top:8px;border-top:2px solid #e2e8f0;'><tr>
+          <td style='padding:10px 0 0;font-size:14px;font-weight:800;color:#065f46;'>Total Charged</td>
+          <td style='padding:10px 0 0;font-size:14px;font-weight:800;font-family:monospace;color:#065f46;text-align:right;'>{$total}</td>
+        </tr></table>
       </div>" : "<div style='padding:0 0 24px;text-align:right;font-size:15px;font-weight:800;color:#065f46;'>Total: {$total}</div>";
+
+        // ── Ticket Conditions (endorsements, baggage, fare rules, policy) ───
+        $condParts = [];
+        if (!empty($eticket->endorsements)) {
+            $condParts[] = "<div style='margin-bottom:12px;'><div style='font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:4px;'>Endorsements</div><div style='font-size:12px;font-family:monospace;color:#334155;white-space:pre-line;'>" . htmlspecialchars($eticket->endorsements) . "</div></div>";
+        }
+        if (!empty($eticket->baggage_info)) {
+            $condParts[] = "<div style='margin-bottom:12px;'><div style='font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:4px;'>Baggage Allowance</div><div style='font-size:12px;color:#334155;white-space:pre-line;'>" . htmlspecialchars($eticket->baggage_info) . "</div></div>";
+        }
+        if (!empty($eticket->fare_rules)) {
+            $condParts[] = "<div style='margin-bottom:12px;'><div style='font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:4px;'>Fare Rules</div><div style='font-size:12px;color:#334155;white-space:pre-line;'>" . htmlspecialchars($eticket->fare_rules) . "</div></div>";
+        }
+        if (!empty($eticket->policy_text)) {
+            $condParts[] = "<div><div style='font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:4px;'>Policy</div><div style='font-size:12px;color:#334155;white-space:pre-line;'>" . htmlspecialchars($eticket->policy_text) . "</div></div>";
+        }
+        $condSection = !empty($condParts) ? "
+      <div style='margin:0 0 24px;background:#fafafa;border:1px solid #e2e8f0;border-radius:8px;padding:16px 18px;'>
+        <div style='font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;'>&#128203; Ticket Conditions</div>"
+            . implode('', $condParts) . "
+      </div>" : '';
 
         $orderLine = $orderId ? "<div style='font-size:11px;color:#94a3b8;margin-top:4px;'>Conf: {$orderId}</div>" : '';
 
@@ -423,6 +527,7 @@ class ETicketEmailService
 
       {$itinSection}
       {$fareSection}
+      {$condSection}
 
     </div>
 
@@ -430,24 +535,12 @@ class ETicketEmailService
     <div style="background:linear-gradient(135deg,#0f1e3c,#1a3a6b);padding:28px 30px;text-align:center;">
       <div style="color:#c9a84c;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">&#10003; Your Documents Are Ready</div>
       <div style="color:rgba(255,255,255,0.85);font-size:13px;line-height:1.8;margin-bottom:20px;">
-        Please review all details carefully. If you have any questions or notice<br>any discrepancies, contact us immediately at the address below.
+        Please review all details carefully. If you have any questions or notice<br>any discrepancies, contact us immediately.
       </div>
-      <table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
-        <tr>
-          <td style="padding:0 8px;">
-            <a href="mailto:reservation@base-fare.com"
-               style="display:inline-block;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;text-decoration:none;padding:11px 28px;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:0.3px;">
-              &#9993;&nbsp; Contact Us
-            </a>
-          </td>
-          <td style="padding:0 8px;">
-            <a href="{$viewUrl}"
-               style="display:inline-block;background:linear-gradient(135deg,#c9a84c,#d4b86a);color:#0f1e3c;text-decoration:none;padding:11px 28px;border-radius:8px;font-weight:800;font-size:13px;letter-spacing:0.3px;">
-              View Online &rarr;
-            </a>
-          </td>
-        </tr>
-      </table>
+      <a href="mailto:reservation@base-fare.com"
+         style="display:inline-block;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;text-decoration:none;padding:11px 32px;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:0.3px;">
+        &#9993;&nbsp; Contact Us
+      </a>
     </div>
 
     <!-- Footer -->
