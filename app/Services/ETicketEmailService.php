@@ -19,7 +19,7 @@ use PHPMailer\PHPMailer\Exception;
 class ETicketEmailService
 {
     const SUPPORT_EMAIL = 'reservation@base-fare.com';
-    const SUPPORT_NAME  = 'Lets Fly Travel DBA Base Fare';
+    const SUPPORT_NAME  = 'Reservation Desk';
 
     // =========================================================================
     // MAILER SETUP
@@ -37,7 +37,7 @@ class ETicketEmailService
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = $_ENV['SMTP_PORT']    ?? 587;
 
-        $fromName  = $_ENV['SMTP_FROM_NAME'] ?? self::SUPPORT_NAME;
+        $fromName  = 'Reservation Desk';
         $fromEmail = $_ENV['SMTP_FROM']      ?? $_ENV['SMTP_USER'] ?? '';
 
         if ($fromEmail) {
@@ -126,11 +126,65 @@ class ETicketEmailService
 
     public function buildSubject(ETicket $eticket): string
     {
+        // Resolve type label from the linked transaction (if available)
+        $typeLabel = $this->resolveTypeLabel($eticket);
         return sprintf(
-            'Your E-Ticket — PNR: %s | %s | Lets Fly Travel',
+            '%s — PNR: %s | %s | Lets Fly Travel',
+            $typeLabel,
             $eticket->pnr,
             $eticket->customer_name
         );
+    }
+
+    /**
+     * Resolve a human-readable type label from the linked Transaction.
+     * Falls back gracefully if the transaction is not loaded or has no type.
+     */
+    private function resolveTypeLabel(ETicket $eticket): string
+    {
+        $typeMap = [
+            'new_booking'      => 'Booking Confirmation',
+            'exchange'         => 'Exchange Confirmation',
+            'seat_purchase'    => 'Seat Purchase Confirmation',
+            'cabin_upgrade'    => 'Cabin Upgrade Confirmation',
+            'cancel_refund'    => 'Cancellation & Refund Notice',
+            'cancel_credit'    => 'Cancellation & Credit Notice',
+            'name_correction'  => 'Name Correction Confirmation',
+            'other'            => 'Service Confirmation',
+        ];
+        // Try the eager-loaded relationship first (avoids extra query if loaded)
+        $txn = $eticket->relationLoaded('transaction')
+            ? $eticket->transaction
+            : $eticket->transaction()->first();
+        if ($txn && !empty($txn->type)) {
+            return $typeMap[$txn->type] ?? 'Service Confirmation';
+        }
+        // Absolute fallback — generic
+        return 'Booking Confirmation';
+    }
+
+    /**
+     * Short type badge text for email header banner.
+     */
+    private function resolveTypeBadge(ETicket $eticket): string
+    {
+        $badgeMap = [
+            'new_booking'      => '✈ ELECTRONIC TICKET',
+            'exchange'         => '🔄 EXCHANGE / DATE CHANGE',
+            'seat_purchase'    => '💺 SEAT PURCHASE',
+            'cabin_upgrade'    => '⬆ CABIN UPGRADE',
+            'cancel_refund'    => '✕ CANCELLATION & REFUND',
+            'cancel_credit'    => '✕ CANCELLATION & CREDIT',
+            'name_correction'  => '✎ NAME CORRECTION',
+            'other'            => '📋 SERVICE CONFIRMATION',
+        ];
+        $txn = $eticket->relationLoaded('transaction')
+            ? $eticket->transaction
+            : $eticket->transaction()->first();
+        if ($txn && !empty($txn->type)) {
+            return $badgeMap[$txn->type] ?? '📋 CONFIRMATION';
+        }
+        return '✈ ELECTRONIC TICKET';
     }
 
     // =========================================================================
@@ -245,6 +299,70 @@ class ETicketEmailService
 
         $orderLine = $orderId ? "<div style='font-size:11px;color:#94a3b8;margin-top:4px;'>Conf: {$orderId}</div>" : '';
 
+        // ── Resolve type label + badge for this e-ticket ──────────────────
+        $typeLabel = $this->resolveTypeLabel($eticket);
+        $typeBadge = $this->resolveTypeBadge($eticket);
+
+        // ── Resolve airline IATA from flight segments (most reliable) ────────
+        $flightDataForIata = $eticket->flight_data ?? [];
+        $allSegsForIata = array_merge(
+            (array)($flightDataForIata['flights']     ?? []),
+            (array)($flightDataForIata['old_flights'] ?? []),
+            (array)($flightDataForIata['new_flights'] ?? [])
+        );
+        $headerIataCode = null;
+        foreach ($allSegsForIata as $seg) {
+            $cand = strtoupper(trim($seg['airline_iata'] ?? ''));
+            if (preg_match('/^[A-Z0-9]{2,3}$/', $cand)) { $headerIataCode = $cand; break; }
+        }
+        // Fallback: airline field itself may be a code
+        if (!$headerIataCode) {
+            $airlineUpper = strtoupper(trim($eticket->airline ?? ''));
+            if (preg_match('/^[A-Z0-9]{2,3}$/', $airlineUpper)) { $headerIataCode = $airlineUpper; }
+        }
+        // Resolve full name (so "AA" becomes "American Airlines")
+        $iataFullNames = [
+            'AC'=>'Air Canada','WS'=>'WestJet','TS'=>'Air Transat','PD'=>'Porter Airlines','WG'=>'Sunwing',
+            'AA'=>'American Airlines','DL'=>'Delta Air Lines','UA'=>'United Airlines',
+            'WN'=>'Southwest Airlines','B6'=>'JetBlue Airways','AS'=>'Alaska Airlines',
+            'F9'=>'Frontier Airlines','NK'=>'Spirit Airlines','G4'=>'Allegiant Air','HA'=>'Hawaiian Airlines',
+            'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM',
+            'LX'=>'Swiss International','OS'=>'Austrian Airlines','SN'=>'Brussels Airlines',
+            'IB'=>'Iberia','VY'=>'Vueling','TP'=>'TAP Portugal','FR'=>'Ryanair',
+            'U2'=>'easyJet','DY'=>'Norwegian Air','TK'=>'Turkish Airlines','LO'=>'LOT Polish Airlines',
+            'EK'=>'Emirates','QR'=>'Qatar Airways','EY'=>'Etihad Airways',
+            'FZ'=>'flydubai','G9'=>'Air Arabia','WY'=>'Oman Air','GF'=>'Gulf Air',
+            'SQ'=>'Singapore Airlines','CX'=>'Cathay Pacific','JL'=>'Japan Airlines',
+            'NH'=>'All Nippon Airways','KE'=>'Korean Air','OZ'=>'Asiana Airlines',
+            'TG'=>'Thai Airways','MH'=>'Malaysia Airlines','SV'=>'Saudia',
+            '6E'=>'IndiGo','SG'=>'SpiceJet','AI'=>'Air India','UK'=>'Vistara',
+            'AM'=>'Aeromexico','LA'=>'LATAM Airlines','AV'=>'Avianca','CM'=>'Copa Airlines',
+            'QF'=>'Qantas Airways','NZ'=>'Air New Zealand',
+            'MU'=>'China Eastern','CA'=>'Air China','CZ'=>'China Southern',
+            'ET'=>'Ethiopian Airlines','KQ'=>'Kenya Airways','AT'=>'Royal Air Maroc',
+            'UL'=>'SriLankan Airlines','KU'=>'Kuwait Airways','MS'=>'EgyptAir',
+        ];
+        $airlineRaw = trim($eticket->airline ?? '');
+        $airlineUpper2 = strtoupper($airlineRaw);
+        if (preg_match('/^[A-Z0-9]{2,3}$/', $airlineUpper2) && isset($iataFullNames[$airlineUpper2])) {
+            $headerAirlineName = $iataFullNames[$airlineUpper2];
+        } else {
+            $headerAirlineName = $airlineRaw ?: ($headerIataCode ? ($iataFullNames[$headerIataCode] ?? $headerIataCode) : '');
+        }
+        $headerAirlineName = htmlspecialchars($headerAirlineName);
+        // Build logo + name block (table layout — Gmail safe, no flex)
+        $headerAirlineHtml = '';
+        if ($headerAirlineName) {
+            $logoCell = $headerIataCode
+                ? "<td style='padding:0 8px 0 0;vertical-align:middle;'><img src='https://www.gstatic.com/flights/airline_logos/70px/{$headerIataCode}.png' alt='{$headerAirlineName}' width='40' height='40' style='display:block;border-radius:6px;background:#fff;padding:2px;'></td>"
+                : '';
+            $headerAirlineHtml = "<div style='margin-top:14px;text-align:center;'>"
+                . "<table cellpadding='0' cellspacing='0' border='0' style='display:inline-table;margin:0 auto;'><tr>"
+                . $logoCell
+                . "<td style='vertical-align:middle;'><span style='color:rgba(255,255,255,0.95);font-size:16px;font-weight:700;letter-spacing:0.5px;'>{$headerAirlineName}</span></td>"
+                . "</tr></table></div>";
+        }
+
         return <<<HTML
 <!DOCTYPE html>
 <html>
@@ -252,26 +370,25 @@ class ETicketEmailService
 <body style="font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;margin:0;padding:20px;color:#333;">
   <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.08);">
 
-    <!-- Header -->
+    <!-- Header: Airline logo + name + type badge -->
     <div style="background:linear-gradient(135deg,#0f1e3c 0%,#1a3a6b 100%);padding:28px 30px;text-align:center;">
-      <div style="color:#fff;font-size:22px;font-weight:800;letter-spacing:1px;">LETS FLY TRAVEL</div>
-      <div style="color:#c9a84c;font-size:11px;font-weight:700;margin-top:3px;letter-spacing:.5px;">DBA BASE FARE</div>
+      {$headerAirlineHtml}
       <div style="margin-top:14px;border-top:1px solid rgba(255,255,255,.2);padding-top:12px;">
-        <span style="color:#fff;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">&#9992; ELECTRONIC TICKET</span>
+        <span style="color:#fff;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">{$typeBadge}</span>
       </div>
     </div>
 
     <!-- Status Banner -->
     <div style="background:#d1fae5;border-bottom:2px solid #6ee7b7;padding:12px 30px;">
-      <div style="font-size:13px;font-weight:800;color:#064e3b;">&#10003; E-Ticket Ready &mdash; {$etId}</div>
-      <div style="font-size:11px;color:#047857;margin-top:1px;">Your booking is confirmed. Review your details and acknowledge at the bottom of this email.</div>
+      <div style="font-size:13px;font-weight:800;color:#064e3b;">&#10003; {$typeLabel} &mdash; {$etId}</div>
+      <div style="font-size:11px;color:#047857;margin-top:1px;">Your confirmation is ready. Please review the details below.</div>
     </div>
 
     <!-- Body -->
     <div style="padding:28px 30px;">
       <p style="color:#1e293b;font-size:15px;margin:0 0 20px;">Dear <strong>{$name}</strong>,</p>
       <p style="color:#555;font-size:13px;line-height:1.7;margin:0 0 24px;">
-        Your electronic travel ticket is ready. All booking details are included below for your records.
+        Your {$typeLabel} is ready. All details are included below for your records.
       </p>
 
       <!-- PNR Card -->
