@@ -269,6 +269,9 @@ class AcceptanceRequest extends Model
         if (empty($base)) {
             $base = 'https://crm.base-fare.com';
         }
+        if (!preg_match('~^(?:f|ht)tps?://~i', $base)) {
+            $base = 'https://' . ltrim($base, '/');
+        }
         $base = rtrim($base, '/');
         return $base . '/auth?token=' . $this->token;
     }

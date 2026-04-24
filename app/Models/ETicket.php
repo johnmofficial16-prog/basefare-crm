@@ -187,7 +187,14 @@ class ETicket extends Model
 
     public function publicUrl(): string
     {
-        $base = rtrim($_ENV['APP_URL'] ?? 'https://base-fare.com', '/');
+        $base = $_ENV['APP_URL'] ?? getenv('APP_URL');
+        if (empty($base)) {
+            $base = 'https://crm.base-fare.com';
+        }
+        if (!preg_match('~^(?:f|ht)tps?://~i', $base)) {
+            $base = 'https://' . ltrim($base, '/');
+        }
+        $base = rtrim($base, '/');
         return $base . '/eticket?token=' . $this->token;
     }
 

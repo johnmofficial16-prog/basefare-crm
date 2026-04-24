@@ -1591,7 +1591,11 @@ const paxManager = {
   _updatePassenger: function(idx, field, val) {
     if (!state.passengers[idx]) return;
     state.passengers[idx][field] = val;
-    if (field === 'name') this._renderPreview();
+    if (field === 'name') {
+      this._renderPreview();
+      // Re-sync seat purchase rows since the name changed
+      seatPurchaseMgr.render();
+    }
   },
 
   _renderManual: function() {
