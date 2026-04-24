@@ -311,12 +311,12 @@ if (session_status() === PHP_SESSION_NONE) {
     <div class="ticket-status-bar <?= $isAcked ? 'acked' : '' ?>">
       <span class="status-icon"><?= $isAcked ? '✅' : '📄' ?></span>
       <div>
-        <div class="status-text"><?= $isAcked ? 'Acknowledged — Booking Confirmed' : 'Please Review & Acknowledge Your E-Ticket' ?></div>
+        <div class="status-text"><?= $isAcked ? 'Acknowledged — Booking Confirmed' : 'Your Travel Documents' ?></div>
         <div class="status-sub">
           <?php if ($isAcked): ?>
             Acknowledged on <?= $et->acknowledged_at->format('F j, Y \a\t g:i A') ?>
           <?php else: ?>
-            Scroll down to review all details, then click "I have read and acknowledged this e-ticket"
+            Please review all details carefully and contact us if anything requires correction.
           <?php endif; ?>
         </div>
       </div>

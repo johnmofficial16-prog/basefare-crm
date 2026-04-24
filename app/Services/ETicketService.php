@@ -18,8 +18,7 @@ use Illuminate\Database\Capsule\Manager as DB;
 class ETicketService
 {
     const DEFAULT_POLICY =
-        "By clicking 'I have read and acknowledged this e-ticket', you confirm that:\n\n"
-        . "1. TICKET RECEIPT: You have received your electronic travel ticket and all booking details are correct.\n\n"
+        "1. TICKET RECEIPT: You have received your electronic travel ticket and all booking details are correct.\n\n"
         . "2. NON-REFUNDABLE: This ticket is 100% NON-REFUNDABLE and NON-TRANSFERABLE as per the airline's fare rules.\n\n"
         . "3. CHARGEBACK WAIVER: You explicitly acknowledge that all services described herein have been rendered by "
         . "Lets Fly Travel DBA Base Fare. Filing a credit card dispute or chargeback after receiving this e-ticket "
