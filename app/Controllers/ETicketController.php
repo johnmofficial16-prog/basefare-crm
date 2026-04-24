@@ -33,9 +33,8 @@ class ETicketController
 
     public function index(Request $request, Response $response): Response
     {
-        $session  = $_SESSION;
-        $role     = $session['user_role'] ?? 'agent';
-        $userId   = (int)($session['user_id'] ?? 0);
+        $role     = $_SESSION['role']    ?? 'agent';
+        $userId   = (int)($_SESSION['user_id'] ?? 0);
         $isAdmin  = in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR]);
 
         $params  = $request->getQueryParams();
@@ -63,9 +62,8 @@ class ETicketController
 
     public function createForm(Request $request, Response $response): Response
     {
-        $session = $_SESSION;
-        $role    = $session['user_role'] ?? 'agent';
-        $userId  = (int)($session['user_id'] ?? 0);
+        $role    = $_SESSION['role']    ?? 'agent';
+        $userId  = (int)($_SESSION['user_id'] ?? 0);
         $isAdmin = in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
 
         $agentId = $isAdmin ? null : $userId;
@@ -85,8 +83,7 @@ class ETicketController
 
     public function store(Request $request, Response $response): Response
     {
-        $session = $_SESSION;
-        $userId  = (int)($session['user_id'] ?? 0);
+        $userId  = (int)($_SESSION['user_id'] ?? 0);
         $body    = $request->getParsedBody() ?? [];
 
         // CSRF
@@ -247,9 +244,8 @@ class ETicketController
 
     public function autofillOptions(Request $request, Response $response): Response
     {
-        $session = $_SESSION;
-        $userId  = (int)($session['user_id'] ?? 0);
-        $role    = $session['user_role'] ?? 'agent';
+        $role    = $_SESSION['role']    ?? 'agent';
+        $userId  = (int)($_SESSION['user_id'] ?? 0);
         $isAdmin = in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
         $agentId = $isAdmin ? null : $userId;
 
