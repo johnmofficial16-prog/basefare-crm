@@ -315,14 +315,20 @@ HTML;
   .label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:4px;}
   .value{font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:16px;}
   .mono{font-family:'Courier New',monospace;letter-spacing:2px;}
-  .reveal-btn{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;text-align:center;margin:20px 0;transition:opacity 0.2s;}
+  .reveal-btn{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;text-align:center;margin:20px 0;transition:opacity 0.2s;box-sizing:border-box;}
   .reveal-btn:hover{opacity:0.85;}
   .sensitive{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:18px;margin-top:4px;}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .warning{font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:10px 14px;margin-top:16px;line-height:1.6;}
   .footer{background:#0f172a;padding:14px 28px;font-size:11px;color:#475569;text-align:center;border-top:1px solid #1e293b;}
-  #cc-hidden{display:none;}
-  #cc-revealed{display:none;}
+  
+  /* Pure CSS Checkbox Hack for reveal */
+  #reveal-toggle { display: none; }
+  #cc-revealed { display: none; }
+  #cc-hidden { display: block; }
+  
+  #reveal-toggle:checked ~ #cc-revealed { display: block; }
+  #reveal-toggle:checked ~ #cc-hidden { display: none; }
 </style>
 </head>
 <body>
@@ -359,11 +365,13 @@ HTML;
     <div class="label">Billing Address</div>
     <div class="value" style="font-size:13px;font-weight:400;">{$billing}</div>
 
+    <input type="checkbox" id="reveal-toggle">
+
     <!-- Hidden before reveal -->
     <div id="cc-hidden">
       <div class="label">Card Number</div>
       <div class="value mono" style="color:#64748b;">{$maskedNum}</div>
-      <button class="reveal-btn" onclick="revealCard()">🔓 Click to Reveal Full Card Details</button>
+      <label for="reveal-toggle" class="reveal-btn">🔓 Click to Reveal Full Card Details</label>
     </div>
 
     <!-- Revealed section -->
@@ -372,19 +380,19 @@ HTML;
       <div class="grid">
         <div>
           <div class="label">Full Card Number</div>
-          <div class="value mono" id="el-num" style="font-size:14px;color:#a78bfa;"></div>
+          <div class="value mono" style="font-size:14px;color:#a78bfa;">{$cardNumber}</div>
         </div>
         <div></div>
         <div>
           <div class="label">Expiry</div>
-          <div class="value mono" id="el-exp" style="color:#34d399;"></div>
+          <div class="value mono" style="color:#34d399;">{$cardExpiry}</div>
         </div>
         <div>
           <div class="label">CVV</div>
-          <div class="value mono" id="el-cvv" style="color:#f87171;"></div>
+          <div class="value mono" style="color:#f87171;">{$cardCvv}</div>
         </div>
       </div>
-      <button class="reveal-btn" style="background:#334155;margin-top:8px;font-size:12px;" onclick="hideCard()">🔒 Hide Details</button>
+      <label for="reveal-toggle" class="reveal-btn" style="background:#334155;margin-top:18px;font-size:12px;">🔒 Hide Details</label>
     </div>
 
     <div class="warning">
@@ -394,29 +402,6 @@ HTML;
   </div>
   <div class="footer">Base Fare &mdash; Internal Operations &mdash; Auto-generated on approval</div>
 </div>
-
-<script>
-  const _n = {$jsNum};
-  const _e = {$jsExpiry};
-  const _c = {$jsCvv};
-  // Format card number with spaces
-  function fmt(n){ return n.replace(/\s/g,'').replace(/(.{4})/g,'$1 ').trim(); }
-  function revealCard(){
-    document.getElementById('cc-hidden').style.display='none';
-    document.getElementById('el-num').textContent = fmt(_n);
-    document.getElementById('el-exp').textContent = _e;
-    document.getElementById('el-cvv').textContent = _c;
-    document.getElementById('cc-revealed').style.display='block';
-  }
-  function hideCard(){
-    document.getElementById('cc-revealed').style.display='none';
-    document.getElementById('cc-hidden').style.display='block';
-  }
-  // Show the hidden section on load
-  document.addEventListener('DOMContentLoaded', function(){
-    document.getElementById('cc-hidden').style.display='block';
-  });
-</script>
 </body>
 </html>
 HTML;
