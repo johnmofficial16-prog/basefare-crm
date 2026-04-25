@@ -128,6 +128,11 @@ const wizard = {
         errs.push('At least one passenger is required.');
       } else {
         document.getElementById('step2-pax-error').classList.add('hidden');
+        // Mandatory e-ticket number for every passenger
+        var missingTicket = filledPax.some(function(p) { return !(p.ticket_number||'').trim(); });
+        if (missingTicket) {
+          errs.push('E-Ticket number is required for all passengers. Please fill in the Ticket # field for each passenger before proceeding.');
+        }
       }
       if (errs.length) return { valid: false, msg: errs.join(' ') };
       return { valid: true };
@@ -301,10 +306,10 @@ const paxMgr = {
           </select>
         </div>
         <div>
-          <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Ticket #</label>
-          <input type="text" value="${_esc(p.ticket_number)}" placeholder="014-..." title="E-ticket number"
-            class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-mono bg-white focus:outline-none focus:ring-2 focus:ring-primary/40"
-            oninput="paxMgr._update(${i},'ticket_number',this.value)">
+          <label class="block text-[9px] font-bold uppercase mb-1 ${!(p.ticket_number||'').trim() ? 'text-rose-500' : 'text-slate-400'}">Ticket # <span class="text-rose-500">*</span></label>
+          <input type="text" value="${_esc(p.ticket_number)}" placeholder="014-..." title="E-ticket number (required)"
+            class="w-full border rounded-lg px-2 py-1.5 text-[10px] font-mono bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 ${!(p.ticket_number||'').trim() ? 'border-rose-300 bg-rose-50' : 'border-slate-200'}"
+            oninput="paxMgr._update(${i},'ticket_number',this.value);paxMgr._render()">
         </div>
         <div>
           <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">FF#</label>
