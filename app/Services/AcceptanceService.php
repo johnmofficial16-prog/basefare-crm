@@ -26,16 +26,15 @@ class AcceptanceService
     const DEFAULT_POLICY = "By digitally signing this authorization form, you confirm that:\n\n"
         . "1. FINAL SALE: All airline tickets purchased are 100% NON-REFUNDABLE and NON-TRANSFERABLE. "
         . "Making a purchase implies acceptance of the airline's fare rules.\n\n"
-        . "2. CHARGEBACK WAIVER: You explicitly waive your right to file a credit card dispute or "
-        . "chargeback for this transaction. You confirm that Lets Fly Travel DBA Base Fare has fulfilled its "
-        . "obligation by processing your request as described above.\n\n"
-        . "3. FRAUDULENT DISPUTES: You understand that filing a dispute after receiving services "
-        . "constitutes Friendly Fraud. Lets Fly Travel DBA Base Fare will submit this signed authorization, "
-        . "IP address, and device fingerprint as conclusive evidence to your bank to contest any such claim.\n\n"
-        . "4. TRAVEL DOCUMENTS: Lets Fly Travel DBA Base Fare is not responsible for Visa, Passport, or Health "
+        . "2. CHARGEBACK WAIVER: You explicitly acknowledge that all services described herein have been rendered by "
+        . "Lets Fly Travel DBA Base Fare. Filing a credit card dispute or chargeback after signing this authorization "
+        . "constitutes Friendly Fraud. You explicitly waive your right to file a credit card dispute or chargeback for "
+        . "this transaction. This signed authorization, along with your IP address, device fingerprint, and user-agent "
+        . "information will be submitted as conclusive evidence to your financial institution to contest any such claim.\n\n"
+        . "3. TRAVEL DOCUMENTS: Lets Fly Travel DBA Base Fare is not responsible for Visa, Passport, or Health "
         . "documentation requirements. Denied boarding due to missing documents does not constitute "
         . "grounds for a refund or dispute.\n\n"
-        . "5. GOVERNING LAW: This agreement is governed by the laws of the State of New York, USA.";
+        . "4. GOVERNING LAW: This agreement is governed by the laws of the State of New York, USA.";
 
     // Default endorsements
     const DEFAULT_ENDORSEMENTS = "NON END/NON REF";
