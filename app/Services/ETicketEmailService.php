@@ -129,7 +129,7 @@ class ETicketEmailService
         // Resolve type label from the linked transaction (if available)
         $typeLabel = $this->resolveTypeLabel($eticket);
         return sprintf(
-            '%s — PNR: %s | %s | Lets Fly Travel',
+            '%s — PNR: %s | %s',
             $typeLabel,
             $eticket->pnr,
             $eticket->customer_name

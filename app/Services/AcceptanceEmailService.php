@@ -85,7 +85,7 @@ class AcceptanceEmailService
 
     public function sendConfirmation(AcceptanceRequest $acceptance): array
     {
-        $subject = 'Authorization Confirmed — ' . $acceptance->typeLabel() . ' | Lets Fly Travel';
+        $subject = 'Authorization Confirmed — ' . $acceptance->typeLabel() . ' | PNR: ' . $acceptance->pnr;
         $link    = $acceptance->publicUrl();
 
         // Stubbed for now as requested. Can wire PHPMailer here later if needed.
@@ -101,7 +101,7 @@ class AcceptanceEmailService
     public function buildSubject(AcceptanceRequest $acceptance): string
     {
         return sprintf(
-            'Authorization Required — %s | PNR: %s | Lets Fly Travel',
+            'Authorization Required — %s | PNR: %s',
             $acceptance->typeLabel(),
             $acceptance->pnr
         );
