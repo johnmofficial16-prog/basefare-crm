@@ -231,19 +231,10 @@ class ETicketEmailService
         $etId     = 'ET-' . str_pad($eticket->id, 6, '0', STR_PAD_LEFT);
 
         // ── Reply-style mailto for Contact Us button ───────────────────────────
-        $typeLabel   = $this->resolveTypeLabel($eticket);
-        $mailSubject = rawurlencode('Re: ' . $typeLabel . ' — PNR: ' . $eticket->pnr . ' | ' . $eticket->customer_name);
-        $mailBody    = rawurlencode(
-            "Hi Reservation Desk,\n\n"
-            . "I am writing regarding my booking.\n\n"
-            . "Reference  : {$etId}\n"
-            . "PNR        : {$eticket->pnr}\n"
-            . "Airline    : {$eticket->airline}\n"
-            . "Name       : {$eticket->customer_name}\n\n"
-            . "[Please describe your question or concern here]\n\n"
-            . "Thank you."
-        );
-        $mailtoHref = "mailto:reservation@base-fare.com?subject={$mailSubject}&body={$mailBody}";
+        // Uses the exact same subject as the outgoing email with "Re:" prefix,
+        // no body pre-fill — opens clean like a native email reply dialog.
+        $mailSubject = rawurlencode('Re: ' . $this->buildSubject($eticket));
+        $mailtoHref  = "mailto:reservation@base-fare.com?subject={$mailSubject}";
 
         // ── Passenger rows ────────────────────────────────────────────────────
         $paxRows = '';
