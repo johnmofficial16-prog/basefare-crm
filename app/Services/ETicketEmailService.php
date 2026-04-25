@@ -230,6 +230,21 @@ class ETicketEmailService
         $viewUrl  = htmlspecialchars($link);
         $etId     = 'ET-' . str_pad($eticket->id, 6, '0', STR_PAD_LEFT);
 
+        // ── Reply-style mailto for Contact Us button ───────────────────────────
+        $typeLabel   = $this->resolveTypeLabel($eticket);
+        $mailSubject = rawurlencode('Re: ' . $typeLabel . ' — PNR: ' . $eticket->pnr . ' | ' . $eticket->customer_name);
+        $mailBody    = rawurlencode(
+            "Hi Reservation Desk,\n\n"
+            . "I am writing regarding my booking.\n\n"
+            . "Reference  : {$etId}\n"
+            . "PNR        : {$eticket->pnr}\n"
+            . "Airline    : {$eticket->airline}\n"
+            . "Name       : {$eticket->customer_name}\n\n"
+            . "[Please describe your question or concern here]\n\n"
+            . "Thank you."
+        );
+        $mailtoHref = "mailto:reservation@base-fare.com?subject={$mailSubject}&body={$mailBody}";
+
         // ── Passenger rows ────────────────────────────────────────────────────
         $paxRows = '';
         foreach ($eticket->ticketDataWithAutoNumbers() as $i => $p) {
@@ -537,7 +552,7 @@ class ETicketEmailService
       <div style="color:rgba(255,255,255,0.85);font-size:13px;line-height:1.8;margin-bottom:20px;">
         Please review all details carefully. If you have any questions or notice<br>any discrepancies, contact us immediately.
       </div>
-      <a href="mailto:reservation@base-fare.com"
+      <a href="{$mailtoHref}"
          style="display:inline-block;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;text-decoration:none;padding:11px 32px;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:0.3px;">
         &#9993;&nbsp; Contact Us
       </a>
