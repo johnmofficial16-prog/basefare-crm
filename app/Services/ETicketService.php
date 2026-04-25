@@ -20,15 +20,11 @@ class ETicketService
     const DEFAULT_POLICY =
         "1. TICKET RECEIPT: You have received your electronic travel ticket and all booking details are correct.\n\n"
         . "2. NON-REFUNDABLE: This ticket is 100% NON-REFUNDABLE and NON-TRANSFERABLE as per the airline's fare rules.\n\n"
-        . "3. CHARGEBACK WAIVER: You explicitly acknowledge that all services described herein have been rendered by "
-        . "Lets Fly Travel DBA Base Fare. Filing a credit card dispute or chargeback after receiving this e-ticket "
-        . "constitutes Friendly Fraud. This acknowledgment, along with your previously signed authorization, IP address, "
-        . "and device information will be submitted as conclusive evidence to your bank to contest any such claim.\n\n"
-        . "4. TRAVEL DOCUMENTS: You are solely responsible for ensuring valid passport, visa, and health documentation. "
+        . "3. TRAVEL DOCUMENTS: You are solely responsible for ensuring valid passport, visa, and health documentation. "
         . "Denied boarding due to missing documents does not constitute grounds for a refund or dispute.\n\n"
-        . "5. CHECK-IN: Please check in online within the airline's check-in window. Missed check-in is not the "
+        . "4. CHECK-IN: Please check in online within the airline's check-in window. Missed check-in is not the "
         . "responsibility of Lets Fly Travel DBA Base Fare.\n\n"
-        . "6. GOVERNING LAW: This agreement is governed by the laws of the State of New York, USA.";
+        . "5. GOVERNING LAW: This agreement is governed by the laws of the State of New York, USA.";
 
     // =========================================================================
     // ELIGIBILITY
