@@ -809,24 +809,34 @@ tailwind.config = {
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div class="sm:col-span-1">
                 <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Card Number <span class="text-rose-500">*</span></label>
-                <input type="text" name="card_number" id="field_card_number" required
-                  maxlength="19" placeholder="•••• •••• •••• ••••"
-                  oninput="this.value=this.value.replace(/[^\d\s]/g,'').replace(/(\d{4})(?=\d)/g,'$1 ').trim().slice(0,19); syncSummary();"
-                  class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono font-bold tracking-widest bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
+                <div class="relative">
+                  <input type="text" name="card_number" id="field_card_number" required
+                    maxlength="19" placeholder="•••• •••• •••• ••••"
+                    oninput="this.value=this.value.replace(/[^\d\s]/g,'').replace(/(\d{4})(?=\d)/g,'$1 ').trim().slice(0,19); syncSummary(); ccValidator.validateNumber(this);"
+                    onblur="ccValidator.validateNumber(this);"
+                    class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono font-bold tracking-widest bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600 pr-24">
+                  <span id="cc-type-badge" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;display:none;"></span>
+                </div>
+                <p id="cc-num-error" class="hidden mt-1 text-[11px] font-semibold text-rose-600 flex items-center gap-1"><span class="material-symbols-outlined text-sm">error</span><span></span></p>
               </div>
               <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Expiry <span class="text-rose-500">*</span></label>
                 <input type="text" name="card_expiry" id="field_card_expiry" required
                   maxlength="5" placeholder="MM/YY"
-                  oninput="let v=this.value.replace(/\D/g,''); if(v.length>=3) v=v.slice(0,2)+'/'+v.slice(2,4); this.value=v;"
+                  oninput="let v=this.value.replace(/\D/g,''); if(v.length>=3) v=v.slice(0,2)+'/'+v.slice(2,4); this.value=v; ccValidator.validateExpiry(this);"
+                  onblur="ccValidator.validateExpiry(this);"
                   class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono font-bold tracking-widest bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
+                <p id="cc-exp-error" class="hidden mt-1 text-[11px] font-semibold text-rose-600 flex items-center gap-1"><span class="material-symbols-outlined text-sm">error</span><span></span></p>
               </div>
               <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">CVV <span class="text-rose-500">*</span></label>
                 <input type="password" name="card_cvv" id="field_card_cvv" required
                   maxlength="4" placeholder="•••"
                   autocomplete="off"
+                  oninput="ccValidator.validateCvv(this);"
+                  onblur="ccValidator.validateCvv(this);"
                   class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono font-bold tracking-widest bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
+                <p id="cc-cvv-error" class="hidden mt-1 text-[11px] font-semibold text-rose-600 flex items-center gap-1"><span class="material-symbols-outlined text-sm">error</span><span></span></p>
               </div>
             </div>
             <p class="text-[10px] text-slate-400 flex items-center gap-1"><span class="material-symbols-outlined text-sm text-emerald-600">lock</span> Full CC details are AES-256 encrypted at rest. Only last 4 digits are shown to the customer.</p>
@@ -1284,6 +1294,108 @@ const state = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CREDIT CARD VALIDATOR
+// ─────────────────────────────────────────────────────────────────────────────
+const ccValidator = {
+
+  // Detect card network from raw digits
+  detectType: function(digits) {
+    if (/^4/.test(digits))                          return 'Visa';
+    if (/^5[1-5]/.test(digits) || /^2[2-7]/.test(digits)) return 'Mastercard';
+    if (/^3[47]/.test(digits))                      return 'Amex';
+    if (/^6(?:011|5)/.test(digits))                 return 'Discover';
+    if (/^62/.test(digits))                          return 'UnionPay';
+    return null;
+  },
+
+  // Luhn algorithm
+  luhn: function(num) {
+    let sum = 0, alt = false;
+    for (let i = num.length - 1; i >= 0; i--) {
+      let d = parseInt(num[i], 10);
+      if (alt) { d *= 2; if (d > 9) d -= 9; }
+      sum += d; alt = !alt;
+    }
+    return sum % 10 === 0;
+  },
+
+  _setError: function(errId, inputEl, msg) {
+    const errEl = document.getElementById(errId);
+    if (!errEl) return;
+    if (msg) {
+      errEl.classList.remove('hidden');
+      errEl.querySelector('span:last-child').textContent = msg;
+      inputEl.style.borderColor = '#f87171';
+      inputEl.style.background  = '#fff5f5';
+    } else {
+      errEl.classList.add('hidden');
+      inputEl.style.borderColor = '';
+      inputEl.style.background  = '';
+    }
+  },
+
+  validateNumber: function(inputEl) {
+    const raw    = (inputEl.value || '').replace(/\s/g, '');
+    const badge  = document.getElementById('cc-type-badge');
+    const type   = raw.length >= 4 ? this.detectType(raw) : null;
+
+    // Update card type badge
+    const badgeColors = { Visa:'#1a56db,#fff', Mastercard:'#eb5a1e,#fff', Amex:'#2d6a4f,#fff', Discover:'#f59e0b,#000', UnionPay:'#c0392b,#fff' };
+    if (badge) {
+      if (type) {
+        const [bg, fg] = badgeColors[type].split(',');
+        badge.textContent  = type;
+        badge.style.display    = 'inline-block';
+        badge.style.background = bg;
+        badge.style.color      = fg;
+        // Also sync the card_type dropdown if it exists
+        const sel = document.getElementById('field_card_type');
+        if (sel) {
+          for (let o of sel.options) { if (o.text === type) { sel.value = o.value || o.text; break; } }
+        }
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    if (!raw) { this._setError('cc-num-error', inputEl, 'Card number is required.'); return false; }
+    if (!/^\d{13,19}$/.test(raw)) { this._setError('cc-num-error', inputEl, 'Must be 13–19 digits.'); return false; }
+    if (!this.luhn(raw)) { this._setError('cc-num-error', inputEl, 'Invalid card number — please double-check.'); return false; }
+    this._setError('cc-num-error', inputEl, null);
+    return true;
+  },
+
+  validateExpiry: function(inputEl) {
+    const val = (inputEl.value || '').trim();
+    if (!val) { this._setError('cc-exp-error', inputEl, 'Expiry is required.'); return false; }
+    if (!/^\d{2}\/\d{2}$/.test(val)) { this._setError('cc-exp-error', inputEl, 'Use MM/YY format.'); return false; }
+    const [mm, yy] = val.split('/').map(Number);
+    if (mm < 1 || mm > 12) { this._setError('cc-exp-error', inputEl, 'Month must be 01–12.'); return false; }
+    const now    = new Date();
+    const expiry = new Date(2000 + yy, mm - 1, 1);
+    const cutoff = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (expiry < cutoff) { this._setError('cc-exp-error', inputEl, 'This card is expired.'); return false; }
+    this._setError('cc-exp-error', inputEl, null);
+    return true;
+  },
+
+  validateCvv: function(inputEl) {
+    const val = (inputEl.value || '').trim();
+    if (!val) { this._setError('cc-cvv-error', inputEl, 'CVV is required.'); return false; }
+    // Detect if Amex (needs 4 digits) via card number field
+    const cardNum = (document.getElementById('field_card_number')?.value || '').replace(/\s/g,'');
+    const isAmex  = /^3[47]/.test(cardNum);
+    const cvvLen  = isAmex ? 4 : 3;
+    if (!new RegExp(`^\\d{${cvvLen}}$`).test(val)) {
+      this._setError('cc-cvv-error', inputEl, `CVV must be ${cvvLen} digits${isAmex ? ' (Amex)' : ''}.`);
+      return false;
+    }
+    this._setError('cc-cvv-error', inputEl, null);
+    return true;
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // WIZARD — Step navigation
 // ─────────────────────────────────────────────────────────────────────────────
 const wizard = {
@@ -1428,9 +1540,13 @@ const wizard = {
       else document.getElementById('step4-amount-error').classList.add('hidden');
       if (!cardType)   errs.push('Card type is required.');
       if (!cardName)   errs.push('Cardholder name is required.');
-      if (!/^\d{13,19}$/.test(cardNumber)) errs.push('Valid card number is required (13–19 digits).');
-      if (!/^\d{2}\/\d{2}$/.test(cardExpiry)) errs.push('Expiry must be MM/YY format.');
-      if (!/^\d{3,4}$/.test(cardCvv)) errs.push('CVV must be 3 or 4 digits.');
+      // Run inline validators and check results
+      const numOk  = ccValidator.validateNumber(document.getElementById('field_card_number'));
+      const expOk  = ccValidator.validateExpiry(document.getElementById('field_card_expiry'));
+      const cvvOk  = ccValidator.validateCvv(document.getElementById('field_card_cvv'));
+      if (!numOk)  errs.push('Card number is invalid.');
+      if (!expOk)  errs.push('Expiry date is invalid or expired.');
+      if (!cvvOk)  errs.push('CVV is invalid.');
       if (!billing)    errs.push('Billing address is required.');
       if (!agentNotes) errs.push('Agent notes are required.');
       if (errs.length) return { valid: false, msg: errs.join(' ') };
