@@ -309,7 +309,8 @@ const paxMgr = {
           <label class="block text-[9px] font-bold uppercase mb-1 ${!(p.ticket_number||'').trim() ? 'text-rose-500' : 'text-slate-400'}">Ticket # <span class="text-rose-500">*</span></label>
           <input type="text" value="${_esc(p.ticket_number)}" placeholder="014-..." title="E-ticket number (required)"
             class="w-full border rounded-lg px-2 py-1.5 text-[10px] font-mono bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 ${!(p.ticket_number||'').trim() ? 'border-rose-300 bg-rose-50' : 'border-slate-200'}"
-            oninput="paxMgr._update(${i},'ticket_number',this.value);paxMgr._render()">
+            oninput="paxMgr._update(${i},'ticket_number',this.value); if(this.value.trim()){this.style.borderColor='';this.style.background='';} else {this.style.borderColor='#fca5a5';this.style.background='#fff5f5';}"
+            onblur="paxMgr._render()">
         </div>
         <div>
           <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">FF#</label>
