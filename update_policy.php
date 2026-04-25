@@ -1,34 +1,43 @@
 <?php
-require __DIR__ . '/vendor/autoload.php';
+/**
+ * One-time: update policy_text for acceptance #45 to new chargeback waiver
+ * Run via SSH: php update_policy.php
+ * Delete after use.
+ */
 
-use App\Models\AcceptanceRequest;
-use Illuminate\Database\Capsule\Manager as DB;
-use Dotenv\Dotenv;
-
-// Load environment variables dynamically so it works on live server
-$dotenv = Dotenv::createImmutable(__DIR__);
-$dotenv->safeLoad();
-
-try {
-    $capsule = new DB;
-    $capsule->addConnection([
-        'driver'    => 'mysql',
-        'host'      => $_ENV['DB_HOST'] ?? '127.0.0.1',
-        'port'      => $_ENV['DB_PORT'] ?? '3306',
-        'database'  => $_ENV['DB_DATABASE'] ?? 'basefare_crm',
-        'username'  => $_ENV['DB_USERNAME'] ?? 'root',
-        'password'  => $_ENV['DB_PASSWORD'] ?? '',
-        'charset'   => 'utf8mb4',
-        'collation' => 'utf8mb4_unicode_ci',
-        'prefix'    => '',
-    ]);
-    $capsule->setAsGlobal();
-    $capsule->bootEloquent();
-
-    $newPolicy = "1. PASSENGER NAMES: Names must match your government-issued ID exactly. Lets Fly Travel DBA Base Fare is not responsible for denied boarding due to name mismatches or Visa/Travel Document issues.\n2. REFUNDS & CHANGES: All tickets are NON-REFUNDABLE and NON-TRANSFERABLE once issued. Date changes are subject to airline penalties plus fare differences.\n3. CHARGEBACK WAIVER: By signing, I acknowledge the service has been performed. I agree NOT to dispute or chargeback this transaction with my card issuer for any reason.\n4. AUTHORIZATION: I authorize Lets Fly Travel DBA Base Fare to charge the Total Amount listed to my credit card.\n5. I confirm that I am the authorized cardholder and approve the charge of the agreed amount for the requested travel services.\n6. I acknowledge that I have personally requested this service and that all details, including itinerary, pricing, and applicable terms, have been clearly explained to me prior to authorization.\n7. I understand that the Lets Fly Travel DBA Base Fare acts solely as an intermediary, and all bookings, cancellations, and refunds are subject to the respective airline’s rules and regulations.\n8. I agree that the service fee charged by Lets Fly Travel DBA Base Fare is non-refundable once the booking or requested service has been processed.\n9. I acknowledge that the service is considered fully rendered once the reservation/ticket has been issued or the requested service has been completed.\n10. I confirm that I have received and reviewed all booking details via email, phone, or message and have provided my consent to proceed.\n11. I understand that any cancellations, changes, refund or any other travel related service requests will be governed strictly by the airline’s fare rules and policies, and additional charges may apply.\n12. I agree that this transaction is valid, authorized, and initiated by me voluntarily without any misrepresentation.\n13. I undertake to contact Lets Fly Travel DBA Base Fare directly for any concerns or clarifications before initiating any dispute or chargeback with my bank or card issuer.\n14. I acknowledge that this transaction may be recorded (call/email/SMS) for quality, training, and verification purposes.\n15. I confirm that the billing details provided by me are accurate and belong to me, and I take full responsibility for this transaction.\n16. I understand and agree to comply with the 24-hour cancellation policy (if applicable), subject to airline terms and conditions.";
-
-    $updated = DB::table('acceptance_requests')->whereNotNull('policy_text')->where('policy_text', '!=', '')->update(['policy_text' => $newPolicy]);
-    echo "\n✅ SUCCESS: Updated policy_text for {$updated} historical records to the new 16-point policy.\n";
-} catch (Exception $e) {
-    echo "\n❌ ERROR: " . $e->getMessage() . "\n";
+// Load env manually
+$envFile = __DIR__ . '/.env';
+$env = [];
+if (file_exists($envFile)) {
+    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        if (strpos(trim($line), '#') === 0) continue;
+        if (strpos($line, '=') === false) continue;
+        [$k, $v] = explode('=', $line, 2);
+        $env[trim($k)] = trim($v, " \t\n\r\0\x0B\"'");
+    }
 }
+
+$host = $env['DB_HOST'] ?? '127.0.0.1';
+$db   = $env['DB_NAME'] ?? '';
+$user = $env['DB_USER'] ?? '';
+$pass = $env['DB_PASS'] ?? '';
+
+$pdo = new PDO("mysql:host={$host};dbname={$db};charset=utf8mb4", $user, $pass, [
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+]);
+
+$newPolicy = "By digitally signing this authorization form, you confirm that:
+
+1. FINAL SALE: All airline tickets purchased are 100% NON-REFUNDABLE and NON-TRANSFERABLE. Making a purchase implies acceptance of the airline's fare rules.
+
+2. CHARGEBACK WAIVER: You explicitly acknowledge that all services described herein have been rendered by Lets Fly Travel DBA Base Fare. Filing a credit card dispute or chargeback after signing this authorization constitutes Friendly Fraud. You explicitly waive your right to file a credit card dispute or chargeback for this transaction. This signed authorization, along with your IP address, device fingerprint, and user-agent information will be submitted as conclusive evidence to your financial institution to contest any such claim.
+
+3. TRAVEL DOCUMENTS: Lets Fly Travel DBA Base Fare is not responsible for Visa, Passport, or Health documentation requirements. Denied boarding due to missing documents does not constitute grounds for a refund or dispute.
+
+4. GOVERNING LAW: This agreement is governed by the laws of the State of New York, USA.";
+
+$stmt = $pdo->prepare("UPDATE acceptance_requests SET policy_text = ? WHERE id = 45");
+$stmt->execute([$newPolicy]);
+
+echo "Done. Rows updated: " . $stmt->rowCount() . "\n\n";
+echo "New policy:\n\n" . $newPolicy . "\n";
