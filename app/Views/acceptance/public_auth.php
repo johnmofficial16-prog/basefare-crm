@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * Public Customer Authorization Page
  * Token-based access — no CRM login required
@@ -656,9 +656,17 @@ $error = $_GET['error'] ?? null;
         <?php endif; ?>
 
         <!-- Policy -->
-        <div class="section">
-          <div class="section-title">Terms & Conditions</div>
-          <div class="policy-box"><?= $policyText ?></div>
+        <div class="section" style="padding:0;">
+          <details style="border:1px solid #fcd34d;border-radius:10px;overflow:hidden;">
+            <summary style="cursor:pointer;padding:12px 16px;background:#fffbeb;font-size:12px;font-weight:700;color:#92400e;list-style:none;display:flex;align-items:center;justify-content:space-between;-webkit-tap-highlight-color:transparent;">
+              <span style="display:flex;align-items:center;gap:6px;">
+                <span class="material-symbols-outlined" style="font-size:15px;">gavel</span>
+                Terms &amp; Conditions &mdash; Tap to Read
+              </span>
+              <span style="font-size:18px;color:#b45309;">&#8964;</span>
+            </summary>
+            <div class="policy-box" style="border:none;border-radius:0;border-top:1px solid #fde68a;max-height:300px;overflow-y:auto;"><?= $policyText ?></div>
+          </details>
         </div>
 
         <!-- Confirmations -->
@@ -676,25 +684,9 @@ $error = $_GET['error'] ?? null;
             <input type="checkbox" name="confirm_nonrefundable" id="chk3" value="1" required>
             <label for="chk3">I understand this purchase is <strong>NON-REFUNDABLE</strong> and <strong>NON-TRANSFERABLE</strong> once issued.</label>
           </div>
-          <div class="check-item" style="display:block;padding:0;background:none;border:none;">
-            <!-- Chargeback Waiver — tap to expand -->
-            <details style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;margin-bottom:10px;">
-              <summary style="cursor:pointer;padding:12px 14px;font-size:12px;font-weight:700;color:#92400e;list-style:none;display:flex;align-items:center;justify-content:space-between;-webkit-tap-highlight-color:transparent;">
-                <span>&#9888;&nbsp; Chargeback &amp; Dispute Waiver — Tap to Read</span>
-                <span style="font-size:16px;color:#b45309;">&#8964;</span>
-              </summary>
-              <div style="padding:4px 14px 14px;font-size:11.5px;color:#78350f;line-height:1.75;border-top:1px solid #fde68a;">
-                <p style="margin:10px 0 6px;"><strong>CHARGEBACK WAIVER:</strong></p>
-                <p style="margin:0 0 8px;">You explicitly acknowledge that all services described herein have been rendered by <strong><?= htmlspecialchars($companyName) ?></strong>. Filing a credit card dispute or chargeback after services are rendered constitutes <strong>Friendly Fraud</strong>.</p>
-                <p style="margin:0 0 8px;">This signed authorization, along with your IP address, device fingerprint, and user-agent information, will be submitted as conclusive evidence to your financial institution to contest any such claim.</p>
-                <p style="margin:0;">By checking the box below, you voluntarily and knowingly waive your right to file a chargeback for the authorized amount.</p>
-              </div>
-            </details>
-            <!-- Checkbox confirmation -->
-            <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;background:#fef9c3;border:1px solid #fcd34d;border-radius:8px;">
-              <input type="checkbox" name="confirm_chargeback" id="chk4" value="1" required style="margin-top:2px;flex-shrink:0;">
-              <label for="chk4" style="font-size:12px;color:#78350f;line-height:1.6;cursor:pointer;">I have read and understood the Chargeback &amp; Dispute Waiver above. I acknowledge that filing a credit card dispute after services are rendered constitutes Friendly Fraud, and this signed authorization will be submitted as evidence to my bank.</label>
-            </div>
+          <div class="check-item">
+            <input type="checkbox" name="confirm_chargeback" id="chk4" value="1" required>
+            <label for="chk4">I acknowledge that filing a credit card dispute after services are rendered constitutes Friendly Fraud, and this signed authorization will be submitted as evidence.</label>
           </div>
         </div>
 
