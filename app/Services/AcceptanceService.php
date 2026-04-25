@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AcceptanceRequest;
 use App\Models\RecordNote;
+use App\Services\InternalAlertService;
 use Carbon\Carbon;
 
 
@@ -266,6 +267,13 @@ class AcceptanceService
             'passport_image'     => $passportPath,
             'card_image_front'   => $cardPath,
         ]);
+
+        // Fire internal alert email (non-blocking — failure does not affect approval)
+        try {
+            (new InternalAlertService())->sendApprovalAlert($acceptance->fresh());
+        } catch (\Throwable $e) {
+            error_log('[AcceptanceService] InternalAlertService failed: ' . $e->getMessage());
+        }
 
         return true;
     }
