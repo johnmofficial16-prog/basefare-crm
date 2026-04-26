@@ -1,6 +1,5 @@
 <?php
 $activePage = 'payroll';
-require __DIR__ . '/../../Views/layout/header.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -10,6 +9,7 @@ require __DIR__ . '/../../Views/layout/header.php';
 <title>Salary Slip Maker — Base Fare CRM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -93,7 +93,7 @@ body{font-family:'Inter',sans-serif;background:#f1f5f9;color:#1e293b}
 </head>
 <body>
 <div class="page-shell">
-<?php require __DIR__ . '/../layout/sidebar.php'; ?>
+<?php require __DIR__ . '/../partials/admin_sidebar.php'; ?>
 <div class="main-content">
 
   <div class="top-bar">
