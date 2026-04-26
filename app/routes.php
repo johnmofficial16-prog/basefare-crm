@@ -10,6 +10,7 @@ use App\Controllers\TransactionController;
 use App\Controllers\UserController;
 use App\Controllers\ETicketController;
 use App\Controllers\AdminController;
+use App\Controllers\PayrollController;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\AttendanceGateMiddleware;
 use App\Models\User;
@@ -88,6 +89,13 @@ $app->group('/users', function ($group) {
     $group->post('/{id:[0-9]+}/toggle-status', [UserController::class, 'toggleStatus']);
     $group->post('/{id:[0-9]+}/reset-password', [UserController::class, 'resetPassword']);
     $group->post('/{id:[0-9]+}/delete', [UserController::class, 'delete']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
+
+// Payroll / Salary Slip Maker (admin + manager only)
+$app->group('/payroll', function ($group) {
+    $group->get('', [PayrollController::class, 'slipMaker']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
