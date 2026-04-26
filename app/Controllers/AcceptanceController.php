@@ -297,9 +297,7 @@ class AcceptanceController
 
         // Agents can only add notes to their own records
         $userRole = $_SESSION['role'] ?? 'agent';
-        if ($userRole === \App\Models\User::ROLE_CSA) {
-            return $this->jsonResponse($response, ['error' => 'CSA cannot add notes.'], 403);
-        }
+
         if ($userRole === \App\Models\User::ROLE_AGENT && $acc->agent_id !== $userId) {
             return $this->jsonResponse($response, ['error' => 'Access denied.'], 403);
         }

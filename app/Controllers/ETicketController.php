@@ -240,9 +240,7 @@ class ETicketController
         $body    = $request->getParsedBody() ?? [];
         $role    = $_SESSION['role'] ?? 'agent';
 
-        if ($role === User::ROLE_CSA) {
-            return $response->withHeader('Location', '/etickets/' . $eticket->id)->withStatus(302);
-        }
+
 
         if (empty($body['csrf_token']) || $body['csrf_token'] !== ($_SESSION['csrf_token'] ?? '')) {
             return $this->jsonError($response, 'CSRF validation failed.', 403);

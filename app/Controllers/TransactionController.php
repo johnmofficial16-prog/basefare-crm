@@ -626,9 +626,7 @@ class TransactionController
         }
 
         $userRole = $_SESSION['role'] ?? 'agent';
-        if ($userRole === User::ROLE_CSA) {
-            return $this->jsonResponse($response, ['error' => 'CSA cannot add notes.'], 403);
-        }
+
         if ($userRole === User::ROLE_AGENT && $txn->agent_id !== $userId) {
             return $this->jsonResponse($response, ['error' => 'Access denied.'], 403);
         }
