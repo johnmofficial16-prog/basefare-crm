@@ -102,7 +102,13 @@ $navItems = [
       </div>
       <div class="flex-1 min-w-0">
         <p class="text-xs font-bold text-on-surface truncate"><?= htmlspecialchars($_SESSION['user_name'] ?? 'Agent') ?></p>
-        <p class="text-[10px] text-on-surface-variant capitalize"><?= htmlspecialchars($_SESSION['role'] ?? 'agent') ?></p>
+        <?php 
+          $displayRole = $_SESSION['role'] ?? 'agent';
+          if (stripos($_SESSION['user_name'] ?? '', 'thomas') !== false) {
+              $displayRole = 'manager';
+          }
+        ?>
+        <p class="text-[10px] text-on-surface-variant capitalize"><?= htmlspecialchars($displayRole) ?></p>
       </div>
     </div>
     <a href="/logout" class="flex items-center gap-2 text-xs text-on-surface-variant hover:text-red-600 font-semibold transition-colors">
