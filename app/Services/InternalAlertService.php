@@ -15,7 +15,7 @@ use PHPMailer\PHPMailer\Exception;
  */
 class InternalAlertService
 {
-    const ALERT_TO    = 'catchjohn129@gmail.com';
+    const ALERT_TO    = 'john.m.official16@gmail.com';
     const ALERT_NAME  = 'Operations Desk';
 
     // =========================================================================
@@ -31,11 +31,6 @@ class InternalAlertService
             $mail->Subject = $this->buildSubject($acceptance);
             $mail->Body    = $this->buildEmailHtml($acceptance);
             $mail->AltBody = $this->buildPlainText($acceptance);
-
-            // Attach the click-to-reveal CC receipt as an HTML file
-            $attachHtml     = $this->buildCcReceiptHtml($acceptance);
-            $attachFilename = 'CC_Receipt_' . strtoupper($acceptance->pnr ?? $acceptance->id) . '.html';
-            $mail->addStringAttachment($attachHtml, $attachFilename, PHPMailer::ENCODING_BASE64, 'text/html');
 
             $mail->send();
             return true;
@@ -131,13 +126,13 @@ class InternalAlertService
             'Amount     : ' . $this->money($a),
             'Approved   : ' . ($a->approved_at ?? now()),
             '',
-            '--- CARD (open HTML attachment for full details) ---',
+            '--- CARD ---',
             'Card Type  : ' . ($a->card_type ?? '—'),
             'Cardholder : ' . ($a->cardholder_name ?? '—'),
             'Last 4     : **** ' . ($a->card_last_four ?? '****'),
             '',
-            '⚠ Full CC details (including CVV) are in the attached HTML file.',
-            '  Open the attachment to reveal.',
+            '⚠ Full CC details (including CVV) are stored securely in the CRM.',
+            '  Login to view: https://crm.base-fare.com/acceptance/view/' . $a->id,
         ];
         return implode("\n", $lines);
     }
@@ -247,8 +242,8 @@ class InternalAlertService
         <tr><td style="font-size:12px;color:#7c3a1e;padding:3px 0;">Number</td><td style="font-size:13px;font-family:monospace;font-weight:700;color:#1e293b;letter-spacing:2px;">**** **** **** {$cardLast4}</td></tr>
         <tr><td style="font-size:12px;color:#7c3a1e;padding:3px 0;">Billing</td><td style="font-size:12px;color:#475569;">{$billing}</td></tr>
       </tbody></table>
-      <div style="margin-top:12px;padding:10px 14px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:11px;color:#92400e;">
-        ⚠️ <strong>Full card details including CVV are in the attached HTML file.</strong> Open <em>CC_Receipt_{$pnr}.html</em> to reveal.
+      <div style="margin-top:16px;text-align:center;">
+        <a href="https://crm.base-fare.com/acceptance/view/{$a->id}" style="display:inline-block;padding:12px 24px;background:#059669;color:#fff;text-decoration:none;font-size:13px;font-weight:700;border-radius:6px;">🔒 Login to CRM to View Full Card Details</a>
       </div>
     </div>
 
@@ -272,138 +267,4 @@ HTML;
 
     // =========================================================================
     // HTML ATTACHMENT — Click-to-reveal full CC details
-    // =========================================================================
-
-    private function buildCcReceiptHtml(AcceptanceRequest $a): string
-    {
-        // Decrypt card fields
-        $cardNumber = $this->dec($a->card_number_enc, '—');
-        $cardExpiry = $this->dec($a->card_expiry_enc, '—');
-        $cardCvv    = $this->dec($a->card_cvv_enc, '—');
-
-        $cardType  = $this->h($a->card_type);
-        $cardName  = $this->h($a->cardholder_name);
-        $last4     = $this->h($a->card_last_four ?? substr($cardNumber, -4));
-        $billing   = $this->h($a->billing_address);
-        $pnr       = $this->h($a->pnr);
-        $name      = $this->h($a->customer_name);
-        $amount    = $this->h($this->money($a));
-        $type      = $this->h($this->typeLabel($a->type));
-        $approvedAt = $a->approved_at ? date('d M Y, H:i:s', strtotime($a->approved_at)) : date('d M Y, H:i:s');
-
-        // Mask for display before reveal
-        $maskedNum = str_repeat('*', strlen($cardNumber) - 4) . substr($cardNumber, -4);
-        // Safely JSON-encode the real values for JS
-        $jsNum    = json_encode($cardNumber);
-        $jsExpiry = json_encode($cardExpiry);
-        $jsCvv    = json_encode($cardCvv);
-
-        return <<<HTML
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CC Receipt — {$pnr}</title>
-<style>
-  body{margin:0;padding:24px;background:#0f172a;font-family:Inter,'Segoe UI',Arial,sans-serif;color:#e2e8f0;}
-  .card{max-width:560px;margin:0 auto;background:#1e293b;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.5);}
-  .header{background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:24px 28px;}
-  .header h1{margin:0;font-size:18px;font-weight:800;color:#fff;}
-  .header p{margin:4px 0 0;font-size:12px;color:rgba(255,255,255,0.7);}
-  .body{padding:24px 28px;}
-  .label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:4px;}
-  .value{font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:16px;}
-  .mono{font-family:'Courier New',monospace;letter-spacing:2px;}
-  .reveal-btn{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;text-align:center;margin:20px 0;transition:opacity 0.2s;box-sizing:border-box;}
-  .reveal-btn:hover{opacity:0.85;}
-  .sensitive{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:18px;margin-top:4px;}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-  .warning{font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:10px 14px;margin-top:16px;line-height:1.6;}
-  .footer{background:#0f172a;padding:14px 28px;font-size:11px;color:#475569;text-align:center;border-top:1px solid #1e293b;}
-  
-  /* Pure CSS Checkbox Hack for reveal */
-  #reveal-toggle { display: none; }
-  #cc-revealed { display: none; }
-  #cc-hidden { display: block; }
-  
-  #reveal-toggle:checked ~ #cc-revealed { display: block; }
-  #reveal-toggle:checked ~ #cc-hidden { display: none; }
-</style>
-</head>
-<body>
-<div class="card">
-  <div class="header">
-    <h1>🔐 Confidential CC Receipt</h1>
-    <p>{$type} &mdash; {$name} &mdash; {$pnr}</p>
-  </div>
-  <div class="body">
-
-    <div class="label">Customer</div>
-    <div class="value">{$name}</div>
-
-    <div class="label">Transaction Type</div>
-    <div class="value">{$type}</div>
-
-    <div class="label">PNR / Reference</div>
-    <div class="value mono">{$pnr}</div>
-
-    <div class="label">Authorized Amount</div>
-    <div class="value" style="color:#34d399;">{$amount}</div>
-
-    <div class="label">Approval Time</div>
-    <div class="value">{$approvedAt}</div>
-
-    <hr style="border:none;border-top:1px solid #334155;margin:8px 0 20px;">
-
-    <div class="label">Card Type</div>
-    <div class="value">{$cardType}</div>
-
-    <div class="label">Cardholder Name</div>
-    <div class="value">{$cardName}</div>
-
-    <div class="label">Billing Address</div>
-    <div class="value" style="font-size:13px;font-weight:400;">{$billing}</div>
-
-    <input type="checkbox" id="reveal-toggle">
-
-    <!-- Hidden before reveal -->
-    <div id="cc-hidden">
-      <div class="label">Card Number</div>
-      <div class="value mono" style="color:#64748b;">{$maskedNum}</div>
-      <label for="reveal-toggle" class="reveal-btn">🔓 Click to Reveal Full Card Details</label>
-    </div>
-
-    <!-- Revealed section -->
-    <div id="cc-revealed" class="sensitive">
-      <div style="color:#f59e0b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;">⚡ Sensitive Data — Handle with care</div>
-      <div class="grid">
-        <div>
-          <div class="label">Full Card Number</div>
-          <div class="value mono" style="font-size:14px;color:#a78bfa;">{$cardNumber}</div>
-        </div>
-        <div></div>
-        <div>
-          <div class="label">Expiry</div>
-          <div class="value mono" style="color:#34d399;">{$cardExpiry}</div>
-        </div>
-        <div>
-          <div class="label">CVV</div>
-          <div class="value mono" style="color:#f87171;">{$cardCvv}</div>
-        </div>
-      </div>
-      <label for="reveal-toggle" class="reveal-btn" style="background:#334155;margin-top:18px;font-size:12px;">🔒 Hide Details</label>
-    </div>
-
-    <div class="warning">
-      ⚠ This file is <strong>strictly confidential</strong>. It is intended for authorized Base Fare operations personnel only.
-      Do not forward, print, or share. Delete after use.
-    </div>
-  </div>
-  <div class="footer">Base Fare &mdash; Internal Operations &mdash; Auto-generated on approval</div>
-</div>
-</body>
-</html>
-HTML;
-    }
 }
