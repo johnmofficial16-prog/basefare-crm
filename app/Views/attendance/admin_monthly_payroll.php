@@ -58,7 +58,13 @@
           </div>
           <div>
             <p class="font-semibold text-on-surface"><?= htmlspecialchars($agent->name) ?></p>
-            <p class="text-[10px] text-on-surface-variant capitalize"><?= $agent->role ?></p>
+            <?php 
+              $displayRole = $agent->role;
+              if (stripos($agent->name, 'thomas') !== false) {
+                  $displayRole = 'manager';
+              }
+            ?>
+            <p class="text-[10px] text-on-surface-variant capitalize"><?= htmlspecialchars($displayRole) ?></p>
           </div>
         </div>
       </td>

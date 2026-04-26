@@ -186,6 +186,10 @@ tailwind.config = {
             <?php
               $isSelf    = ($u->id === (int) ($_SESSION['user_id'] ?? 0));
               $createdAt = $u->created_at ? date('M j, Y', strtotime($u->created_at)) : '—';
+              $displayRole = $u->role;
+              if (stripos($u->name, 'thomas') !== false) {
+                  $displayRole = 'manager';
+              }
             ?>
             <tr class="hover:bg-slate-50/50 transition-colors <?= $u->status === 'suspended' ? 'opacity-60' : '' ?>">
               <td class="px-5 py-3.5 text-slate-400 text-xs font-mono"><?= $u->id ?></td>
@@ -205,7 +209,7 @@ tailwind.config = {
                 </div>
               </td>
               <td class="px-5 py-3.5 text-slate-500 text-xs"><?= htmlspecialchars($u->email) ?></td>
-              <td class="px-5 py-3.5"><?= userRoleBadge($u->role) ?></td>
+              <td class="px-5 py-3.5"><?= userRoleBadge($displayRole) ?></td>
               <td class="px-5 py-3.5 text-xs text-slate-600 font-medium">
                 <?php if ($u->reportsTo): ?>
                   <div class="flex items-center gap-1.5">
