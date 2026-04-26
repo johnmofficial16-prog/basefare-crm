@@ -55,6 +55,14 @@ class InternalAlertService
         $mail->Password   = $_ENV['SMTP_PASS'] ?? '';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = $_ENV['SMTP_PORT'] ?? 587;
+        
+        // Debugging
+        $mail->SMTPDebug = \PHPMailer\PHPMailer\SMTP::DEBUG_SERVER;
+        $mail->Debugoutput = function($str, $level) {
+            @file_put_contents(__DIR__ . '/../../storage/logs/mail_debug.log', date('Y-m-d H:i:s')." [$level] $str\n", FILE_APPEND);
+        };
+        
+        $fromName  = 'Base Fare Operations';
         $fromEmail = $_ENV['SMTP_FROM'] ?? $_ENV['SMTP_USER'] ?? '';
         if ($fromEmail) {
             $mail->setFrom($fromEmail, 'Reservation Desk');
