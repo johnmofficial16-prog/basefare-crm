@@ -247,7 +247,7 @@ class DashboardController
         // AGENT — personal performance dashboard
         // =====================================================================
         $agentData = null;
-        if ($role === User::ROLE_AGENT) {
+        if (in_array($role, [User::ROLE_AGENT, User::ROLE_CSA])) {
             $myTodayBase     = fn() => Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
                                    ->where('status', '!=', Transaction::STATUS_VOIDED)
                                    ->where('agent_id', $userId);

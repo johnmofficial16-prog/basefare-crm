@@ -43,11 +43,12 @@ class TransactionController
 
         $isElevated   = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
         $isSupervisor = ($userRole === User::ROLE_SUPERVISOR);
+        $isCsa        = ($userRole === User::ROLE_CSA);
 
         $agentIds = null;
         $agentFilter = null;
 
-        if ($isElevated) {
+        if ($isElevated || $isCsa) {
             // unrestricted
         } elseif ($isSupervisor) {
             $actor = \App\Models\User::find($userId);
@@ -78,6 +79,11 @@ class TransactionController
         $userId = $_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
 
+        if ($userRole === User::ROLE_CSA) {
+            $_SESSION['flash_error'] = 'Access denied. CSA cannot create transactions.';
+            return $response->withHeader('Location', '/transactions')->withStatus(302);
+        }
+
         $prefill = null;
         $autofillId = $params['autofill'] ?? $params['acceptance_id'] ?? null;
         if (!empty($autofillId)) {
@@ -105,7 +111,13 @@ class TransactionController
     public function store(Request $request, Response $response): Response
     {
         $agentId = $_SESSION['user_id'];
+        $userRole = $_SESSION['role'] ?? 'agent';
         $body    = $request->getParsedBody();
+
+        if ($userRole === User::ROLE_CSA) {
+            $_SESSION['flash_error'] = 'Access denied. CSA cannot create transactions.';
+            return $response->withHeader('Location', '/transactions')->withStatus(302);
+        }
 
         $required = ['type', 'customer_name', 'customer_email', 'pnr', 'total_amount', 'profit_mco'];
         foreach ($required as $field) {
@@ -196,7 +208,7 @@ class TransactionController
             return $response->withHeader('Location', '/transactions')->withStatus(302);
         }
 
-        if (!$isAdmin && $txn->agent_id !== $userId) {
+        if (!$isAdmin && $userRole !== User::ROLE_CSA && $txn->agent_id !== $userId) {
             $_SESSION['flash_error'] = 'Access denied.';
             return $response->withHeader('Location', '/transactions')->withStatus(302);
         }
@@ -265,6 +277,11 @@ class TransactionController
         $userRole = $_SESSION['role'] ?? 'agent';
         $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
 
+        if ($userRole === User::ROLE_CSA) {
+            $_SESSION['flash_error'] = 'Access denied. CSA cannot edit transactions.';
+            return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
+        }
+
         $txn = Transaction::with(['passengers', 'cards'])->find($id);
         if (!$txn) {
             $_SESSION['flash_error'] = 'Transaction not found.';
@@ -294,6 +311,12 @@ class TransactionController
     {
         $id   = (int)$args['id'];
         $body = $request->getParsedBody();
+        $userRole = $_SESSION['role'] ?? 'agent';
+
+        if ($userRole === User::ROLE_CSA) {
+            $_SESSION['flash_error'] = 'Access denied. CSA cannot edit transactions.';
+            return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
+        }
 
         $passengers = json_decode($body['passengers_json'] ?? '[]', true);
         $typeData   = !empty($body['type_specific_data_json'])
@@ -603,6 +626,9 @@ class TransactionController
         }
 
         $userRole = $_SESSION['role'] ?? 'agent';
+        if ($userRole === User::ROLE_CSA) {
+            return $this->jsonResponse($response, ['error' => 'CSA cannot add notes.'], 403);
+        }
         if ($userRole === User::ROLE_AGENT && $txn->agent_id !== $userId) {
             return $this->jsonResponse($response, ['error' => 'Access denied.'], 403);
         }

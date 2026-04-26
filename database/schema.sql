@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `name` varchar(255) NOT NULL,
   `email` varchar(255) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
-  `role` enum('admin','manager','supervisor','agent') NOT NULL DEFAULT 'agent',
+  `role` enum('admin','manager','supervisor','agent','csa') NOT NULL DEFAULT 'agent',
   `reports_to_id` int DEFAULT NULL,
   `grace_period_mins` int NOT NULL DEFAULT 30,
   `status` enum('active','inactive','suspended') NOT NULL DEFAULT 'active',

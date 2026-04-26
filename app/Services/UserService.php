@@ -45,7 +45,7 @@ class UserService
         }
 
         // Filter by role
-        $validRoles = [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR, User::ROLE_AGENT];
+        $validRoles = [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR, User::ROLE_AGENT, User::ROLE_CSA];
         if (!empty($filters['role']) && in_array($filters['role'], $validRoles)) {
             $query->where('role', $filters['role']);
         }
@@ -94,7 +94,7 @@ class UserService
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return ['success' => false, 'error' => 'Invalid email address.'];
         }
-        $validRoles = [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR, User::ROLE_AGENT];
+        $validRoles = [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR, User::ROLE_AGENT, User::ROLE_CSA];
         if (!in_array($role, $validRoles)) {
             return ['success' => false, 'error' => 'Invalid role.'];
         }
@@ -203,7 +203,7 @@ class UserService
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return ['success' => false, 'error' => 'Invalid email address.'];
         }
-        $validRoles = [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR, User::ROLE_AGENT];
+        $validRoles = [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR, User::ROLE_AGENT, User::ROLE_CSA];
         if (!in_array($role, $validRoles)) {
             return ['success' => false, 'error' => 'Invalid role.'];
         }

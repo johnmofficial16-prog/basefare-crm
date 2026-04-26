@@ -42,6 +42,7 @@ class User extends Model
     const ROLE_MANAGER    = 'manager';
     const ROLE_SUPERVISOR = 'supervisor';
     const ROLE_AGENT      = 'agent';
+    const ROLE_CSA        = 'csa';
 
     // ─── Relationships ────────────────────────────────────────────────────────
 

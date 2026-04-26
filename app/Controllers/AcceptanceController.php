@@ -50,8 +50,8 @@ class AcceptanceController
             'date_to'   => $params['date_to'] ?? '',
         ];
 
-        // Agents see only their own; admins/managers see all
-        $agentFilter = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])
+        // Agents see only their own; admins/managers/csa see all
+        $agentFilter = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_CSA])
             ? null
             : $userId;
 
@@ -71,6 +71,12 @@ class AcceptanceController
     public function createForm(Request $request, Response $response): Response
     {
         $params = $request->getQueryParams();
+        $userRole = $_SESSION['role'] ?? 'agent';
+
+        if ($userRole === User::ROLE_CSA) {
+            $_SESSION['flash_error'] = 'Access denied. CSA cannot create acceptances.';
+            return $response->withHeader('Location', '/acceptance')->withStatus(302);
+        }
 
         // Pre-fill support: if opened from Transaction Recorder
         $maxId = AcceptanceRequest::max('id') ?? 0;
@@ -129,7 +135,13 @@ class AcceptanceController
     public function store(Request $request, Response $response): Response
     {
         $agentId = $_SESSION['user_id'];
+        $userRole = $_SESSION['role'] ?? 'agent';
         $body    = $request->getParsedBody();
+
+        if ($userRole === User::ROLE_CSA) {
+            $_SESSION['flash_error'] = 'Access denied. CSA cannot create acceptances.';
+            return $response->withHeader('Location', '/acceptance')->withStatus(302);
+        }
 
         // ── Validate required fields ───────────────────────────────────────
         $required = ['type', 'customer_name', 'customer_email', 'total_amount'];
@@ -285,6 +297,9 @@ class AcceptanceController
 
         // Agents can only add notes to their own records
         $userRole = $_SESSION['role'] ?? 'agent';
+        if ($userRole === \App\Models\User::ROLE_CSA) {
+            return $this->jsonResponse($response, ['error' => 'CSA cannot add notes.'], 403);
+        }
         if ($userRole === \App\Models\User::ROLE_AGENT && $acc->agent_id !== $userId) {
             return $this->jsonResponse($response, ['error' => 'Access denied.'], 403);
         }
@@ -393,6 +408,11 @@ class AcceptanceController
     {
         $id         = (int)($args['id'] ?? 0);
         $acceptance = AcceptanceRequest::find($id);
+        $userRole = $_SESSION['role'] ?? 'agent';
+
+        if ($userRole === User::ROLE_CSA) {
+            return $this->jsonResponse($response, ['success' => false, 'error' => 'Access denied. CSA cannot resend.'], 403);
+        }
 
         if (!$acceptance) {
             return $this->jsonResponse($response, ['success' => false, 'error' => 'Not found.'], 404);
@@ -433,6 +453,11 @@ class AcceptanceController
         $id         = (int)($args['id'] ?? 0);
         $agentId    = $_SESSION['user_id'];
         $acceptance = AcceptanceRequest::find($id);
+        $userRole   = $_SESSION['role'] ?? 'agent';
+
+        if ($userRole === User::ROLE_CSA) {
+            return $this->jsonResponse($response, ['success' => false, 'error' => 'Access denied. CSA cannot cancel requests.'], 403);
+        }
 
         if (!$acceptance) {
             return $this->jsonResponse($response, ['success' => false, 'error' => 'Not found.'], 404);

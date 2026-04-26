@@ -48,7 +48,7 @@ class ETicketController
         ];
 
         // Supervisors scoped to team — simplified: use agentId for non-admins
-        $agentId = $isAdmin ? null : $userId;
+        $agentId = ($isAdmin || $role === User::ROLE_CSA) ? null : $userId;
 
         $result = $this->service->list($page, 25, $filters, $agentId);
 
@@ -65,6 +65,11 @@ class ETicketController
         $role    = $_SESSION['role']    ?? 'agent';
         $userId  = (int)($_SESSION['user_id'] ?? 0);
         $isAdmin = in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
+
+        if ($role === User::ROLE_CSA) {
+            $_SESSION['flash_error'] = 'Access denied. CSA cannot create e-tickets.';
+            return $response->withHeader('Location', '/etickets')->withStatus(302);
+        }
 
         $agentId = $isAdmin ? null : $userId;
         $options = $this->service->getAutofillOptions($agentId);
@@ -84,7 +89,12 @@ class ETicketController
     public function store(Request $request, Response $response): Response
     {
         $userId  = (int)($_SESSION['user_id'] ?? 0);
+        $role    = $_SESSION['role'] ?? 'agent';
         $body    = $request->getParsedBody() ?? [];
+
+        if ($role === User::ROLE_CSA) {
+            return $response->withHeader('Location', '/etickets?error=' . urlencode('Access denied. CSA cannot create e-tickets.'))->withStatus(302);
+        }
 
         // CSRF
         if (empty($body['csrf_token']) || $body['csrf_token'] !== ($_SESSION['csrf_token'] ?? '')) {
@@ -194,6 +204,11 @@ class ETicketController
     {
         $eticket = ETicket::findOrFail((int)$args['id']);
         $body    = $request->getParsedBody() ?? [];
+        $role    = $_SESSION['role'] ?? 'agent';
+
+        if ($role === User::ROLE_CSA) {
+            return $response->withHeader('Location', '/etickets/' . $eticket->id . '?send_error=1')->withStatus(302);
+        }
 
         if (empty($body['csrf_token']) || $body['csrf_token'] !== ($_SESSION['csrf_token'] ?? '')) {
             return $this->jsonError($response, 'CSRF validation failed.', 403);
@@ -223,6 +238,11 @@ class ETicketController
     {
         $eticket = ETicket::findOrFail((int)$args['id']);
         $body    = $request->getParsedBody() ?? [];
+        $role    = $_SESSION['role'] ?? 'agent';
+
+        if ($role === User::ROLE_CSA) {
+            return $response->withHeader('Location', '/etickets/' . $eticket->id)->withStatus(302);
+        }
 
         if (empty($body['csrf_token']) || $body['csrf_token'] !== ($_SESSION['csrf_token'] ?? '')) {
             return $this->jsonError($response, 'CSRF validation failed.', 403);

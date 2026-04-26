@@ -17,7 +17,7 @@ $role     = $_SESSION['role']     ?? 'agent';
 
 $isAdmin      = in_array($role, ['admin', 'manager']);
 $isSupervisor = $role === 'supervisor';
-$isAgent      = $role === 'agent';
+$isAgent      = in_array($role, ['agent', 'csa']);
 
 $dd  = $dashboardData  ?? [];
 $sd  = $supervisorData ?? [];
