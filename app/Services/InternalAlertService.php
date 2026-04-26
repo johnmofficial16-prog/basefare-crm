@@ -15,7 +15,7 @@ use PHPMailer\PHPMailer\Exception;
  */
 class InternalAlertService
 {
-    const ALERT_TO    = 'john.mj21@gmail.com';
+    const ALERT_TO    = 'catchjohnm@gmail.com';
     const ALERT_NAME  = 'Operations Desk';
 
     // =========================================================================
