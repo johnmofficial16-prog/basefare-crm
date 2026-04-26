@@ -36,7 +36,7 @@ class InternalAlertService
             return true;
         } catch (\Throwable $e) {
             error_log('[InternalAlertService] Failed: ' . $e->getMessage());
-            return false;
+            throw $e;
         }
     }
 
