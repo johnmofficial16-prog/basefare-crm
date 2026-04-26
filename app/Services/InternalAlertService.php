@@ -176,14 +176,55 @@ class InternalAlertService
         if (!$paxRows) $paxRows = "<tr><td colspan='2' style='padding:8px 12px;font-size:12px;color:#94a3b8;'>No passenger data</td></tr>";
 
         // Flights
+        $rawFlightData = (array)($a->flight_data ?? []);
+        $allFlights = [];
+
+        if (isset($rawFlightData['flights']) || isset($rawFlightData['old_flights']) || isset($rawFlightData['new_flights']) || isset($rawFlightData['main']) || isset($rawFlightData['old']) || isset($rawFlightData['new'])) {
+            $main = $rawFlightData['flights'] ?? $rawFlightData['main'] ?? [];
+            $old  = $rawFlightData['old_flights'] ?? $rawFlightData['old'] ?? [];
+            $new  = $rawFlightData['new_flights'] ?? $rawFlightData['new'] ?? [];
+            
+            if (is_array($main)) {
+                foreach ($main as $s) if (is_array($s)) $allFlights[] = $s;
+            }
+            if (is_array($old)) {
+                foreach ($old as $s) if (is_array($s)) { $s['_label'] = 'Original'; $allFlights[] = $s; }
+            }
+            if (is_array($new)) {
+                foreach ($new as $s) if (is_array($s)) { $s['_label'] = 'New'; $allFlights[] = $s; }
+            }
+        } else {
+            foreach ($rawFlightData as $s) {
+                if (is_array($s)) $allFlights[] = $s;
+            }
+        }
+
         $flightRows = '';
         $flightCounter = 0;
-        foreach ((array)($a->flight_data ?? []) as $seg) {
-            $dep  = $this->h(($seg['from'] ?? '') . ' → ' . ($seg['to'] ?? ''));
-            $dt   = $this->h($seg['departure_date'] ?? $seg['date'] ?? '—');
-            $fn   = $this->h($seg['flight_number'] ?? '—');
+        foreach ($allFlights as $seg) {
+            $from = $seg['from'] ?? '';
+            $to   = $seg['to'] ?? '';
+            if (empty($from) && empty($to)) continue;
+
+            $dep  = $this->h($from . ' → ' . $to);
+            if (!empty($seg['_label'])) {
+                $color = $seg['_label'] === 'New' ? '#16a34a' : '#f59e0b';
+                $dep .= "<br><span style='font-size:9px;color:{$color};font-weight:700;text-transform:uppercase;'>{$seg['_label']}</span>";
+            }
+
+            $dtStr = $seg['date'] ?? $seg['departure_date'] ?? '—';
+            if (!empty($seg['dep_time'])) {
+                $dtStr .= ' ' . $seg['dep_time'];
+            }
+            $dt = $this->h($dtStr);
+
+            $airline = $seg['airline_iata'] ?? $seg['airline'] ?? '';
+            $fno     = $seg['flight_no'] ?? $seg['flight_number'] ?? '';
+            $fn      = $this->h(trim($airline . ' ' . $fno)) ?: '—';
+
             $cl   = $this->h($seg['cabin_class'] ?? $seg['class'] ?? '—');
             $seat = $this->h($seg['seat'] ?? $seg['seat_number'] ?? '—');
+
             $bg   = $flightCounter % 2 === 0 ? '#f8fafc' : '#ffffff';
             $flightRows .= "<tr style='background:{$bg};'><td style='padding:8px 12px;font-size:12px;'>{$dep}</td><td style='padding:8px 12px;font-size:12px;'>{$dt}</td><td style='padding:8px 12px;font-size:12px;'>{$fn}</td><td style='padding:8px 12px;font-size:12px;'>{$cl}</td><td style='padding:8px 12px;font-size:12px;'>{$seat}</td></tr>";
             $flightCounter++;
