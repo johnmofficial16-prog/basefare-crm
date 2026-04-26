@@ -128,6 +128,7 @@ tailwind.config = {
             <option value="manager" <?= ($filters['role'] ?? '') === 'manager' ? 'selected' : '' ?>>Manager</option>
             <option value="supervisor" <?= ($filters['role'] ?? '') === 'supervisor' ? 'selected' : '' ?>>Supervisor</option>
             <option value="agent"   <?= ($filters['role'] ?? '') === 'agent'   ? 'selected' : '' ?>>Agent</option>
+            <option value="csa"     <?= ($filters['role'] ?? '') === 'csa'     ? 'selected' : '' ?>>Customer Service Agent (CSA)</option>
           </select>
         </div>
 

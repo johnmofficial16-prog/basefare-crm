@@ -110,6 +110,7 @@ tailwind.config = {
                 <?= $user->id === (int)($_SESSION['user_id'] ?? 0) ? 'disabled title="You cannot change your own role."' : '' ?>
                 onchange="handleRoleChange(this.value)">
                 <option value="agent"      <?= ($old['role'] ?? $user->role) === 'agent'      ? 'selected' : '' ?>>Agent</option>
+                <option value="csa"        <?= ($old['role'] ?? $user->role) === 'csa'        ? 'selected' : '' ?>>Customer Service Agent (CSA)</option>
                 <option value="supervisor" <?= ($old['role'] ?? $user->role) === 'supervisor' ? 'selected' : '' ?>>Supervisor</option>
                 <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
                 <option value="manager"    <?= ($old['role'] ?? $user->role) === 'manager'    ? 'selected' : '' ?>>Manager</option>
