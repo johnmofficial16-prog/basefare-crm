@@ -352,7 +352,7 @@ class AttendanceController
         $agentId = isset($params['agent_id']) ? (int)$params['agent_id'] : null;
 
         $sessions = $this->service->getHistoricalData($date, $agentId);
-        $agents   = \App\Models\User::whereIn('role', ['agent', 'manager'])
+        $agents   = \App\Models\User::whereIn('role', [\App\Models\User::ROLE_AGENT, \App\Models\User::ROLE_MANAGER, \App\Models\User::ROLE_SUPERVISOR, \App\Models\User::ROLE_CSA])
             ->where('status', 'active')
             ->orderBy('name')
             ->get();

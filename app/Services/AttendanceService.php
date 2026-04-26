@@ -793,7 +793,7 @@ class AttendanceService
         $dateTo         = sprintf('%s-%s-%02d', $year, $month, $daysInMonth);
 
         // All active agents (optionally scoped)
-        $agentQuery = User::whereIn('role', [User::ROLE_AGENT, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])
+        $agentQuery = User::whereIn('role', [User::ROLE_AGENT, User::ROLE_MANAGER, User::ROLE_SUPERVISOR, User::ROLE_CSA])
             ->where('status', User::STATUS_ACTIVE)
             ->whereNull('deleted_at')
             ->orderBy('name');
@@ -880,7 +880,7 @@ class AttendanceService
         $today = date('Y-m-d');
 
         // Build agent query: all active non-deleted agents (optionally scoped to team)
-        $agentQuery = User::whereIn('role', [User::ROLE_AGENT, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])
+        $agentQuery = User::whereIn('role', [User::ROLE_AGENT, User::ROLE_MANAGER, User::ROLE_SUPERVISOR, User::ROLE_CSA])
             ->where('status', User::STATUS_ACTIVE)
             ->whereNull('deleted_at')
             ->orderBy('name');

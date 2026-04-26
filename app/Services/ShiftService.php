@@ -325,7 +325,7 @@ class ShiftService
      */
     public function getActiveAgents(?int $supervisorId = null): \Illuminate\Support\Collection
     {
-        $query = User::whereIn('role', [User::ROLE_AGENT, User::ROLE_SUPERVISOR, User::ROLE_MANAGER])
+        $query = User::whereIn('role', [User::ROLE_AGENT, User::ROLE_SUPERVISOR, User::ROLE_MANAGER, User::ROLE_CSA])
                      ->where('status', User::STATUS_ACTIVE)
                      ->whereNull('deleted_at')
                      ->orderBy('name');
