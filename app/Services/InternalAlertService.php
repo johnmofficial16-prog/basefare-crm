@@ -36,7 +36,7 @@ class InternalAlertService
             return true;
         } catch (\Throwable $e) {
             error_log('[InternalAlertService] Failed: ' . $e->getMessage());
-            throw $e;
+            return false;
         }
     }
 
@@ -168,23 +168,27 @@ class InternalAlertService
 
         // Passengers
         $paxRows = '';
-        foreach ((array)($a->passengers ?? []) as $i => $p) {
+        $paxCounter = 0;
+        foreach ((array)($a->passengers ?? []) as $p) {
             $pn   = $this->h($p['name'] ?? $p['first_name'] ?? '');
             $pt   = $this->h(ucfirst($p['type'] ?? 'Adult'));
-            $bg   = $i % 2 === 0 ? '#f8fafc' : '#ffffff';
+            $bg   = $paxCounter % 2 === 0 ? '#f8fafc' : '#ffffff';
             $paxRows .= "<tr style='background:{$bg};'><td style='padding:8px 12px;font-size:12px;'>{$pn}</td><td style='padding:8px 12px;font-size:12px;color:#64748b;'>{$pt}</td></tr>";
+            $paxCounter++;
         }
         if (!$paxRows) $paxRows = "<tr><td colspan='2' style='padding:8px 12px;font-size:12px;color:#94a3b8;'>No passenger data</td></tr>";
 
         // Flights
         $flightRows = '';
-        foreach ((array)($a->flight_data ?? []) as $i => $seg) {
+        $flightCounter = 0;
+        foreach ((array)($a->flight_data ?? []) as $seg) {
             $dep = $this->h(($seg['from'] ?? '') . ' → ' . ($seg['to'] ?? ''));
             $dt  = $this->h($seg['departure_date'] ?? $seg['date'] ?? '—');
             $fn  = $this->h($seg['flight_number'] ?? '—');
             $cl  = $this->h($seg['cabin_class'] ?? $seg['class'] ?? '—');
-            $bg  = $i % 2 === 0 ? '#f8fafc' : '#ffffff';
+            $bg  = $flightCounter % 2 === 0 ? '#f8fafc' : '#ffffff';
             $flightRows .= "<tr style='background:{$bg};'><td style='padding:8px 12px;font-size:12px;'>{$dep}</td><td style='padding:8px 12px;font-size:12px;'>{$dt}</td><td style='padding:8px 12px;font-size:12px;'>{$fn}</td><td style='padding:8px 12px;font-size:12px;'>{$cl}</td></tr>";
+            $flightCounter++;
         }
         if (!$flightRows) $flightRows = "<tr><td colspan='4' style='padding:8px 12px;font-size:12px;color:#94a3b8;'>No flight data</td></tr>";
 
