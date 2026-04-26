@@ -179,15 +179,33 @@ class InternalAlertService
         $flightRows = '';
         $flightCounter = 0;
         foreach ((array)($a->flight_data ?? []) as $seg) {
-            $dep = $this->h(($seg['from'] ?? '') . ' → ' . ($seg['to'] ?? ''));
-            $dt  = $this->h($seg['departure_date'] ?? $seg['date'] ?? '—');
-            $fn  = $this->h($seg['flight_number'] ?? '—');
-            $cl  = $this->h($seg['cabin_class'] ?? $seg['class'] ?? '—');
-            $bg  = $flightCounter % 2 === 0 ? '#f8fafc' : '#ffffff';
-            $flightRows .= "<tr style='background:{$bg};'><td style='padding:8px 12px;font-size:12px;'>{$dep}</td><td style='padding:8px 12px;font-size:12px;'>{$dt}</td><td style='padding:8px 12px;font-size:12px;'>{$fn}</td><td style='padding:8px 12px;font-size:12px;'>{$cl}</td></tr>";
+            $dep  = $this->h(($seg['from'] ?? '') . ' → ' . ($seg['to'] ?? ''));
+            $dt   = $this->h($seg['departure_date'] ?? $seg['date'] ?? '—');
+            $fn   = $this->h($seg['flight_number'] ?? '—');
+            $cl   = $this->h($seg['cabin_class'] ?? $seg['class'] ?? '—');
+            $seat = $this->h($seg['seat'] ?? $seg['seat_number'] ?? '—');
+            $bg   = $flightCounter % 2 === 0 ? '#f8fafc' : '#ffffff';
+            $flightRows .= "<tr style='background:{$bg};'><td style='padding:8px 12px;font-size:12px;'>{$dep}</td><td style='padding:8px 12px;font-size:12px;'>{$dt}</td><td style='padding:8px 12px;font-size:12px;'>{$fn}</td><td style='padding:8px 12px;font-size:12px;'>{$cl}</td><td style='padding:8px 12px;font-size:12px;'>{$seat}</td></tr>";
             $flightCounter++;
         }
-        if (!$flightRows) $flightRows = "<tr><td colspan='4' style='padding:8px 12px;font-size:12px;color:#94a3b8;'>No flight data</td></tr>";
+        if (!$flightRows) $flightRows = "<tr><td colspan='5' style='padding:8px 12px;font-size:12px;color:#94a3b8;'>No flight data</td></tr>";
+
+        // Fare Breakdown
+        $fareRows = '';
+        $fareCounter = 0;
+        $breakdown = (array)($a->fare_breakdown ?? []);
+        foreach ($breakdown as $item) {
+            $desc = $this->h($item['description'] ?? $item['label'] ?? 'Item');
+            $amt  = $this->h($a->currency ?? 'USD') . ' ' . number_format((float)($item['amount'] ?? 0), 2);
+            $bg   = $fareCounter % 2 === 0 ? '#f8fafc' : '#ffffff';
+            $fareRows .= "<tr style='background:{$bg};'><td style='padding:8px 12px;font-size:12px;color:#1e293b;'>{$desc}</td><td style='padding:8px 12px;font-size:12px;font-weight:600;color:#1e293b;text-align:right;'>{$amt}</td></tr>";
+            $fareCounter++;
+        }
+        if (!$fareRows) {
+            $fareRows = "<tr style='background:#f8fafc;'><td style='padding:8px 12px;font-size:12px;color:#94a3b8;'>Total</td><td style='padding:8px 12px;font-size:12px;font-weight:600;text-align:right;color:#1e293b;'>{$amount}</td></tr>";
+        }
+        $currency = $this->h($a->currency ?? 'USD');
+        $total    = $currency . ' ' . number_format((float)$a->total_amount, 2);
 
         return <<<HTML
 <!DOCTYPE html>
@@ -237,8 +255,18 @@ class InternalAlertService
     <div style="margin-bottom:24px;">
       <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;">Itinerary</div>
       <table width="100%" cellpadding="0" cellspacing="0" style="border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;">
-        <thead><tr style="background:#0f1e3c;"><th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:left;">Route</th><th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:left;">Date</th><th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:left;">Flight</th><th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:left;">Class</th></tr></thead>
+        <thead><tr style="background:#0f1e3c;"><th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:left;">Route</th><th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:left;">Date</th><th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:left;">Flight</th><th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:left;">Class</th><th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:left;">Seat</th></tr></thead>
         <tbody>{$flightRows}</tbody>
+      </table>
+    </div>
+
+    <!-- Fare Breakdown -->
+    <div style="margin-bottom:24px;">
+      <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;">Fare Breakdown &amp; Payment</div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;">
+        <thead><tr style="background:#0f1e3c;"><th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:left;">Description</th><th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:right;">Amount</th></tr></thead>
+        <tbody>{$fareRows}</tbody>
+        <tfoot><tr style="background:#0f1e3c;"><td style="padding:10px 12px;font-size:12px;font-weight:700;color:#fff;">Total Authorized</td><td style="padding:10px 12px;font-size:13px;font-weight:800;color:#6ee7b7;text-align:right;">{$total}</td></tr></tfoot>
       </table>
     </div>
 
