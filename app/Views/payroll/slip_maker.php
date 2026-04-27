@@ -355,8 +355,6 @@ function resetForm(){
   document.getElementById('auth_name').value='Paramjeet Singh';
   document.getElementById('auth_title').value='Authorized Signatory';
   renderAll();
-}').value='<?= date('Y') ?>';
-  renderAll();
 }
 
 renderAll();
