@@ -1,6 +1,6 @@
 <?php
 $activePage = 'payroll';
-$logoPath = ROOTPATH . 'salary slip logo.jpeg';
+$logoPath = __DIR__ . '/../../../salary slip logo.jpeg';
 $logoB64  = file_exists($logoPath) ? 'data:image/jpeg;base64,' . base64_encode(file_get_contents($logoPath)) : '';
 ?>
 <!DOCTYPE html>
