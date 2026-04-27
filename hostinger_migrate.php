@@ -39,6 +39,7 @@ $files = [
     __DIR__ . '/database/migrations/2026_04_15_add_preauth_columns.sql',
     __DIR__ . '/database/migrations/record_notes.sql',
     __DIR__ . '/database/migrations/add_ip_location.sql',
+    __DIR__ . '/database/migrations/2026_04_27_add_csa_role.sql',
 ];
 
 foreach ($files as $file) {
