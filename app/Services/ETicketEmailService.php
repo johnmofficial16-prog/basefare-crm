@@ -324,31 +324,64 @@ class ETicketEmailService
                 $nextSeg  = $segs[$idx + 1];
                 $arrT = $arr;
                 $depT = htmlspecialchars($nextSeg['dep_time'] ?? $nextSeg['time'] ?? $nextSeg['departure_time'] ?? '');
+                
+                $nextDate = htmlspecialchars($nextSeg['date'] ?? $nextSeg['departure_date'] ?? '');
+                $sameDay  = (trim($date) !== '' && trim($nextDate) !== '' && trim($date) === trim($nextDate));
+                $isReturn = !$sameDay;
+
                 $layStr   = 'Connection in ' . ($cityNames[$to] ?? $to);
                 $layColor = '#fffbeb'; $layBorder = '#fde68a'; $layText = '#92400e';
+                
                 if ($arrT && $depT && strpos($arrT,':') !== false && strpos($depT,':') !== false) {
                     [$ah,$am] = array_map('intval', explode(':',$arrT));
                     [$dh,$dm] = array_map('intval', explode(':',$depT));
                     $arrM = $ah*60+$am + ($nd ? 1440 : 0);
-                    $depM = $dh*60+$dm;
-                    if ($depM < $arrM && !$nd) $depM += 1440;
+                    
+                    $months = ['JAN'=>0,'FEB'=>1,'MAR'=>2,'APR'=>3,'MAY'=>4,'JUN'=>5,'JUL'=>6,'AUG'=>7,'SEP'=>8,'OCT'=>9,'NOV'=>10,'DEC'=>11];
+                    $dateDelta = 0;
+                    if (strlen($date) >= 5 && strlen($nextDate) >= 5) {
+                        $md1 = $months[strtoupper(substr($date,2,3))] ?? null;
+                        $md2 = $months[strtoupper(substr($nextDate,2,3))] ?? null;
+                        if ($md1 !== null && $md2 !== null) {
+                            $y1 = (int)date('Y'); $y2 = $y1;
+                            if ($md2 < $md1) $y2++;
+                            $d1 = mktime(0,0,0,$md1+1,intval($date),$y1);
+                            $d2 = mktime(0,0,0,$md2+1,intval($nextDate),$y2);
+                            $dateDelta = (int)round(($d2 - $d1) / 86400);
+                        }
+                    }
+                    
+                    $depM = $dh * 60 + $dm + $dateDelta * 1440;
                     $layMins = $depM - $arrM;
-                    if ($layMins < 0) {
-                        $layStr = '⛔ Impossible connection at ' . ($cityNames[$to] ?? $to);
-                        $layColor='#fff1f2';$layBorder='#fca5a5';$layText='#b91c1c';
-                    } elseif ($layMins < 45) {
-                        $h=intdiv($layMins,60);$m=$layMins%60;
-                        $layStr = ($h?"{$h}h ":'') . "{$m}m connection ⚠ Very tight — " . ($cityNames[$to] ?? $to);
-                        $layColor='#fff7ed';$layBorder='#fdba74';$layText='#c2410c';
+                    
+                    $nextFrom = strtoupper($nextSeg['from'] ?? $nextSeg['departure_airport'] ?? '');
+                    
+                    if ($layMins < 0 || $layMins >= 1440 || ($to !== $nextFrom && $nextFrom !== '')) {
+                        $isReturn = true;
                     } else {
-                        $h=intdiv($layMins,60);$m=$layMins%60;
-                        $layStr = ($h?"{$h}h ":'') . ($m?"{$m}m ":'') . 'connection — ' . ($cityNames[$to] ?? $to);
+                        $isReturn = false;
+                        if ($layMins < 45) {
+                            $h=intdiv($layMins,60);$m=$layMins%60;
+                            $layStr = ($h?"{$h}h ":'') . "{$m}m connection ⚠ Very tight — " . ($cityNames[$to] ?? $to);
+                            $layColor='#fff7ed';$layBorder='#fdba74';$layText='#c2410c';
+                        } else {
+                            $h=intdiv($layMins,60);$m=$layMins%60;
+                            $layStr = ($h?"{$h}h ":'') . ($m?"{$m}m ":'') . 'connection — ' . ($cityNames[$to] ?? $to);
+                        }
                     }
                 }
-                $flightRows .= "<tr style='background:{$layColor};'>"
-                    . "<td colspan='4' style='padding:6px 12px;font-size:10px;font-weight:700;color:{$layText};border-bottom:1px solid {$layBorder};border-top:1px solid {$layBorder};'>"
-                    . "✈&nbsp; {$layStr}"
-                    . "</td></tr>";
+                
+                if ($isReturn) {
+                    $flightRows .= "<tr style='background:#eff6ff;'>"
+                        . "<td colspan='4' style='padding:6px 12px;font-size:10px;font-weight:700;color:#1e40af;border-bottom:1px solid #bfdbfe;border-top:1px solid #bfdbfe;'>"
+                        . "✈&nbsp; Return Leg — {$nextDate}"
+                        . "</td></tr>";
+                } else {
+                    $flightRows .= "<tr style='background:{$layColor};'>"
+                        . "<td colspan='4' style='padding:6px 12px;font-size:10px;font-weight:700;color:{$layText};border-bottom:1px solid {$layBorder};border-top:1px solid {$layBorder};'>"
+                        . "✈&nbsp; {$layStr}"
+                        . "</td></tr>";
+                }
             }
         }
 

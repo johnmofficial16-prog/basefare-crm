@@ -446,66 +446,74 @@ tailwind.config = {
                   </div>
                 </div>
               </div>
-              <?php if ($i < count($segs)-1):
-                  $nextSeg  = $segs[$i + 1];
-                  $thisDate = trim($seg['date'] ?? '');
-                  $nextDate = trim($nextSeg['date'] ?? '');
-                  $sameDay  = ($thisDate !== '' && $nextDate !== '' && $thisDate === $nextDate);
-
-                  // Calculate actual layover duration
-                  $layStr   = '';
-                  $layClass = 'bg-amber-50 border-amber-200 text-amber-700';
-                  $layIcon  = 'connecting_airports';
-                  $arrT = $seg['arr_time'] ?? '';
-                  $depT = $nextSeg['dep_time'] ?? '';
-                  if ($arrT && $depT) {
-                      [$ah, $am] = array_map('intval', explode(':', $arrT));
-                      [$dh, $dm] = array_map('intval', explode(':', $depT));
-                      $arrM = $ah * 60 + $am + (!empty($seg['arr_next_day']) ? 1440 : 0);
-                      // Date delta
-                      $months = ['JAN'=>0,'FEB'=>1,'MAR'=>2,'APR'=>3,'MAY'=>4,'JUN'=>5,'JUL'=>6,'AUG'=>7,'SEP'=>8,'OCT'=>9,'NOV'=>10,'DEC'=>11];
-                      $dateDelta = 0;
-                      if (strlen($thisDate) >= 5 && strlen($nextDate) >= 5) {
-                          $md1 = $months[strtoupper(substr($thisDate,2,3))] ?? null;
-                          $md2 = $months[strtoupper(substr($nextDate,2,3))] ?? null;
-                          if ($md1 !== null && $md2 !== null) {
-                              $d1 = mktime(0,0,0,$md1+1,intval($thisDate),date('Y'));
-                              $d2 = mktime(0,0,0,$md2+1,intval($nextDate),date('Y'));
-                              $dateDelta = (int)round(($d2 - $d1) / 86400);
+                  <?php if ($i < count($segs)-1):
+                      $nextSeg  = $segs[$i + 1];
+                      $thisDate = trim($seg['date'] ?? '');
+                      $nextDate = trim($nextSeg['date'] ?? '');
+                      $sameDay  = ($thisDate !== '' && $nextDate !== '' && $thisDate === $nextDate);
+                      $isReturn = !$sameDay;
+    
+                      // Calculate actual layover duration
+                      $layStr   = '';
+                      $layClass = 'bg-amber-50 border-amber-200 text-amber-700';
+                      $layIcon  = 'connecting_airports';
+                      $arrT = $seg['arr_time'] ?? '';
+                      $depT = $nextSeg['dep_time'] ?? '';
+                      if ($arrT && $depT) {
+                          [$ah, $am] = array_map('intval', explode(':', $arrT));
+                          [$dh, $dm] = array_map('intval', explode(':', $depT));
+                          $arrM = $ah * 60 + $am + (!empty($seg['arr_next_day']) ? 1440 : 0);
+                          // Date delta
+                          $months = ['JAN'=>0,'FEB'=>1,'MAR'=>2,'APR'=>3,'MAY'=>4,'JUN'=>5,'JUL'=>6,'AUG'=>7,'SEP'=>8,'OCT'=>9,'NOV'=>10,'DEC'=>11];
+                          $dateDelta = 0;
+                          if (strlen($thisDate) >= 5 && strlen($nextDate) >= 5) {
+                              $md1 = $months[strtoupper(substr($thisDate,2,3))] ?? null;
+                              $md2 = $months[strtoupper(substr($nextDate,2,3))] ?? null;
+                              if ($md1 !== null && $md2 !== null) {
+                                  $y1 = (int)date('Y'); $y2 = $y1;
+                                  if ($md2 < $md1) $y2++;
+                                  $d1 = mktime(0,0,0,$md1+1,intval($thisDate),$y1);
+                                  $d2 = mktime(0,0,0,$md2+1,intval($nextDate),$y2);
+                                  $dateDelta = (int)round(($d2 - $d1) / 86400);
+                              }
+                          }
+                          $depM = $dh * 60 + $dm + $dateDelta * 1440;
+                          $layMins = $depM - $arrM;
+                          
+                          $to = strtoupper($seg['to'] ?? $seg['arrival_airport'] ?? '');
+                          $nextFrom = strtoupper($nextSeg['from'] ?? $nextSeg['departure_airport'] ?? '');
+                          
+                          if ($layMins < 0 || $layMins >= 1440 || ($to !== $nextFrom && $nextFrom !== '')) {
+                              $isReturn = true;
+                          } else {
+                              $isReturn = false;
+                              if ($layMins < 45) {
+                                  $h = intdiv($layMins,60); $m = $layMins % 60;
+                                  $layStr = ($h ? $h.'h ' : '') . $m . 'm connection ⚠ Very tight';
+                                  $layClass = 'bg-orange-50 border-orange-300 text-orange-700';
+                              } else {
+                                  $h = intdiv($layMins,60); $m = $layMins % 60;
+                                  $layStr = ($h ? $h.'h ' : '') . ($m ? $m.'m ' : '') . 'connection';
+                              }
                           }
                       }
-                      $depM = $dh * 60 + $dm + $dateDelta * 1440;
-                      $layMins = $depM - $arrM;
-                      if ($layMins < 0) {
-                          $layStr = '⛔ Impossible connection';
-                          $layClass = 'bg-rose-50 border-rose-400 text-rose-700';
-                          $layIcon  = 'error';
-                      } elseif ($layMins < 45) {
-                          $h = intdiv($layMins,60); $m = $layMins % 60;
-                          $layStr = ($h ? $h.'h ' : '') . $m . 'm connection ⚠ Very tight';
-                          $layClass = 'bg-orange-50 border-orange-300 text-orange-700';
-                      } else {
-                          $h = intdiv($layMins,60); $m = $layMins % 60;
-                          $layStr = ($h ? $h.'h ' : '') . ($m ? $m.'m ' : '') . 'connection';
-                      }
-                  }
-              ?>
-              <?php if ($sameDay || $layStr): ?>
-              <div class="flex items-center gap-2 px-3 py-1.5 <?= $layClass ?> border rounded-lg text-xs font-semibold">
-                <span class="material-symbols-outlined text-sm"><?= $layIcon ?></span>
-                <?php if ($layStr): ?>
-                  <?= htmlspecialchars($layStr) ?> in <?= htmlspecialchars($CITIES[$to] ?? $to) ?>
-                <?php else: ?>
-                  Connection in <?= htmlspecialchars($CITIES[$to] ?? $to) ?>
-                <?php endif; ?>
-              </div>
-              <?php else: ?>
-              <div class="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-semibold text-blue-700">
-                <span class="material-symbols-outlined text-sm">flight_takeoff</span>
-                Return Leg &mdash; <?= htmlspecialchars($nextDate) ?>
-              </div>
-              <?php endif; ?>
-              <?php endif; ?>
+                  ?>
+                  <?php if (!$isReturn): ?>
+                  <div class="flex items-center gap-2 px-3 py-1.5 <?= $layClass ?> border rounded-lg text-xs font-semibold">
+                    <span class="material-symbols-outlined text-sm"><?= $layIcon ?></span>
+                    <?php if ($layStr): ?>
+                      <?= htmlspecialchars($layStr) ?> in <?= htmlspecialchars($CITIES[$to] ?? $to) ?>
+                    <?php else: ?>
+                      Connection in <?= htmlspecialchars($CITIES[$to] ?? $to) ?>
+                    <?php endif; ?>
+                  </div>
+                  <?php else: ?>
+                  <div class="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-semibold text-blue-700">
+                    <span class="material-symbols-outlined text-sm">flight_takeoff</span>
+                    Return Leg &mdash; <?= htmlspecialchars($nextDate) ?>
+                  </div>
+                  <?php endif; ?>
+                  <?php endif; ?>
           <?php endforeach;
       }
       ?>

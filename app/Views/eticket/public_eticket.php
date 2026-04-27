@@ -463,6 +463,7 @@ if (session_status() === PHP_SESSION_NONE) {
                       $thisDate = trim($date);
                       $nextDate = trim($nextSeg['date'] ?? $nextSeg['departure_date'] ?? '');
                       $sameDay  = ($thisDate !== '' && $nextDate !== '' && $thisDate === $nextDate);
+                      $isReturn = !$sameDay;
     
                       // Calculate actual layover duration
                       $layStr   = '';
@@ -480,27 +481,34 @@ if (session_status() === PHP_SESSION_NONE) {
                               $md1 = $months[strtoupper(substr($thisDate,2,3))] ?? null;
                               $md2 = $months[strtoupper(substr($nextDate,2,3))] ?? null;
                               if ($md1 !== null && $md2 !== null) {
-                                  $d1 = mktime(0,0,0,$md1+1,intval($thisDate),date('Y'));
-                                  $d2 = mktime(0,0,0,$md2+1,intval($nextDate),date('Y'));
+                                  $y1 = (int)date('Y'); $y2 = $y1;
+                                  if ($md2 < $md1) $y2++;
+                                  $d1 = mktime(0,0,0,$md1+1,intval($thisDate),$y1);
+                                  $d2 = mktime(0,0,0,$md2+1,intval($nextDate),$y2);
                                   $dateDelta = (int)round(($d2 - $d1) / 86400);
                               }
                           }
                           $depM = $dh * 60 + $dm + $dateDelta * 1440;
                           $layMins = $depM - $arrM;
-                          if ($layMins < 0) {
-                              $layStr = '⛔ Impossible connection';
-                              $layColor = '#be123c'; $layBg = '#fff1f2'; $layBorder = '#fecdd3';
-                          } elseif ($layMins < 45) {
-                              $h = intdiv($layMins,60); $m = $layMins % 60;
-                              $layStr = ($h ? $h.'h ' : '') . $m . 'm connection ⚠ Very tight';
-                              $layColor = '#c2410c'; $layBg = '#fff7ed'; $layBorder = '#fed7aa';
+                          
+                          $nextFrom = strtoupper($nextSeg['from'] ?? $nextSeg['departure_airport'] ?? '');
+                          
+                          if ($layMins < 0 || $layMins >= 1440 || ($to !== $nextFrom && $nextFrom !== '')) {
+                              $isReturn = true;
                           } else {
-                              $h = intdiv($layMins,60); $m = $layMins % 60;
-                              $layStr = ($h ? $h.'h ' : '') . ($m ? $m.'m ' : '') . 'connection';
+                              $isReturn = false;
+                              if ($layMins < 45) {
+                                  $h = intdiv($layMins,60); $m = $layMins % 60;
+                                  $layStr = ($h ? $h.'h ' : '') . $m . 'm connection ⚠ Very tight';
+                                  $layColor = '#c2410c'; $layBg = '#fff7ed'; $layBorder = '#fed7aa';
+                              } else {
+                                  $h = intdiv($layMins,60); $m = $layMins % 60;
+                                  $layStr = ($h ? $h.'h ' : '') . ($m ? $m.'m ' : '') . 'connection';
+                              }
                           }
                       }
                   ?>
-                  <?php if ($sameDay || $layStr): ?>
+                  <?php if (!$isReturn): ?>
                   <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:<?= $layBg ?>;border:1px solid <?= $layBorder ?>;border-radius:8px;font-size:12px;font-weight:600;color:<?= $layColor ?>;">
                     <span style="font-size:16px;">⏱</span>
                     <?php if ($layStr): ?>
