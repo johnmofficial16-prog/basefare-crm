@@ -131,6 +131,28 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         </div>
       </div>
 
+      <!-- Pro-Rata Calculator -->
+      <div class="px-5 py-4 border-b border-slate-100 bg-blue-50/40">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-sm text-primary">calculate</span> Pro-Rata Calculator
+          <span class="ml-auto text-[9px] font-normal text-primary bg-blue-100 px-1.5 py-0.5 rounded-full">Auto-fills earnings</span>
+        </p>
+        <div class="grid grid-cols-2 gap-2.5 mb-2.5">
+          <div><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Monthly Gross (₹)</label>
+            <input id="calc_gross" type="number" placeholder="e.g. 35000" oninput="calcProRata()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
+          <div><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Basic % of Gross</label>
+            <input id="calc_basic_pct" type="number" value="50" min="1" max="100" oninput="calcProRata()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
+          <div><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">HRA % of Basic</label>
+            <input id="calc_hra_pct" type="number" value="40" min="0" max="100" oninput="calcProRata()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
+          <div><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">PF Deduction (₹)</label>
+            <input id="calc_pf" type="number" value="1800" min="0" oninput="calcProRata()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
+        </div>
+        <div id="calc_result" class="hidden text-[11px] text-slate-600 bg-white border border-blue-100 rounded-lg p-2.5 mb-2 space-y-0.5"></div>
+        <button onclick="applyProRata()" class="w-full inline-flex items-center justify-center gap-1 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-container transition-all">
+          <span class="material-symbols-outlined text-sm">auto_fix_high</span> Auto-Fill Earnings & Deductions
+        </button>
+      </div>
+
       <!-- Earnings -->
       <div class="px-5 py-4 border-b border-slate-100">
         <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
@@ -198,31 +220,14 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 </main>
 
 <script>
-const LOGO_B64 = '<?= addslashes($logoB64) ?>';
+const LOGO_B64 = <?= json_encode($logoB64) ?>;
 
 let earnings=[{label:'Basic Salary',amount:25000},{label:'House Rent Allowance (HRA)',amount:5000},{label:'Travel Allowance',amount:1600},{label:'Medical Allowance',amount:1250}];
 let deductions=[{label:'Provident Fund (PF)',amount:1800},{label:'Professional Tax',amount:200}];
 
-// Generate a digital signature: SVG path for default name, Dancing Script fallback otherwise
+// Digital signature: Dancing Script cursive font — looks authentic for any name
 function buildSignatureSVG(name) {
-  const isDefault = name.trim().toLowerCase() === 'paramjeet singh';
-  if (isDefault) {
-    // Hand-crafted SVG cursive path for "Paramjeet Singh"
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="160" height="48" style="display:block;margin:0 auto">
-      <path d="M8,42 C14,28 22,18 32,20 C40,22 38,34 32,38 C26,42 20,36 24,30 C28,24 38,22 46,26 C54,30 52,42 46,44
-               M46,44 C54,46 62,34 58,26 C54,18 44,20 42,28
-               M62,30 C66,20 74,16 80,20 C86,24 84,34 78,38 C74,40 70,36 72,30
-               M80,22 C84,14 92,12 98,18
-               M102,38 C108,24 116,16 122,20 C128,24 126,36 120,40 C116,42 112,38 116,30 C120,22 130,20 138,26 C144,30 142,40 136,44
-               M142,26 C146,18 154,14 160,20 C164,24 162,32 156,36 C152,38 150,44 154,48
-               M160,28 C164,20 170,18 174,24 C178,30 174,40 168,44 C164,46 162,50 166,52"
-            fill="none" stroke="#1e3a5f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M6,52 C40,52 80,50 110,52 C140,54 170,52 194,52" fill="none" stroke="#1e3a5f" stroke-width="0.8" stroke-linecap="round" opacity="0.35"/>
-    </svg>`;
-  } else {
-    // Fallback: Dancing Script cursive font
-    return `<div style="font-family:'Dancing Script',cursive;font-size:22px;font-weight:700;color:#1e3a5f;text-align:center;letter-spacing:.02em;line-height:1.1;padding:2px 0 4px">${esc(name)}</div>`;
-  }
+  return `<div style="font-family:'Dancing Script',cursive;font-size:28px;font-weight:700;color:#1e3a5f;text-align:center;letter-spacing:.01em;line-height:1.2;padding:4px 0 2px;min-height:38px">${name}</div>`;
 }
 
 const fmt=n=>'₹ '+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -354,6 +359,43 @@ function resetForm(){
   document.getElementById('p_year').value='<?= date('Y') ?>';
   document.getElementById('auth_name').value='Paramjeet Singh';
   document.getElementById('auth_title').value='Authorized Signatory';
+  renderAll();
+}
+
+function calcProRata(){
+  const gross    = parseFloat(document.getElementById('calc_gross')?.value)||0;
+  const wdays    = parseInt(document.getElementById('p_wdays')?.value)||26;
+  const present  = parseInt(document.getElementById('p_present')?.value)||26;
+  const basicPct = (parseFloat(document.getElementById('calc_basic_pct')?.value)||50)/100;
+  const hraPct   = (parseFloat(document.getElementById('calc_hra_pct')?.value)||40)/100;
+  const pfFixed  = parseFloat(document.getElementById('calc_pf')?.value)||0;
+  if(!gross){document.getElementById('calc_result').classList.add('hidden');return;}
+  const ratio      = wdays>0?present/wdays:1;
+  const earnedGross= Math.round(gross*ratio);
+  const basic      = Math.round(earnedGross*basicPct);
+  const hra        = Math.round(basic*hraPct);
+  const allowances = earnedGross-basic-hra;
+  const net        = earnedGross - pfFixed;
+  const el=document.getElementById('calc_result');
+  el.classList.remove('hidden');
+  el.innerHTML=`<div class="flex justify-between"><span>Per-day rate:</span><span class="font-bold">₹${Math.round(gross/wdays).toLocaleString('en-IN')}</span></div>
+<div class="flex justify-between"><span>Earned Gross (${present}/${wdays} days):</span><span class="font-bold text-green-700">₹${earnedGross.toLocaleString('en-IN')}</span></div>
+<div class="flex justify-between text-slate-400"><span>↳ Basic:</span><span>₹${basic.toLocaleString('en-IN')}</span></div>
+<div class="flex justify-between text-slate-400"><span>↳ HRA:</span><span>₹${hra.toLocaleString('en-IN')}</span></div>
+<div class="flex justify-between text-slate-400"><span>↳ Allowances:</span><span>₹${allowances.toLocaleString('en-IN')}</span></div>
+<div class="flex justify-between border-t border-slate-100 pt-1 mt-1"><span>Est. Net (after PF):</span><span class="font-bold text-primary">₹${net.toLocaleString('en-IN')}</span></div>`;
+  el._data={basic,hra,allowances,pfFixed,earnedGross};
+}
+
+function applyProRata(){
+  const d=document.getElementById('calc_result')?._data;
+  if(!d){alert('Enter Monthly Gross first.');return;}
+  earnings=[
+    {label:'Basic Salary',amount:d.basic},
+    {label:'House Rent Allowance (HRA)',amount:d.hra},
+    {label:'Special Allowance',amount:d.allowances},
+  ];
+  deductions=[{label:'Provident Fund (PF)',amount:d.pfFixed}];
   renderAll();
 }
 
