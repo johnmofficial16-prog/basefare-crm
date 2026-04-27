@@ -24,9 +24,11 @@ $queryBase = http_build_query(array_filter([
 
 function userRoleBadge(string $role): string {
     return match($role) {
-        'admin'   => '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20"><span class="material-symbols-outlined text-[11px]">shield</span>Admin</span>',
-        'manager' => '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-violet-100 text-violet-800 border border-violet-200"><span class="material-symbols-outlined text-[11px]">manage_accounts</span>Manager</span>',
-        default   => '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200"><span class="material-symbols-outlined text-[11px]">person</span>Agent</span>',
+        'admin'      => '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20"><span class="material-symbols-outlined text-[11px]">shield</span>Admin</span>',
+        'manager'    => '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-violet-100 text-violet-800 border border-violet-200"><span class="material-symbols-outlined text-[11px]">manage_accounts</span>Manager</span>',
+        'supervisor' => '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200"><span class="material-symbols-outlined text-[11px]">supervisor_account</span>Supervisor</span>',
+        'csa'        => '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-200"><span class="material-symbols-outlined text-[11px]">support_agent</span>CSA</span>',
+        default      => '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200"><span class="material-symbols-outlined text-[11px]">person</span>Agent</span>',
     };
 }
 
