@@ -1,5 +1,7 @@
 <?php
 $activePage = 'payroll';
+$logoPath = __DIR__ . '/../../../salary slip logo.jpeg';
+$logoB64  = is_file($logoPath) ? 'data:image/jpeg;base64,' . base64_encode(file_get_contents($logoPath)) : '';
 ?>
 <!DOCTYPE html>
 <html class="light" lang="en">
@@ -7,7 +9,7 @@ $activePage = 'payroll';
 <meta charset="utf-8"/>
 <meta content="width=device-width,initial-scale=1.0" name="viewport"/>
 <title>Salary Slip Maker — Base Fare CRM</title>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&family=Noto+Sans:wght@400;600;700&family=Dancing+Script:wght@600;700&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
 <script>
@@ -152,11 +154,29 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       </div>
 
       <!-- Notes -->
-      <div class="px-5 py-4">
+      <div class="px-5 py-4 border-b border-slate-100">
         <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
           <span class="material-symbols-outlined text-sm text-primary">sticky_note_2</span> Notes
         </p>
         <textarea id="slip_notes" rows="2" placeholder="e.g. Salary for April 2026. Includes performance bonus." oninput="render()" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/30 focus:border-primary resize-none"></textarea>
+      </div>
+
+      <!-- Authorizer -->
+      <div class="px-5 py-4">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-sm text-primary">verified</span> Authorization
+        </p>
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Authorizer Name</label>
+            <input id="auth_name" type="text" value="Paramjeet Singh" oninput="render()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/30 focus:border-primary"/>
+          </div>
+          <div>
+            <label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Authorizer Title</label>
+            <input id="auth_title" type="text" value="Authorized Signatory" oninput="render()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/30 focus:border-primary"/>
+          </div>
+        </div>
+        <p class="mt-2 text-[10px] text-slate-400">This name &amp; signature will appear on the slip footer.</p>
       </div>
 
     </div>
@@ -178,8 +198,32 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 </main>
 
 <script>
+const LOGO_B64 = '<?= addslashes($logoB64) ?>';
+
 let earnings=[{label:'Basic Salary',amount:25000},{label:'House Rent Allowance (HRA)',amount:5000},{label:'Travel Allowance',amount:1600},{label:'Medical Allowance',amount:1250}];
 let deductions=[{label:'Provident Fund (PF)',amount:1800},{label:'Professional Tax',amount:200}];
+
+// Generate a digital signature: SVG path for default name, Dancing Script fallback otherwise
+function buildSignatureSVG(name) {
+  const isDefault = name.trim().toLowerCase() === 'paramjeet singh';
+  if (isDefault) {
+    // Hand-crafted SVG cursive path for "Paramjeet Singh"
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="160" height="48" style="display:block;margin:0 auto">
+      <path d="M8,42 C14,28 22,18 32,20 C40,22 38,34 32,38 C26,42 20,36 24,30 C28,24 38,22 46,26 C54,30 52,42 46,44
+               M46,44 C54,46 62,34 58,26 C54,18 44,20 42,28
+               M62,30 C66,20 74,16 80,20 C86,24 84,34 78,38 C74,40 70,36 72,30
+               M80,22 C84,14 92,12 98,18
+               M102,38 C108,24 116,16 122,20 C128,24 126,36 120,40 C116,42 112,38 116,30 C120,22 130,20 138,26 C144,30 142,40 136,44
+               M142,26 C146,18 154,14 160,20 C164,24 162,32 156,36 C152,38 150,44 154,48
+               M160,28 C164,20 170,18 174,24 C178,30 174,40 168,44 C164,46 162,50 166,52"
+            fill="none" stroke="#1e3a5f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M6,52 C40,52 80,50 110,52 C140,54 170,52 194,52" fill="none" stroke="#1e3a5f" stroke-width="0.8" stroke-linecap="round" opacity="0.35"/>
+    </svg>`;
+  } else {
+    // Fallback: Dancing Script cursive font
+    return `<div style="font-family:'Dancing Script',cursive;font-size:22px;font-weight:700;color:#1e3a5f;text-align:center;letter-spacing:.02em;line-height:1.1;padding:2px 0 4px">${esc(name)}</div>`;
+  }
+}
 
 const fmt=n=>'₹ '+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
 const v=id=>document.getElementById(id)?.value?.trim()??'';
@@ -208,6 +252,8 @@ function render(){
   const eDoj=v('e_doj'),ePan=v('e_pan'),eBank=v('e_bank'),eAcc=v('e_acc');
   const pMonth=v('p_month'),pYear=v('p_year'),pWdays=v('p_wdays')||'26',pPresent=v('p_present')||'26';
   const notes=v('slip_notes');
+  const authName=v('auth_name')||'Authorized Signatory';
+  const authTitle=v('auth_title')||'Authorized Signatory';
   const absent=Math.max(0,parseInt(pWdays||0)-parseInt(pPresent||0));
 
   const gross=earnings.reduce((s,r)=>s+(r.amount||0),0);
@@ -220,9 +266,12 @@ function render(){
   let dRows=deductions.filter(r=>r.label||r.amount).map(r=>`<tr><td>${esc(r.label)}</td><td style="color:#dc2626">- ${fmt(r.amount)}</td></tr>`).join('');
   if(!dRows)dRows='<tr><td colspan="2" style="color:#94a3b8;font-style:italic;padding:6px">No deductions added</td></tr>';
 
+  const logoHtml = LOGO_B64 ? `<img src="${LOGO_B64}" alt="Company Logo" style="width:52px;height:52px;object-fit:contain;margin-bottom:6px;display:block"/>` : '';
+
   document.getElementById('slip-preview').innerHTML=`<div id="slip-inner">
   <div class="slip-hdr">
     <div>
+      ${logoHtml}
       <div style="font-size:17px;font-weight:800;letter-spacing:-.02em;line-height:1.2">${esc(cName)}</div>
       <div style="font-size:10px;opacity:.8;margin-top:2px">${esc(cAddr)}${cCin?' &nbsp;·&nbsp; '+esc(cCin):''}</div>
       ${cEmail?`<div style="font-size:10px;opacity:.7;margin-top:1px">${esc(cEmail)}</div>`:''}
@@ -271,7 +320,12 @@ function render(){
   <div class="slip-footer">
     <div style="text-align:center"><div class="sig-line"></div>Employee Signature</div>
     <div style="text-align:center;align-self:center;font-size:9px;color:#cbd5e1">This is a computer generated salary slip.</div>
-    <div style="text-align:center"><div class="sig-line"></div>Authorized Signatory</div>
+    <div style="text-align:center">
+      ${buildSignatureSVG(authName)}
+      <div style="width:110px;border-top:1.5px solid #cbd5e1;margin:4px auto 3px"></div>
+      <div style="font-size:9.5px;font-weight:700;color:#1e293b">${esc(authName)}</div>
+      <div style="font-size:8.5px;color:#94a3b8;margin-top:1px">${esc(authTitle)}</div>
+    </div>
   </div>
 </div>`;
 }
@@ -290,7 +344,7 @@ function resetForm(){
   deductions=[{label:'Provident Fund (PF)',amount:1800},{label:'Professional Tax',amount:200}];
   document.getElementById('c_name').value='Base Fare Travels Pvt. Ltd.';
   document.getElementById('c_addr').value='Mumbai, Maharashtra, India';
-  ['c_cin','c_email','e_doj','e_pan','e_bank','e_acc','slip_notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['c_cin','c_email','e_doj','e_pan','e_bank','e_acc','slip_notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';})
   document.getElementById('e_name').value='Rahul Sharma';
   document.getElementById('e_id').value='EMP-001';
   document.getElementById('e_desig').value='Travel Agent';
@@ -298,6 +352,10 @@ function resetForm(){
   document.getElementById('p_wdays').value='26';
   document.getElementById('p_present').value='26';
   document.getElementById('p_year').value='<?= date('Y') ?>';
+  document.getElementById('auth_name').value='Paramjeet Singh';
+  document.getElementById('auth_title').value='Authorized Signatory';
+  renderAll();
+}').value='<?= date('Y') ?>';
   renderAll();
 }
 
