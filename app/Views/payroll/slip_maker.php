@@ -1,7 +1,7 @@
 <?php
 $activePage = 'payroll';
-$logoPath = __DIR__ . '/../../../salary slip logo.jpeg';
-$logoB64  = is_file($logoPath) ? 'data:image/jpeg;base64,' . base64_encode(file_get_contents($logoPath)) : '';
+$logoPath = ROOTPATH . 'salary slip logo.jpeg';
+$logoB64  = file_exists($logoPath) ? 'data:image/jpeg;base64,' . base64_encode(file_get_contents($logoPath)) : '';
 ?>
 <!DOCTYPE html>
 <html class="light" lang="en">
@@ -125,9 +125,9 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <div><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Year</label>
             <input id="p_year" type="number" value="<?= date('Y') ?>" min="2020" max="2099" oninput="render()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
           <div><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Working Days</label>
-            <input id="p_wdays" type="number" value="26" min="1" max="31" oninput="render()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
+            <input id="p_wdays" type="number" value="26" min="1" max="31" oninput="render(); calcProRata();" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
           <div><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Days Present</label>
-            <input id="p_present" type="number" value="26" min="0" max="31" oninput="render()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
+            <input id="p_present" type="number" value="26" min="0" max="31" oninput="render(); calcProRata();" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
         </div>
       </div>
 
