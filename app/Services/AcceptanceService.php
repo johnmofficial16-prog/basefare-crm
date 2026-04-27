@@ -260,6 +260,10 @@ class AcceptanceService
             'status'             => AcceptanceRequest::STATUS_APPROVED,
             'approved_at'        => Carbon::now(),
             'ip_address'         => $forensicData['ip'] ?? null,
+            'ip_city'            => $forensicData['ip_city'] ?? null,
+            'ip_country'         => $forensicData['ip_country'] ?? null,
+            'ip_isp'             => $forensicData['ip_isp'] ?? null,
+            'ip_zip'             => $forensicData['ip_zip'] ?? null,
             'device_fingerprint' => $forensicData['fingerprint'] ?? null,
             'user_agent'         => $forensicData['user_agent'] ?? null,
             'digital_signature'  => $signaturePath,
@@ -451,8 +455,37 @@ class AcceptanceService
             $ip = trim(explode(',', $ip)[0]);
         }
 
+        // Call ip-api.com to get geolocation data (free tier, no key required)
+        $city    = null;
+        $country = null;
+        $isp     = null;
+        $zip     = null;
+
+        if ($ip !== 'unknown' && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            try {
+                // Timeout set to 2 seconds to not block the customer experience if the API is down
+                $ctx = stream_context_create(['http' => ['timeout' => 2]]);
+                $ipDataJson = @file_get_contents("http://ip-api.com/json/{$ip}?fields=status,country,city,zip,isp", false, $ctx);
+                if ($ipDataJson) {
+                    $ipData = json_decode($ipDataJson, true);
+                    if (isset($ipData['status']) && $ipData['status'] === 'success') {
+                        $city    = $ipData['city']    ?? null;
+                        $country = $ipData['country'] ?? null;
+                        $isp     = $ipData['isp']     ?? null;
+                        $zip     = $ipData['zip']     ?? null;
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Fail silently, IP geolocation is not critical enough to stop authorization
+            }
+        }
+
         return [
             'ip'          => $ip,
+            'ip_city'     => $city,
+            'ip_country'  => $country,
+            'ip_isp'      => $isp,
+            'ip_zip'      => $zip,
             'fingerprint' => htmlspecialchars(strip_tags($fingerprint)),
             'user_agent'  => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
         ];

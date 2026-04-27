@@ -935,8 +935,17 @@ tailwind.config = {
               </p>
             </div>
             <div class="p-3 bg-emerald-50 border border-emerald-100 rounded-lg">
-              <p class="text-[9px] font-bold text-emerald-600 uppercase">IP Address</p>
+              <p class="text-[9px] font-bold text-emerald-600 uppercase">IP Address & Location</p>
               <p class="text-xs font-mono font-bold text-emerald-900 mt-1"><?= htmlspecialchars($acceptance->ip_address ?? '—') ?></p>
+              <?php if ($acceptance->ip_city || $acceptance->ip_country): ?>
+              <p class="text-[10px] text-emerald-700 mt-0.5 leading-tight">
+                <?= htmlspecialchars(trim(($acceptance->ip_city ?? '') . ', ' . ($acceptance->ip_country ?? ''), ', ')) ?>
+                <?php if ($acceptance->ip_zip): ?>(<?= htmlspecialchars($acceptance->ip_zip) ?>)<?php endif; ?>
+              </p>
+              <?php if ($acceptance->ip_isp): ?>
+              <p class="text-[9px] text-emerald-600 truncate" title="<?= htmlspecialchars($acceptance->ip_isp) ?>">ISP: <?= htmlspecialchars($acceptance->ip_isp) ?></p>
+              <?php endif; ?>
+              <?php endif; ?>
             </div>
             <div class="p-3 bg-emerald-50 border border-emerald-100 rounded-lg">
               <p class="text-[9px] font-bold text-emerald-600 uppercase">Link Viewed At</p>

@@ -809,7 +809,22 @@ body {
           </div>
           <div class="forensic-cell">
             <div class="f-label">IP Address</div>
-            <div class="f-value"><?= rh($acceptance->ip_address ?? 'not captured') ?></div>
+            <div class="f-value">
+              <?= rh($acceptance->ip_address ?? 'not captured') ?>
+              <?php if ($acceptance->ip_city || $acceptance->ip_country): ?>
+              <br>
+              <span style="font-size:10px; color:#065f46; font-weight:600; font-family:sans-serif;">
+                <?= rh(trim(($acceptance->ip_city ?? '') . ', ' . ($acceptance->ip_country ?? ''), ', ')) ?>
+                <?php if ($acceptance->ip_zip): ?>(<?= rh($acceptance->ip_zip) ?>)<?php endif; ?>
+              </span>
+              <?php endif; ?>
+              <?php if ($acceptance->ip_isp): ?>
+              <br>
+              <span style="font-size:9px; color:#047857; font-weight:500; font-family:sans-serif;">
+                ISP: <?= rh($acceptance->ip_isp) ?>
+              </span>
+              <?php endif; ?>
+            </div>
           </div>
           <div class="forensic-cell">
             <div class="f-label">Link First Viewed</div>

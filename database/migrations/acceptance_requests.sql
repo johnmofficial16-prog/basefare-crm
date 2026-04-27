@@ -130,6 +130,10 @@ CREATE TABLE IF NOT EXISTS `acceptance_requests` (
     -- Customer Forensic Data (populated on signing)
     -- -------------------------------------------------------------------------
     `ip_address`            VARCHAR(45)     NULL,   -- Customer's IP at time of signing
+    `ip_city`               VARCHAR(100)    NULL,
+    `ip_country`            VARCHAR(100)    NULL,
+    `ip_isp`                VARCHAR(150)    NULL,
+    `ip_zip`                VARCHAR(20)     NULL,
     `device_fingerprint`    TEXT            NULL,   -- Browser fingerprint hash
     `user_agent`            TEXT            NULL,   -- Customer's browser UA string
     `viewed_at`             DATETIME        NULL,   -- First time the link was opened (even without signing)
