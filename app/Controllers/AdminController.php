@@ -268,4 +268,101 @@ class AdminController
         $_SESSION['flash_success'] = 'Error log cleared successfully.';
         return $response->withHeader('Location', '/admin/error-console')->withStatus(302);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // IP WHITELIST
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function ipWhitelist(Request $request, Response $response): Response
+    {
+        $this->requireAdmin($response);
+
+        $ips = DB::table('ip_whitelist')->orderBy('created_at', 'desc')->get();
+        $whitelistingEnabled = DB::table('system_config')->where('key', 'ip_whitelisting_enabled')->value('value') === '1';
+
+        $activePage   = 'ip_whitelist';
+        $flashSuccess = $_SESSION['flash_success'] ?? null;
+        $flashError   = $_SESSION['flash_error'] ?? null;
+        unset($_SESSION['flash_success'], $_SESSION['flash_error']);
+
+        ob_start();
+        require __DIR__ . '/../Views/admin/ip_whitelist.php';
+        $html = ob_get_clean();
+
+        $response->getBody()->write($html);
+        return $response;
+    }
+
+    public function addIpWhitelist(Request $request, Response $response): Response
+    {
+        $this->requireAdmin($response);
+
+        $body = $request->getParsedBody() ?? [];
+        $ipAddress = trim($body['ip_address'] ?? '');
+        $locationName = trim($body['location_name'] ?? '');
+
+        if (!$ipAddress || !$locationName) {
+            $_SESSION['flash_error'] = 'IP Address and Location Name are required.';
+            return $response->withHeader('Location', '/admin/ip-whitelist')->withStatus(302);
+        }
+
+        // Check for duplicates
+        $exists = DB::table('ip_whitelist')->where('ip_address', $ipAddress)->exists();
+        if ($exists) {
+            $_SESSION['flash_error'] = 'That IP Address or Hostname is already in the whitelist.';
+            return $response->withHeader('Location', '/admin/ip-whitelist')->withStatus(302);
+        }
+
+        try {
+            DB::table('ip_whitelist')->insert([
+                'ip_address'    => $ipAddress,
+                'location_name' => $locationName,
+                'created_by'    => (int) $_SESSION['user_id'],
+                'created_at'    => date('Y-m-d H:i:s'),
+            ]);
+            $_SESSION['flash_success'] = 'IP address added to whitelist successfully.';
+        } catch (\Exception $e) {
+            $_SESSION['flash_error'] = 'Error adding IP: ' . $e->getMessage();
+        }
+
+        return $response->withHeader('Location', '/admin/ip-whitelist')->withStatus(302);
+    }
+
+    public function deleteIpWhitelist(Request $request, Response $response, array $args): Response
+    {
+        $this->requireAdmin($response);
+
+        $id = (int) $args['id'];
+        DB::table('ip_whitelist')->where('id', $id)->delete();
+
+        $_SESSION['flash_success'] = 'IP address removed from whitelist.';
+        return $response->withHeader('Location', '/admin/ip-whitelist')->withStatus(302);
+    }
+
+    public function toggleIpWhitelist(Request $request, Response $response): Response
+    {
+        $this->requireAdmin($response);
+
+        $body = $request->getParsedBody() ?? [];
+        $enabled = ($body['enabled'] ?? '0') === '1' ? '1' : '0';
+
+        $existing = DB::table('system_config')->where('key', 'ip_whitelisting_enabled')->first();
+        if ($existing) {
+            DB::table('system_config')->where('key', 'ip_whitelisting_enabled')->update([
+                'value' => $enabled,
+                'updated_by' => (int) $_SESSION['user_id'],
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+        } else {
+            DB::table('system_config')->insert([
+                'key' => 'ip_whitelisting_enabled',
+                'value' => $enabled,
+                'updated_by' => (int) $_SESSION['user_id'],
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
+
+        $_SESSION['flash_success'] = $enabled === '1' ? 'IP Whitelisting Enabled.' : 'IP Whitelisting Disabled.';
+        return $response->withHeader('Location', '/admin/ip-whitelist')->withStatus(302);
+    }
 }

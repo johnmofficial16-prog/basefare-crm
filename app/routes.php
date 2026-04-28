@@ -12,6 +12,7 @@ use App\Controllers\ETicketController;
 use App\Controllers\AdminController;
 use App\Controllers\PayrollController;
 use App\Middleware\AuthMiddleware;
+use App\Middleware\IpRestrictionMiddleware;
 use App\Middleware\AttendanceGateMiddleware;
 use App\Models\User;
 
@@ -34,7 +35,7 @@ $app->group('', function ($group) {
     $group->get('/attendance/status', [AttendanceController::class, 'statusPoll']);
     $group->get('/attendance/waiting', [AttendanceController::class, 'overrideWait']);
     $group->get('/attendance/my', [AttendanceController::class, 'myAttendance']);
-})->add(new AuthMiddleware());
+})->add(new IpRestrictionMiddleware())->add(new AuthMiddleware());
 
 // Attendance Admin routes (admin + manager + supervisor, outside AttendanceGate)
 $app->group('/attendance', function ($group) {
@@ -49,7 +50,7 @@ $app->group('/attendance', function ($group) {
     $group->post('/admin/clock-in', [AttendanceController::class, 'adminClockIn']);
     $group->post('/admin/clock-out', [AttendanceController::class, 'adminClockOut']);
     $group->post('/admin/force-end-break', [AttendanceController::class, 'adminForceEndBreak']);
-})->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR]));
+})->add(new IpRestrictionMiddleware())->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR]));
 
 // ==========================================================================
 // CRM Core routes — BEHIND the AttendanceGate
@@ -58,6 +59,7 @@ $app->group('', function ($group) {
     $group->get('/dashboard', [DashboardController::class, 'index']);
 })
 ->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
 
 // Shift Scheduling Routes (admin + manager + supervisor, behind AttendanceGate)
@@ -72,6 +74,7 @@ $app->group('/shifts', function ($group) {
     $group->get('/pending-approvals', [ShiftController::class, 'pendingApprovals']); // manager/admin only (enforced in controller)
 })
 ->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR]));
 
 // ==========================================================================
@@ -91,6 +94,7 @@ $app->group('/users', function ($group) {
     $group->post('/{id:[0-9]+}/delete', [UserController::class, 'delete']);
 })
 ->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
 
 // Payroll / Salary Slip Maker (admin + manager only)
@@ -98,16 +102,22 @@ $app->group('/payroll', function ($group) {
     $group->get('', [PayrollController::class, 'slipMaker']);
 })
 ->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
 
 $app->group('/admin', function ($group) {
     $group->get('/settings', [AdminController::class, 'settings']);
     $group->post('/settings', [AdminController::class, 'saveSettings']);
+    $group->get('/ip-whitelist', [AdminController::class, 'ipWhitelist']);
+    $group->post('/ip-whitelist', [AdminController::class, 'addIpWhitelist']);
+    $group->post('/ip-whitelist/toggle', [AdminController::class, 'toggleIpWhitelist']);
+    $group->post('/ip-whitelist/{id:[0-9]+}/delete', [AdminController::class, 'deleteIpWhitelist']);
     $group->get('/activity-log', [AdminController::class, 'activityLog']);
     $group->get('/error-console', [AdminController::class, 'errorConsole']);
     $group->post('/error-console/clear', [AdminController::class, 'clearErrorLog']);
 })
 ->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
 
 // ==========================================================================
@@ -127,6 +137,7 @@ $app->group('/acceptance', function ($group) {
     $group->post('/{id:[0-9]+}/reveal-cc', [AcceptanceController::class, 'revealCC']);
 })
 ->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
 
 // ==========================================================================
@@ -164,6 +175,7 @@ $app->group('/transactions', function ($group) {
     $group->post('/{id:[0-9]+}/note',    [TransactionController::class, 'addNote']);
 })
 ->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
 
 // ==========================================================================
@@ -193,6 +205,7 @@ $app->group('/etickets', function ($group) {
     $group->post('/{id:[0-9]+}/note',                 [ETicketController::class, 'addNote']);
 })
 ->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
 
 // ==========================================================================
