@@ -290,7 +290,31 @@ tailwind.config = {
           </div>
           <div>
             <label class="fl">Payment Status</label>
-             <!-- ── Proof of Sale ──────────────────────────────────────────────────── -->
+            <select name="payment_status" class="fi">
+              <?php foreach (['pending','captured','refunded','failed'] as $v): ?>
+              <option value="<?= $v ?>" <?= $prefill['payment_status'] === $v ? 'selected' : '' ?>><?= ucfirst($v) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Notes & Auditing ─────────────────────────────────────────────── -->
+    <div class="section" style="border-color:#e2e8f0;background:#fff;">
+      <div class="section-head">
+        <h2><span class="msym">gavel</span> Notes & Auditing</h2>
+      </div>
+      <div class="section-body">
+        <div>
+          <label class="fl">Agent Notes (Required) <span style="color:#ef4444">*</span></label>
+          <textarea name="agent_notes" rows="3" required class="fi" style="resize:none;" placeholder="Required: Please describe what you changed and why."><?= htmlspecialchars($prefill['agent_notes'] ?? '') ?></textarea>
+          <p style="font-size:10px;color:#64748b;margin-top:4px;">Mandatory for auditing. Your name and timestamp will be recorded.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Proof of Sale ──────────────────────────────────────────────────── -->
     <div class="section" style="border-color:#fde68a;background:linear-gradient(135deg,#fffbeb,#fff);">
       <div class="section-head" style="background:rgba(254,243,199,.5);border-color:#fde68a;">
         <h2 style="color:#92400e;">
