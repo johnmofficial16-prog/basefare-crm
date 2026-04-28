@@ -83,7 +83,8 @@ class IpRestrictionMiddleware
                 DB::table('error_log')->insert([
                     'severity'   => 'warning',
                     'message'    => "Blocked unauthorized IP login attempt for User ID: " . ($_SESSION['user_id'] ?? 'unknown'),
-                    'context'    => json_encode(['ip' => $clientIp, 'role' => $userRole]),
+                    'ip_address' => $clientIp,
+                    'context'    => json_encode(['role' => $userRole]),
                     'created_at' => date('Y-m-d H:i:s'),
                 ]);
             } catch (\Throwable $e) {
