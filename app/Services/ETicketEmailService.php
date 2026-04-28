@@ -584,6 +584,9 @@ class ETicketEmailService
          style="display:inline-block;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;text-decoration:none;padding:11px 32px;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:0.3px;">
         &#9993;&nbsp; Contact Us
       </a>
+      <div style="margin-top:16px;color:rgba(255,255,255,0.9);font-size:14px;font-weight:700;letter-spacing:0.5px;">
+        &#9742;&nbsp; Toll-Free: <a href="tel:+18886084011" style="color:#fff;text-decoration:none;">888 608 4011</a>
+      </div>
     </div>
 
     <!-- Footer -->
