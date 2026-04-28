@@ -80,12 +80,13 @@ class IpRestrictionMiddleware
 
             // Log this security event
             try {
-                DB::table('error_log')->insert([
-                    'severity'   => 'warning',
-                    'message'    => "Blocked unauthorized IP login attempt for User ID: " . ($_SESSION['user_id'] ?? 'unknown'),
-                    'ip_address' => $clientIp,
-                    'context'    => json_encode(['role' => $userRole]),
-                    'created_at' => date('Y-m-d H:i:s'),
+                DB::table('activity_log')->insert([
+                    'user_id'     => $_SESSION['user_id'] ?? null,
+                    'action'      => 'blocked_login_ip',
+                    'entity_type' => 'security',
+                    'details'     => json_encode(['role' => $userRole, 'message' => 'Blocked unauthorized IP attempt']),
+                    'ip_address'  => $clientIp,
+                    'created_at'  => date('Y-m-d H:i:s'),
                 ]);
             } catch (\Throwable $e) {
                 // Ignore log failure
