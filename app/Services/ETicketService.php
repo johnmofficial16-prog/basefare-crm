@@ -166,7 +166,15 @@ class ETicketService
         }
 
         if (!$flightData && is_array($txn->data)) {
-            $flightData = $txn->data['flight_data'] ?? null;
+            if (isset($txn->data['flights']) || isset($txn->data['old_flights']) || isset($txn->data['new_flights'])) {
+                $flightData = [
+                    'flights'     => $txn->data['flights'] ?? [],
+                    'old_flights' => $txn->data['old_flights'] ?? [],
+                    'new_flights' => $txn->data['new_flights'] ?? [],
+                ];
+            } else {
+                $flightData = $txn->data['flight_data'] ?? null;
+            }
         }
 
         return [

@@ -369,12 +369,19 @@ function renderFlightDisplay(flightData) {
     let flights = [];
     if (Array.isArray(flightData)) {
         flights = flightData;
-    } else if (flightData && Array.isArray(flightData.flights)) {
-        flights = flightData.flights;
+    } else if (flightData) {
+        if (Array.isArray(flightData.flights) && flightData.flights.length > 0) {
+            flights = flightData.flights;
+        } else if (Array.isArray(flightData.new_flights) && flightData.new_flights.length > 0) {
+            flights = flightData.new_flights;
+        } else if (Array.isArray(flightData.old_flights) && flightData.old_flights.length > 0) {
+            flights = flightData.old_flights;
+        }
     }
 
     if (!flights || !flights.length) {
         el.innerHTML = '<span class="text-slate-400 text-sm">No flight itinerary data available from this record.</span>';
+        el.className = 'bg-slate-50 border border-dashed border-slate-200 rounded-lg p-8 text-center text-slate-400 text-sm';
         return;
     }
 
@@ -383,8 +390,9 @@ function renderFlightDisplay(flightData) {
         const dep = f.departure_airport || f.from || '???';
         const arr = f.arrival_airport   || f.to   || '???';
         const dt  = f.departure_date    || f.date || '';
-        const tm  = f.departure_time    || f.time || '';
-        const fn  = f.flight_number     || f.flight || '';
+        const tm  = f.departure_time    || f.dep_time || f.time || '';
+        const arrTm = f.arrival_time    || f.arr_time || '';
+        const fn  = f.flight_number     || f.flight_no || f.flight || '';
         const cab = f.cabin_class       || f.class  || '';
         html += `
         <div class="flex items-center gap-6 py-4">
@@ -403,8 +411,8 @@ function renderFlightDisplay(flightData) {
           </div>
           <div class="text-center min-w-[56px]">
             <div class="text-xl font-black text-primary font-mono">${escHtml(arr)}</div>
-            <div class="text-[10px] text-slate-400">${escHtml(f.arrival_date||'')}</div>
-            <div class="text-xs font-bold text-slate-500">${escHtml(f.arrival_time||'')}</div>
+            <div class="text-[10px] text-slate-400">${escHtml(f.arrival_date || f.date || '')}</div>
+            <div class="text-xs font-bold text-slate-500">${escHtml(arrTm)}</div>
           </div>
         </div>`;
     });

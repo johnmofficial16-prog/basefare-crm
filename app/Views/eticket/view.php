@@ -177,9 +177,13 @@ tailwind.config = {
       <?php
       $flightDataArr = (array)$et->flight_data;
       $flightsToRender = [];
-      if (isset($flightDataArr['flights']) && is_array($flightDataArr['flights'])) {
+      if (!empty($flightDataArr['flights']) && is_array($flightDataArr['flights'])) {
           $flightsToRender = $flightDataArr['flights'];
-      } elseif (!empty($flightDataArr) && is_array(reset($flightDataArr)) && !isset($flightDataArr['flights'])) {
+      } elseif (!empty($flightDataArr['new_flights']) && is_array($flightDataArr['new_flights'])) {
+          $flightsToRender = $flightDataArr['new_flights'];
+      } elseif (!empty($flightDataArr['old_flights']) && is_array($flightDataArr['old_flights'])) {
+          $flightsToRender = $flightDataArr['old_flights'];
+      } elseif (!empty($flightDataArr) && is_array(reset($flightDataArr)) && !isset($flightDataArr['flights']) && !isset($flightDataArr['new_flights']) && !isset($flightDataArr['old_flights'])) {
           $flightsToRender = $flightDataArr; // It's already a sequential array
       }
       ?>

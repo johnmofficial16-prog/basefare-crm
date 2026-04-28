@@ -274,9 +274,13 @@ class ETicketEmailService
         $flightRows = '';
         $flightData = $eticket->flight_data ?? [];
         $segs = [];
-        if (isset($flightData['flights']) && is_array($flightData['flights'])) {
+        if (!empty($flightData['flights']) && is_array($flightData['flights'])) {
             $segs = $flightData['flights'];
-        } elseif (!empty($flightData) && is_array(reset($flightData))) {
+        } elseif (!empty($flightData['new_flights']) && is_array($flightData['new_flights'])) {
+            $segs = $flightData['new_flights'];
+        } elseif (!empty($flightData['old_flights']) && is_array($flightData['old_flights'])) {
+            $segs = $flightData['old_flights'];
+        } elseif (!empty($flightData) && is_array(reset($flightData)) && !isset($flightData['flights']) && !isset($flightData['new_flights']) && !isset($flightData['old_flights'])) {
             $segs = array_values($flightData);
         }
         $segs = array_values(array_filter($segs, fn($s) =>
