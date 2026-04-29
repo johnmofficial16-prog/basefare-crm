@@ -462,7 +462,10 @@ async function saveAndDownload() {
     try {
         const res = await fetch('/vouchers', {
             method: 'POST',
-            headers: {'Content-Type':'application/json'},
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>'
+            },
             body: JSON.stringify(payload)
         });
         
