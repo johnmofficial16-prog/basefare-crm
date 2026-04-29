@@ -70,6 +70,9 @@ class IpRestrictionMiddleware
         }
 
         if (!$isAllowed) {
+            // Save user info before destroying session
+            $blockedUserId = $_SESSION['user_id'] ?? null;
+            
             // Destroy the session and log them out
             session_destroy();
             
@@ -81,7 +84,7 @@ class IpRestrictionMiddleware
             // Log this security event
             try {
                 DB::table('activity_log')->insert([
-                    'user_id'     => $_SESSION['user_id'] ?? null,
+                    'user_id'     => $blockedUserId,
                     'action'      => 'blocked_login_ip',
                     'entity_type' => 'security',
                     'details'     => json_encode(['role' => $userRole, 'message' => 'Blocked unauthorized IP attempt']),
