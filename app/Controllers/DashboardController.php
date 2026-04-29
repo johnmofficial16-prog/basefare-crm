@@ -94,9 +94,9 @@ class DashboardController
         // ── Date-range helpers ────────────────────────────────────────────────
         $todayStart = Carbon::today()->startOfDay();
         $todayEnd   = Carbon::today()->endOfDay();
-        $weekStart  = Carbon::now()->startOfWeek(Carbon::MONDAY)->startOfDay();
-        $weekEnd    = Carbon::now()->endOfWeek(Carbon::SUNDAY)->endOfDay();
-        $weekLabel  = $weekStart->format('M j') . ' – ' . $weekEnd->format('M j, Y');
+        $monthStart = Carbon::now()->startOfMonth()->startOfDay();
+        $monthEnd   = Carbon::now()->endOfMonth()->endOfDay();
+        $monthLabel = $monthStart->format('M j') . ' – ' . $monthEnd->format('M j, Y');
 
         // =====================================================================
         // ADMIN / MANAGER — full business dashboard
@@ -123,13 +123,13 @@ class DashboardController
             $todayProfit      = $todayRevenue - $todayCost;
             $pendingTxnCount  = Transaction::where('status', Transaction::STATUS_PENDING)->count();
 
-            // Transaction KPIs — this week (explicit queries)
-            $weekBase       = fn() => Transaction::whereBetween('created_at', [$weekStart, $weekEnd])
+            // Transaction KPIs — this month
+            $monthBase      = fn() => Transaction::whereBetween('created_at', [$monthStart, $monthEnd])
                                   ->where('status', '!=', Transaction::STATUS_VOIDED);
-            $weekTxnCount   = $weekBase()->count();
-            $weekRevenue    = (float) $weekBase()->sum('total_amount');
-            $weekCost       = (float) $weekBase()->sum('cost_amount');
-            $weekProfit     = $weekRevenue - $weekCost;
+            $monthTxnCount  = $monthBase()->count();
+            $monthRevenue   = (float) $monthBase()->sum('total_amount');
+            $monthCost      = (float) $monthBase()->sum('cost_amount');
+            $monthProfit    = $monthRevenue - $monthCost;
 
             // All-time totals (non-voided)
             $allBase        = fn() => Transaction::where('status', '!=', Transaction::STATUS_VOIDED);
@@ -141,8 +141,24 @@ class DashboardController
             $leaderboard = Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
                 ->where('status', '!=', Transaction::STATUS_VOIDED)
                 ->selectRaw('agent_id, SUM(total_amount) as revenue, SUM(profit_mco) as profit, COUNT(*) as txn_count')
-                ->groupBy('agent_id')->orderByDesc('revenue')->limit(5)
+                ->groupBy('agent_id')->orderByDesc('profit')->limit(5)
                 ->with('agent:id,name')->get();
+
+            // Agent leaderboard — this month
+            $monthLeaderboard = Transaction::whereBetween('created_at', [$monthStart, $monthEnd])
+                ->where('status', '!=', Transaction::STATUS_VOIDED)
+                ->selectRaw('agent_id, SUM(total_amount) as revenue, SUM(profit_mco) as profit, COUNT(*) as txn_count')
+                ->groupBy('agent_id')->orderByDesc('profit')->limit(5)
+                ->with('agent:id,name')->get();
+
+            // Top Airline — this month
+            $topAirlineRow = Transaction::whereBetween('created_at', [$monthStart, $monthEnd])
+                ->where('status', '!=', Transaction::STATUS_VOIDED)
+                ->whereNotNull('airline')
+                ->where('airline', '!=', '')
+                ->selectRaw('airline, COUNT(*) as count')
+                ->groupBy('airline')->orderByDesc('count')->first();
+            $topAirline = $topAirlineRow ? $topAirlineRow->airline : null;
 
             // Recent activity
             $recentTxns = Transaction::with('agent:id,name')->latest()->limit(6)
@@ -164,15 +180,17 @@ class DashboardController
                 'today_txn_count'     => $todayTxnCount,'today_revenue'      => $todayRevenue,
                 'today_cost'          => $todayCost,    'today_profit'       => $todayProfit,
                 'pending_txn_count'   => $pendingTxnCount,
-                'week_txn_count'  => $weekTxnCount, 'week_revenue' => $weekRevenue,
-                'week_cost'       => $weekCost,     'week_profit'  => $weekProfit,
+                'month_txn_count' => $monthTxnCount, 'month_revenue' => $monthRevenue,
+                'month_cost'      => $monthCost,     'month_profit'  => $monthProfit,
                 'all_txn_count'   => $allTxnCount,  'all_revenue'  => $allRevenue, 'all_profit' => $allProfit,
                 'leaderboard'         => $leaderboard,
+                'month_leaderboard'   => $monthLeaderboard,
+                'top_airline'         => $topAirline,
                 'recent_txns'         => $recentTxns,
                 'recent_acceptances'  => $recentAcceptances,
                 'pending_acc_list'    => $pendingAccList,
                 'pending_txn_list'    => $pendingTxnList,
-                'week_label'          => $weekLabel,
+                'month_label'         => $monthLabel,
             ];
         }
 
@@ -253,6 +271,13 @@ class DashboardController
                                    ->where('agent_id', $userId);
             $myTodayCount    = $myTodayBase()->count();
             $myTodayRevenue  = (float) $myTodayBase()->sum('total_amount');
+            
+            $myMonthBase     = fn() => Transaction::whereBetween('created_at', [$monthStart, $monthEnd])
+                                   ->where('status', '!=', Transaction::STATUS_VOIDED)
+                                   ->where('agent_id', $userId);
+            $myMonthCount    = $myMonthBase()->count();
+            $myMonthProfit   = (float) $myMonthBase()->sum('profit_mco');
+
             $myPendingCount  = Transaction::where('status', Transaction::STATUS_PENDING)
                                    ->where('agent_id', $userId)->count();
             $myTodayAccCount = AcceptanceRequest::whereBetween('created_at', [$todayStart, $todayEnd])
@@ -264,9 +289,12 @@ class DashboardController
             $agentData = [
                 'today_txn_count'    => $myTodayCount,
                 'today_revenue'      => $myTodayRevenue,
+                'month_txn_count'    => $myMonthCount,
+                'month_profit'       => $myMonthProfit,
                 'pending_txn_count'  => $myPendingCount,
                 'today_acc_count'    => $myTodayAccCount,
                 'recent_txns'        => $myRecentTxns,
+                'month_label'        => $monthLabel,
             ];
         }
 

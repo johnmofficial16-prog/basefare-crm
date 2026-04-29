@@ -251,34 +251,34 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     </div>
   </div>
 
-  <!-- Row 3: Weekly Financials + All-Time + Agent Leaderboard -->
+  <!-- Row 3: Monthly Financials + All-Time + Agent Leaderboard -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
 
-    <!-- Weekly Financials -->
+    <!-- Monthly Financials -->
     <div class="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
       <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
         <div class="flex items-center gap-2"><span class="material-symbols-outlined text-emerald-600 text-xl">account_balance_wallet</span><h2 class="font-headline font-extrabold text-slate-900">Financial Summary</h2></div>
-        <span class="text-[10px] text-slate-400 font-medium"><?= htmlspecialchars($dd['week_label'] ?? '') ?></span>
+        <span class="text-[10px] text-slate-400 font-medium"><?= htmlspecialchars($dd['month_label'] ?? '') ?></span>
       </div>
       <div class="p-6">
-        <p class="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-3">This Week</p>
+        <p class="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-3">This Month</p>
         <div class="grid grid-cols-3 gap-4 text-center mb-4">
           <div class="bg-blue-50 rounded-2xl p-4">
             <p class="text-[10px] font-bold uppercase text-blue-700 tracking-wider mb-1">Charged</p>
-            <p class="text-2xl font-headline font-extrabold text-blue-900"><?= number_format($dd['week_revenue'], 0) ?></p>
+            <p class="text-2xl font-headline font-extrabold text-blue-900"><?= number_format($dd['month_revenue'], 0) ?></p>
             <p class="text-[10px] text-blue-600 mt-0.5"><?= htmlspecialchars($currency) ?></p>
           </div>
           <div class="bg-rose-50 rounded-2xl p-4">
             <p class="text-[10px] font-bold uppercase text-rose-700 tracking-wider mb-1">Cost</p>
-            <p class="text-2xl font-headline font-extrabold text-rose-900"><?= number_format($dd['week_cost'], 0) ?></p>
+            <p class="text-2xl font-headline font-extrabold text-rose-900"><?= number_format($dd['month_cost'], 0) ?></p>
             <p class="text-[10px] text-rose-600 mt-0.5"><?= htmlspecialchars($currency) ?></p>
           </div>
-          <div class="<?= $dd['week_profit'] >= 0 ? 'bg-emerald-50' : 'bg-rose-50' ?> rounded-2xl p-4">
-            <p class="text-[10px] font-bold uppercase <?= $dd['week_profit'] >= 0 ? 'text-emerald-700' : 'text-rose-700' ?> tracking-wider mb-1">Profit</p>
-            <p class="text-2xl font-headline font-extrabold <?= $dd['week_profit'] >= 0 ? 'text-emerald-700' : 'text-rose-700' ?>">
-              <?= ($dd['week_profit'] >= 0 ? '+' : '-') . number_format(abs($dd['week_profit']), 0) ?>
+          <div class="<?= $dd['month_profit'] >= 0 ? 'bg-emerald-50' : 'bg-rose-50' ?> rounded-2xl p-4">
+            <p class="text-[10px] font-bold uppercase <?= $dd['month_profit'] >= 0 ? 'text-emerald-700' : 'text-rose-700' ?> tracking-wider mb-1">Profit</p>
+            <p class="text-2xl font-headline font-extrabold <?= $dd['month_profit'] >= 0 ? 'text-emerald-700' : 'text-rose-700' ?>">
+              <?= ($dd['month_profit'] >= 0 ? '+' : '-') . number_format(abs($dd['month_profit']), 0) ?>
             </p>
-            <p class="text-[10px] <?= $dd['week_profit'] >= 0 ? 'text-emerald-600' : 'text-rose-600' ?> mt-0.5"><?= htmlspecialchars($currency) ?></p>
+            <p class="text-[10px] <?= $dd['month_profit'] >= 0 ? 'text-emerald-600' : 'text-rose-600' ?> mt-0.5"><?= htmlspecialchars($currency) ?></p>
           </div>
         </div>
         <div class="border-t border-slate-100 pt-4">
@@ -287,40 +287,77 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <div><p class="text-[10px] text-slate-400">Transactions</p><p class="font-headline font-extrabold text-primary"><?= number_format($dd['all_txn_count']) ?></p></div>
             <div><p class="text-[10px] text-slate-400">Total Revenue</p><p class="font-headline font-extrabold text-blue-700"><?= htmlspecialchars($currency) ?> <?= number_format($dd['all_revenue'], 0) ?></p></div>
             <div><p class="text-[10px] text-slate-400">Total Profit</p><p class="font-headline font-extrabold <?= $dd['all_profit'] >= 0 ? 'text-emerald-600' : 'text-rose-600' ?>"><?= htmlspecialchars($currency) ?> <?= number_format(abs($dd['all_profit']), 0) ?></p></div>
+            <?php if (!empty($dd['top_airline'])): ?>
+            <div class="ml-auto text-right">
+              <p class="text-[10px] text-slate-400">Top Airline (Month)</p>
+              <div class="flex items-center gap-1.5 justify-end">
+                <span class="font-headline font-extrabold text-slate-700"><?= htmlspecialchars($dd['top_airline']) ?></span>
+              </div>
+            </div>
+            <?php endif; ?>
           </div>
         </div>
         <p class="mt-3 text-xs text-slate-400">
-          <?= $dd['week_txn_count'] ?> transactions this week
-          <?= $dd['all_txn_count'] > 0 ? '· avg '.htmlspecialchars($currency).' '.number_format($dd['week_txn_count'] > 0 ? $dd['week_revenue']/$dd['week_txn_count'] : 0, 0).' / txn this week' : '' ?>
+          <?= $dd['month_txn_count'] ?> transactions this month
+          <?= $dd['all_txn_count'] > 0 ? '· avg '.htmlspecialchars($currency).' '.number_format($dd['month_txn_count'] > 0 ? $dd['month_revenue']/$dd['month_txn_count'] : 0, 0).' / txn this month' : '' ?>
         </p>
       </div>
     </div>
 
-    <!-- Agent Leaderboard -->
-    <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/60 flex items-center gap-2">
-        <span class="material-symbols-outlined text-amber-500 text-xl">emoji_events</span>
-        <h2 class="font-headline font-extrabold text-slate-900">Top Agents Today</h2>
-      </div>
-      <div class="p-4 space-y-2">
-        <?php if ($dd['leaderboard']->count() === 0): ?>
-        <div class="text-center py-8 text-slate-400"><span class="material-symbols-outlined text-3xl mb-2 block">leaderboard</span><p class="text-sm font-semibold">No transactions today yet</p></div>
-        <?php else: ?>
-        <?php $medals = ['🥇','🥈','🥉','4.','5.']; ?>
-        <?php foreach ($dd['leaderboard'] as $rank => $row): ?>
-        <div class="flex items-center gap-3 px-3 py-2.5 rounded-xl <?= $rank===0 ? 'bg-amber-50 border border-amber-100' : 'hover:bg-slate-50' ?> transition-colors">
-          <span class="text-lg w-7 text-center flex-none"><?= $medals[$rank] ?? ($rank+1).'.' ?></span>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-bold text-slate-900 truncate"><?= htmlspecialchars($row->agent?->name ?? 'Unknown') ?></p>
-            <p class="text-[11px] text-slate-500"><?= $row->txn_count ?> txn<?= $row->txn_count != 1 ? 's' : '' ?></p>
-          </div>
-          <div class="text-right flex-none">
-            <p class="text-sm font-bold text-primary"><?= htmlspecialchars($currency) ?> <?= number_format($row->revenue, 0) ?></p>
-            <?php if ($row->profit > 0): ?><p class="text-[10px] text-emerald-600 font-semibold">+<?= number_format($row->profit, 0) ?> profit</p><?php endif; ?>
-          </div>
+    <!-- Agent Leaderboards -->
+    <div class="space-y-6">
+      <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/60 flex items-center gap-2">
+          <span class="material-symbols-outlined text-amber-500 text-xl">emoji_events</span>
+          <h2 class="font-headline font-extrabold text-slate-900">Top Agents Today</h2>
         </div>
-        <?php endforeach; ?>
-        <?php endif; ?>
+        <div class="p-4 space-y-2">
+          <?php if ($dd['leaderboard']->count() === 0): ?>
+          <div class="text-center py-8 text-slate-400"><span class="material-symbols-outlined text-3xl mb-2 block">leaderboard</span><p class="text-sm font-semibold">No transactions today yet</p></div>
+          <?php else: ?>
+          <?php $medals = ['🥇','🥈','🥉','4.','5.']; ?>
+          <?php foreach ($dd['leaderboard'] as $rank => $row): ?>
+          <div class="flex items-center gap-3 px-3 py-2.5 rounded-xl <?= $rank===0 ? 'bg-amber-50 border border-amber-100' : 'hover:bg-slate-50' ?> transition-colors">
+            <span class="text-lg w-7 text-center flex-none"><?= $medals[$rank] ?? ($rank+1).'.' ?></span>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-bold text-slate-900 truncate"><?= htmlspecialchars($row->agent?->name ?? 'Unknown') ?></p>
+              <p class="text-[11px] text-slate-500"><?= $row->txn_count ?> txn<?= $row->txn_count != 1 ? 's' : '' ?></p>
+            </div>
+            <div class="text-right flex-none">
+              <p class="text-sm font-bold text-primary"><?= htmlspecialchars($currency) ?> <?= number_format($row->revenue, 0) ?></p>
+              <?php if ($row->profit > 0): ?><p class="text-[10px] text-emerald-600 font-semibold">+<?= number_format($row->profit, 0) ?> profit</p><?php endif; ?>
+            </div>
+          </div>
+          <?php endforeach; ?>
+          <?php endif; ?>
+        </div>
+      </div>
+
+      <!-- Top Agents This Month -->
+      <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/60 flex items-center gap-2">
+          <span class="material-symbols-outlined text-violet-500 text-xl">workspace_premium</span>
+          <h2 class="font-headline font-extrabold text-slate-900">Top Agents This Month</h2>
+        </div>
+        <div class="p-4 space-y-2">
+          <?php if ($dd['month_leaderboard']->count() === 0): ?>
+          <div class="text-center py-8 text-slate-400"><span class="material-symbols-outlined text-3xl mb-2 block">leaderboard</span><p class="text-sm font-semibold">No transactions this month yet</p></div>
+          <?php else: ?>
+          <?php foreach ($dd['month_leaderboard'] as $rank => $row): ?>
+          <div class="flex items-center gap-3 px-3 py-2.5 rounded-xl <?= $rank===0 ? 'bg-violet-50 border border-violet-100' : 'hover:bg-slate-50' ?> transition-colors">
+            <span class="text-lg w-7 text-center flex-none"><?= $medals[$rank] ?? ($rank+1).'.' ?></span>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-bold text-slate-900 truncate"><?= htmlspecialchars($row->agent?->name ?? 'Unknown') ?></p>
+              <p class="text-[11px] text-slate-500"><?= $row->txn_count ?> txn<?= $row->txn_count != 1 ? 's' : '' ?></p>
+            </div>
+            <div class="text-right flex-none">
+              <p class="text-sm font-bold text-primary"><?= htmlspecialchars($currency) ?> <?= number_format($row->revenue, 0) ?></p>
+              <?php if ($row->profit > 0): ?><p class="text-[10px] text-emerald-600 font-semibold">+<?= number_format($row->profit, 0) ?> profit</p><?php endif; ?>
+            </div>
+          </div>
+          <?php endforeach; ?>
+          <?php endif; ?>
+        </div>
       </div>
     </div>
   </div>
@@ -446,7 +483,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
   <!-- AGENT — Personal performance KPIs -->
   <!-- ═══════════════════════════════════════════════════════════════════════ -->
   <?php if ($isAgent && !empty($ad)): ?>
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
     <div class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">My Txns Today</p>
       <p class="text-3xl font-headline font-extrabold text-blue-700"><?= $ad['today_txn_count'] ?></p>
@@ -464,6 +501,29 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <p class="text-3xl font-headline font-extrabold <?= $ad['pending_txn_count'] > 0 ? 'text-amber-600' : 'text-slate-400' ?>"><?= $ad['pending_txn_count'] ?></p>
       <p class="text-[10px] <?= $ad['pending_txn_count'] > 0 ? 'text-amber-600 font-bold' : 'text-slate-400' ?> mt-1"><?= $ad['pending_txn_count'] > 0 ? 'Awaiting approval' : 'All approved' ?></p>
     </a>
+  </div>
+
+  <!-- Agent Monthly Score -->
+  <div class="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-100 rounded-3xl p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-sm">
+    <div class="flex items-center gap-4">
+      <div class="w-12 h-12 bg-white rounded-full shadow-sm flex items-center justify-center text-emerald-600">
+        <span class="material-symbols-outlined text-2xl">workspace_premium</span>
+      </div>
+      <div>
+        <p class="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-0.5">My Monthly Score</p>
+        <p class="text-sm font-medium text-emerald-700"><?= htmlspecialchars($ad['month_label'] ?? '') ?></p>
+      </div>
+    </div>
+    <div class="flex gap-8 text-center sm:text-right">
+      <div>
+        <p class="text-[10px] font-bold text-emerald-700/70 uppercase tracking-widest mb-1">Month Txns</p>
+        <p class="text-2xl font-headline font-extrabold text-emerald-900"><?= $ad['month_txn_count'] ?></p>
+      </div>
+      <div>
+        <p class="text-[10px] font-bold text-emerald-700/70 uppercase tracking-widest mb-1">Total Profit (MCO)</p>
+        <p class="text-2xl font-headline font-extrabold text-emerald-700"><?= htmlspecialchars($currency) ?> <?= number_format($ad['month_profit'], 0) ?></p>
+      </div>
+    </div>
   </div>
 
   <!-- My Recent Records -->
