@@ -52,37 +52,18 @@ class IpRestrictionMiddleware
 
         foreach ($whitelistedRecords as $allowedValue) {
             $allowedValue = trim($allowedValue);
-            
-            // 1. Direct IP match
-            if ($clientIp === $allowedValue) {
+
+            // If it's a hostname (DDNS), resolve it to an IP first
+            if (!filter_var($allowedValue, FILTER_VALIDATE_IP) && !str_contains($allowedValue, '*')) {
+                $resolvedIp = gethostbyname($allowedValue);
+                if ($resolvedIp !== $allowedValue) {
+                    $allowedValue = $resolvedIp;
+                }
+            }
+
+            if ($this->isIpAllowed($clientIp, $allowedValue)) {
                 $isAllowed = true;
                 break;
-            }
-
-            // 2. Wildcard match (e.g., 192.168.1.* or 2401:4900:8836:2b55:*)
-            if (str_ends_with($allowedValue, '*')) {
-                $prefix = rtrim($allowedValue, '*');
-                if (str_starts_with($clientIp, $prefix)) {
-                    $isAllowed = true;
-                    break;
-                }
-            }
-
-            // 3. IPv6 Prefix match without asterisk (e.g. 2401:4900:8836:2b55:)
-            if (str_contains($clientIp, ':') && str_ends_with($allowedValue, ':')) {
-                if (str_starts_with($clientIp, $allowedValue)) {
-                    $isAllowed = true;
-                    break;
-                }
-            }
-
-            // If it's a hostname (e.g., DDNS), try to resolve it
-            if (!filter_var($allowedValue, FILTER_VALIDATE_IP)) {
-                $resolvedIp = gethostbyname($allowedValue);
-                if ($resolvedIp !== $allowedValue && $clientIp === $resolvedIp) {
-                    $isAllowed = true;
-                    break;
-                }
             }
         }
 
@@ -117,5 +98,68 @@ class IpRestrictionMiddleware
         }
 
         return $handler->handle($request);
+    }
+
+    /**
+     * Normalize any IPv6 (or IPv4) address to a canonical lowercase string.
+     */
+    private function normalizeIp(string $ip): ?string
+    {
+        $binary = @inet_pton(trim($ip));
+        return $binary !== false ? inet_ntop($binary) : null;
+    }
+
+    /**
+     * Check if a client IP matches an allowed value from the DB.
+     */
+    private function isIpAllowed(string $clientIp, string $allowedValue): bool
+    {
+        // Wildcard prefix path
+        if (str_contains($allowedValue, '*')) {
+            $rawPrefix = rtrim($allowedValue, '*');
+            $normalizedClient = $this->normalizeIp($clientIp);
+            if ($normalizedClient === null) {
+                return false;
+            }
+            $normalizedPrefix = $this->normalizePrefixSegment($rawPrefix);
+            if ($normalizedPrefix === null) {
+                return false;
+            }
+            return str_starts_with($normalizedClient, $normalizedPrefix);
+        }
+
+        // Exact match path
+        $normalizedClient  = $this->normalizeIp($clientIp);
+        $normalizedAllowed = $this->normalizeIp($allowedValue);
+
+        if ($normalizedClient === null || $normalizedAllowed === null) {
+            return false;
+        }
+
+        return $normalizedClient === $normalizedAllowed;
+    }
+
+    /**
+     * Normalize a raw wildcard prefix like "2401:4900:8FC1:b7dd:"
+     */
+    private function normalizePrefixSegment(string $rawPrefix): ?string
+    {
+        // For IPv4 wildcards (e.g. 192.168.1.)
+        if (!str_contains($rawPrefix, ':')) {
+             return $rawPrefix; // IPv4 prefix doesn't need complex normalization
+        }
+
+        // Complete the IPv6 prefix into a parseable address
+        $completed = rtrim($rawPrefix, ':') . '::';
+        $normalized = $this->normalizeIp($completed);
+        if ($normalized === null) {
+            return null;
+        }
+
+        $groupCount = substr_count(rtrim($rawPrefix, ':'), ':') + 1;
+        $parts = explode(':', $normalized);
+        $prefixParts = array_slice($parts, 0, $groupCount);
+
+        return implode(':', $prefixParts) . ':';
     }
 }
