@@ -120,7 +120,7 @@ class DashboardController
             $todayTxnCount    = $todayBase()->count();
             $todayRevenue     = (float) $todayBase()->sum('total_amount');
             $todayCost        = (float) $todayBase()->sum('cost_amount');
-            $todayProfit      = $todayRevenue - $todayCost;
+            $todayProfit      = (float) $todayBase()->sum('profit_mco');
             $pendingTxnCount  = Transaction::where('status', Transaction::STATUS_PENDING)->count();
 
             // Transaction KPIs — this month
@@ -129,7 +129,7 @@ class DashboardController
             $monthTxnCount  = $monthBase()->count();
             $monthRevenue   = (float) $monthBase()->sum('total_amount');
             $monthCost      = (float) $monthBase()->sum('cost_amount');
-            $monthProfit    = $monthRevenue - $monthCost;
+            $monthProfit    = (float) $monthBase()->sum('profit_mco');
 
             // All-time totals (non-voided)
             $allBase        = fn() => Transaction::where('status', '!=', Transaction::STATUS_VOIDED);
