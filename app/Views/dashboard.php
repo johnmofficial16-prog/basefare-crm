@@ -132,8 +132,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
   <!-- ═══════════════════════════════════════════════════════════════════════ -->
   <?php if ($isAdmin && !empty($dd)): ?>
 
-  <!-- Row 1: Business KPIs (6 cards) -->
-  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+  <!-- Row 1: Business KPIs (5 cards) -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
     <a href="/acceptance?status=PENDING" class="kpi-card col-span-1 bg-white border <?= $dd['pending_acceptances'] > 0 ? 'border-rose-300 ring-2 ring-rose-200' : 'border-slate-200' ?> rounded-2xl p-4 shadow-sm">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Pending Auth</p>
       <p class="text-3xl font-headline font-extrabold <?= $dd['pending_acceptances'] > 0 ? 'text-rose-600' : 'text-slate-400' ?>"><?= $dd['pending_acceptances'] ?></p>
@@ -153,11 +153,6 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Txns Today</p>
       <p class="text-3xl font-headline font-extrabold text-blue-700"><?= $dd['today_txn_count'] ?></p>
       <p class="text-[10px] mt-1"><?= $dd['pending_txn_count'] > 0 ? '<span class="text-amber-600 font-bold">'.$dd['pending_txn_count'].' pending review</span>' : '<span class="text-slate-500">All recorded</span>' ?></p>
-    </a>
-    <a href="/transactions" class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Revenue Today</p>
-      <p class="text-xl font-headline font-extrabold text-primary"><?= number_format($dd['today_revenue'], 0) ?></p>
-      <p class="text-[10px] text-slate-500 mt-1"><?= htmlspecialchars($currency) ?> charged</p>
     </a>
     <div class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Profit Today</p>
@@ -262,19 +257,14 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       </div>
       <div class="p-6">
         <p class="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-3">This Month</p>
-        <div class="grid grid-cols-3 gap-4 text-center mb-4">
+        <div class="grid grid-cols-2 gap-4 text-center mb-4">
           <div class="bg-blue-50 rounded-2xl p-4">
-            <p class="text-[10px] font-bold uppercase text-blue-700 tracking-wider mb-1">Charged</p>
-            <p class="text-2xl font-headline font-extrabold text-blue-900"><?= number_format($dd['month_revenue'], 0) ?></p>
-            <p class="text-[10px] text-blue-600 mt-0.5"><?= htmlspecialchars($currency) ?></p>
-          </div>
-          <div class="bg-rose-50 rounded-2xl p-4">
-            <p class="text-[10px] font-bold uppercase text-rose-700 tracking-wider mb-1">Cost</p>
-            <p class="text-2xl font-headline font-extrabold text-rose-900"><?= number_format($dd['month_cost'], 0) ?></p>
-            <p class="text-[10px] text-rose-600 mt-0.5"><?= htmlspecialchars($currency) ?></p>
+            <p class="text-[10px] font-bold uppercase text-blue-700 tracking-wider mb-1">Transactions</p>
+            <p class="text-2xl font-headline font-extrabold text-blue-900"><?= number_format($dd['month_txn_count']) ?></p>
+            <p class="text-[10px] text-blue-600 mt-0.5">This Month</p>
           </div>
           <div class="<?= $dd['month_profit'] >= 0 ? 'bg-emerald-50' : 'bg-rose-50' ?> rounded-2xl p-4">
-            <p class="text-[10px] font-bold uppercase <?= $dd['month_profit'] >= 0 ? 'text-emerald-700' : 'text-rose-700' ?> tracking-wider mb-1">Profit</p>
+            <p class="text-[10px] font-bold uppercase <?= $dd['month_profit'] >= 0 ? 'text-emerald-700' : 'text-rose-700' ?> tracking-wider mb-1">Profit (MCO)</p>
             <p class="text-2xl font-headline font-extrabold <?= $dd['month_profit'] >= 0 ? 'text-emerald-700' : 'text-rose-700' ?>">
               <?= ($dd['month_profit'] >= 0 ? '+' : '-') . number_format(abs($dd['month_profit']), 0) ?>
             </p>
@@ -285,7 +275,6 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <p class="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-2">All-Time Totals</p>
           <div class="flex items-center gap-6 text-sm">
             <div><p class="text-[10px] text-slate-400">Transactions</p><p class="font-headline font-extrabold text-primary"><?= number_format($dd['all_txn_count']) ?></p></div>
-            <div><p class="text-[10px] text-slate-400">Total Revenue</p><p class="font-headline font-extrabold text-blue-700"><?= htmlspecialchars($currency) ?> <?= number_format($dd['all_revenue'], 0) ?></p></div>
             <div><p class="text-[10px] text-slate-400">Total Profit</p><p class="font-headline font-extrabold <?= $dd['all_profit'] >= 0 ? 'text-emerald-600' : 'text-rose-600' ?>"><?= htmlspecialchars($currency) ?> <?= number_format(abs($dd['all_profit']), 0) ?></p></div>
             <?php if (!empty($dd['top_airline'])): ?>
             <div class="ml-auto text-right">
@@ -299,7 +288,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         </div>
         <p class="mt-3 text-xs text-slate-400">
           <?= $dd['month_txn_count'] ?> transactions this month
-          <?= $dd['all_txn_count'] > 0 ? '· avg '.htmlspecialchars($currency).' '.number_format($dd['month_txn_count'] > 0 ? $dd['month_revenue']/$dd['month_txn_count'] : 0, 0).' / txn this month' : '' ?>
+          <?= $dd['month_txn_count'] > 0 ? '· avg profit '.htmlspecialchars($currency).' '.number_format($dd['month_profit']/$dd['month_txn_count'], 0).' / txn this month' : '' ?>
         </p>
       </div>
     </div>
@@ -325,7 +314,6 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             </div>
             <div class="text-right flex-none">
               <p class="text-sm font-bold <?= $row->profit >= 0 ? 'text-emerald-700' : 'text-rose-700' ?>"><?= $row->profit > 0 ? '+' : '' ?><?= htmlspecialchars($currency) ?> <?= number_format($row->profit, 0) ?></p>
-              <p class="text-[10px] text-slate-500 font-semibold">Rev: <?= number_format($row->revenue, 0) ?></p>
             </div>
           </div>
           <?php endforeach; ?>
@@ -483,14 +471,10 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
   <!-- AGENT — Personal performance KPIs -->
   <!-- ═══════════════════════════════════════════════════════════════════════ -->
   <?php if ($isAgent && !empty($ad)): ?>
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
     <div class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">My Txns Today</p>
       <p class="text-3xl font-headline font-extrabold text-blue-700"><?= $ad['today_txn_count'] ?></p>
-    </div>
-    <div class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Revenue Today</p>
-      <p class="text-xl font-headline font-extrabold text-primary"><?= htmlspecialchars($currency) ?> <?= number_format($ad['today_revenue'], 0) ?></p>
     </div>
     <div class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">My Auth Today</p>
