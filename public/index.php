@@ -44,6 +44,9 @@ date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'Asia/Kolkata');
 // Instantiate App
 $app = AppFactory::create();
 
+// Add Body Parsing Middleware (for JSON requests)
+$app->addBodyParsingMiddleware();
+
 // Add Routing Middleware
 $app->addRoutingMiddleware();
 
