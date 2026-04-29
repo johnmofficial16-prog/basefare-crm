@@ -324,8 +324,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               <p class="text-[11px] text-slate-500"><?= $row->txn_count ?> txn<?= $row->txn_count != 1 ? 's' : '' ?></p>
             </div>
             <div class="text-right flex-none">
-              <p class="text-sm font-bold text-primary"><?= htmlspecialchars($currency) ?> <?= number_format($row->revenue, 0) ?></p>
-              <?php if ($row->profit > 0): ?><p class="text-[10px] text-emerald-600 font-semibold">+<?= number_format($row->profit, 0) ?> profit</p><?php endif; ?>
+              <p class="text-sm font-bold <?= $row->profit >= 0 ? 'text-emerald-700' : 'text-rose-700' ?>"><?= $row->profit > 0 ? '+' : '' ?><?= htmlspecialchars($currency) ?> <?= number_format($row->profit, 0) ?></p>
+              <p class="text-[10px] text-slate-500 font-semibold">Rev: <?= number_format($row->revenue, 0) ?></p>
             </div>
           </div>
           <?php endforeach; ?>
@@ -351,8 +351,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               <p class="text-[11px] text-slate-500"><?= $row->txn_count ?> txn<?= $row->txn_count != 1 ? 's' : '' ?></p>
             </div>
             <div class="text-right flex-none">
-              <p class="text-sm font-bold text-primary"><?= htmlspecialchars($currency) ?> <?= number_format($row->revenue, 0) ?></p>
-              <?php if ($row->profit > 0): ?><p class="text-[10px] text-emerald-600 font-semibold">+<?= number_format($row->profit, 0) ?> profit</p><?php endif; ?>
+              <p class="text-sm font-bold <?= $row->profit >= 0 ? 'text-emerald-700' : 'text-rose-700' ?>"><?= $row->profit > 0 ? '+' : '' ?><?= htmlspecialchars($currency) ?> <?= number_format($row->profit, 0) ?></p>
+              <p class="text-[10px] text-slate-500 font-semibold">Rev: <?= number_format($row->revenue, 0) ?></p>
             </div>
           </div>
           <?php endforeach; ?>
