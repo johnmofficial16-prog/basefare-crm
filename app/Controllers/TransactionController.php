@@ -173,6 +173,15 @@ class TransactionController
             $typeData = json_decode($body['type_specific_data_json'], true);
         }
 
+        if (!empty($body['fare_breakdown_json'])) {
+            $fareData = json_decode($body['fare_breakdown_json'], true);
+            if (is_array($typeData)) {
+                $typeData['fare_breakdown'] = $fareData;
+            } else {
+                $typeData = ['fare_breakdown' => $fareData];
+            }
+        }
+
         $data = array_merge($body, [
             'passengers'         => $passengers,
             'type_specific_data' => $typeData,

@@ -114,16 +114,33 @@ class DashboardController
                                 ->where('is_preauth', false)
                                 ->where('created_at', '<', Carbon::now()->subHours(8))->count();
 
+            $calcGross = function($t) {
+                $d = is_string($t->data) ? json_decode($t->data, true) : $t->data;
+                $gross = (isset($d['fare_breakdown'][0]['amount'])) ? (float) $d['fare_breakdown'][0]['amount'] : null;
+                
+                if (!$gross && $t->acceptance_id) {
+                    $acc = \App\Models\AcceptanceRequest::find($t->acceptance_id);
+                    if ($acc) {
+                        $ab = is_string($acc->fare_breakdown) ? json_decode($acc->fare_breakdown, true) : $acc->fare_breakdown;
+                        if (isset($ab[0]['amount'])) {
+                            $gross = (float) $ab[0]['amount'];
+                        }
+                    }
+                }
+                
+                if (!$gross && $t->profit_mco > 0) {
+                    $gross = $t->profit_mco / 0.8;
+                }
+                
+                return $gross ?: $t->profit_mco;
+            };
+
             // Transaction KPIs — today (explicit queries, no clone)
             $todayBase        = fn() => Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
                                     ->where('status', '!=', Transaction::STATUS_VOIDED);
             $todayTxnCount    = $todayBase()->count();
             $todayProfit      = (float) $todayBase()->sum('profit_mco');
-            $todayGrossProfit = (float) $todayBase()->get()->sum(function($t) {
-                $d = is_string($t->data) ? json_decode($t->data, true) : $t->data;
-                $gross = (isset($d['fare_breakdown'][0]['amount'])) ? $d['fare_breakdown'][0]['amount'] : null;
-                return (float) ($gross ?? $t->profit_mco);
-            });
+            $todayGrossProfit = (float) $todayBase()->get()->sum($calcGross);
             $pendingTxnCount  = Transaction::where('status', Transaction::STATUS_PENDING)->count();
 
             // Transaction KPIs — this month
@@ -131,21 +148,13 @@ class DashboardController
                                   ->where('status', '!=', Transaction::STATUS_VOIDED);
             $monthTxnCount  = $monthBase()->count();
             $monthProfit    = (float) $monthBase()->sum('profit_mco');
-            $monthGrossProfit = (float) $monthBase()->get()->sum(function($t) {
-                $d = is_string($t->data) ? json_decode($t->data, true) : $t->data;
-                $gross = (isset($d['fare_breakdown'][0]['amount'])) ? $d['fare_breakdown'][0]['amount'] : null;
-                return (float) ($gross ?? $t->profit_mco);
-            });
+            $monthGrossProfit = (float) $monthBase()->get()->sum($calcGross);
 
             // All-time totals (non-voided)
             $allBase        = fn() => Transaction::where('status', '!=', Transaction::STATUS_VOIDED);
             $allTxnCount    = $allBase()->count();
             $allProfit      = (float) $allBase()->sum('profit_mco');
-            $allGrossProfit = (float) $allBase()->get()->sum(function($t) {
-                $d = is_string($t->data) ? json_decode($t->data, true) : $t->data;
-                $gross = (isset($d['fare_breakdown'][0]['amount'])) ? $d['fare_breakdown'][0]['amount'] : null;
-                return (float) ($gross ?? $t->profit_mco);
-            });
+            $allGrossProfit = (float) $allBase()->get()->sum($calcGross);
 
             // Agent leaderboard — today
             $leaderboard = Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
