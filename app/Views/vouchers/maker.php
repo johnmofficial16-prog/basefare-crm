@@ -293,7 +293,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
     </div>
 
-    <!-- ═══ PREVIEW ═══ -->
+    <!-- ═══ PREVIEW (scaled for display) ═══ -->
     <div class="sticky top-6">
       <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 overflow-x-auto">
         <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5 mb-4">
@@ -307,6 +307,19 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
   </div>
 </main>
+
+<!-- ═══ HIDDEN FULL-SIZE PRINT TARGET ═══ -->
+<!-- Sits in the page flow but invisible; html2canvas captures this directly -->
+<div id="pdf-target" style="position:absolute;left:0;top:0;width:1122px;height:398px;overflow:hidden;opacity:0;pointer-events:none;z-index:-1;">
+  <?php
+  // Replace IDs so render() updates both sets
+  $tpl = file_get_contents(__DIR__ . '/voucher_template.php');
+  // Swap IDs to pdf_ prefix
+  $tpl = preg_replace('/id="(p_|s_)([^"]+)"/', 'id="pdf_$2"', $tpl);
+  $tpl = str_replace('id="barcode"', 'id="barcode_pdf"', $tpl);
+  echo $tpl;
+  ?>
+</div>
 
 <script>
 const fld = id => document.getElementById(id)?.value?.trim() ?? '';
@@ -349,8 +362,34 @@ function render() {
     setText('s_reason', reason);
     setText('s_vno_bc', vno);
 
+    // Also update the hidden PDF target
+    const pdfMap = {
+        'pdf_vno': vno, 'pdf_issue': issue, 'pdf_name': name, 'pdf_pnr': pnr,
+        'pdf_ticket': ticket, 'pdf_amt': amtStr, 'pdf_expiry': expiry, 'pdf_reason': reason,
+        'pdf_terms': terms,
+        // stub
+        'pdf_vno': vno, 's_vno': vno
+    };
+    const pdfIds = {
+        'pdf_vno': vno, 'pdf_issue': issue, 'pdf_name': name, 'pdf_pnr': pnr,
+        'pdf_ticket': ticket, 'pdf_amt': amtStr, 'pdf_expiry': expiry, 'pdf_reason': reason,
+        'pdf_terms': terms,
+        'pdf_vno_r': vno, 'pdf_expiry_r': expiry, 'pdf_name_r': name, 'pdf_amt_r': amtStr,
+        'pdf_reason_r': reason, 'pdf_vno_bc': vno
+    };
+    // Update hidden target using stub s_ -> pdf_ mapping
+    const pdfFull = {
+        pdf_vno: vno, pdf_issue: issue, pdf_name: name, pdf_pnr: pnr,
+        pdf_ticket: ticket, pdf_amt: amtStr, pdf_expiry: expiry, pdf_reason: reason,
+        pdf_terms: terms,
+        // stub fields in pdf target have prefix pdf_ too (via PHP str_replace)
+        pdf_vno: vno, pdf_expiry: expiry, pdf_name: name, pdf_amt: amtStr, pdf_reason: reason, pdf_vno_bc: vno
+    };
+    Object.entries(pdfFull).forEach(([id, val]) => setText(id, val));
+
     try {
         JsBarcode('#barcode', vno, { format:'CODE128', lineColor:'#1e293b', width:1.2, height:36, displayValue:false, margin:0 });
+        JsBarcode('#barcode_pdf', vno, { format:'CODE128', lineColor:'#1e293b', width:1.2, height:36, displayValue:false, margin:0 });
     } catch(e) {}
 }
 
@@ -394,31 +433,24 @@ async function saveAndDownload() {
 
         btn.innerHTML = '<span class="material-symbols-outlined text-base">download</span> Downloading PDF...';
 
-        // Clone template for PDF (render at full size, no transform)
-        const clone = document.getElementById('voucher-printable').cloneNode(true);
-        clone.style.transform = 'none';
-        clone.style.position  = 'fixed';
-        clone.style.top       = '-9999px';
-        clone.style.left      = '-9999px';
-        clone.style.zIndex    = '9999';
-        document.body.appendChild(clone);
-
-        // Copy barcode SVG content to clone
-        const origSvg  = document.querySelector('#voucher-printable #barcode');
-        const cloneSvg = clone.querySelector('#barcode');
-        if (origSvg && cloneSvg) cloneSvg.innerHTML = origSvg.innerHTML;
-
+        // Use the hidden full-size print target — always in the DOM at correct dimensions
+        const printEl = document.getElementById('pdf-target');
         const filename = `TravelVoucher_${payload.voucher_no}_${payload.customer_name.replace(/\s+/g,'_')}.pdf`;
 
-        await html2pdf().set({
-            margin:     0,
-            filename:   filename,
-            image:      { type: 'jpeg', quality: 1.0 },
-            html2canvas:{ scale: 2, useCORS: true, logging: false, width: 1122, height: 398 },
-            jsPDF:      { unit: 'mm', format: [297, 105.5], orientation: 'landscape' }
-        }).from(clone).save();
+        // Temporarily make visible for html2canvas capture
+        printEl.style.opacity = '1';
+        printEl.style.zIndex  = '1';
 
-        document.body.removeChild(clone);
+        await html2pdf().set({
+            margin:      0,
+            filename:    filename,
+            image:       { type: 'jpeg', quality: 1.0 },
+            html2canvas: { scale: 2, useCORS: true, logging: false, width: 1122, height: 398, scrollX: 0, scrollY: 0 },
+            jsPDF:       { unit: 'mm', format: [297, 105.5], orientation: 'landscape' }
+        }).from(printEl).save();
+
+        printEl.style.opacity = '0';
+        printEl.style.zIndex  = '-1';
         window.location.href = '/vouchers';
 
     } catch (err) {
