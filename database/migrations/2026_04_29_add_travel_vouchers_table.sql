@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS `travel_vouchers` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `voucher_no` VARCHAR(50) NOT NULL,
+  `customer_name` VARCHAR(150) NOT NULL,
+  `pnr` VARCHAR(50) DEFAULT NULL,
+  `ticket_number` VARCHAR(100) DEFAULT NULL,
+  `amount` DECIMAL(10,2) NOT NULL,
+  `currency` VARCHAR(10) NOT NULL DEFAULT 'USD',
+  `issue_date` DATE NOT NULL,
+  `expiry_date` DATE NOT NULL,
+  `reason` VARCHAR(255) DEFAULT NULL,
+  `terms` TEXT DEFAULT NULL,
+  `status` ENUM('active', 'redeemed', 'void') NOT NULL DEFAULT 'active',
+  `created_by` BIGINT UNSIGNED NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_voucher_no` (`voucher_no`),
+  KEY `idx_customer_name` (`customer_name`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

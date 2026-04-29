@@ -11,6 +11,7 @@ use App\Controllers\UserController;
 use App\Controllers\ETicketController;
 use App\Controllers\AdminController;
 use App\Controllers\PayrollController;
+use App\Controllers\VoucherController;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\IpRestrictionMiddleware;
 use App\Middleware\AttendanceGateMiddleware;
@@ -100,6 +101,16 @@ $app->group('/users', function ($group) {
 // Payroll / Salary Slip Maker (admin + manager only)
 $app->group('/payroll', function ($group) {
     $group->get('', [PayrollController::class, 'slipMaker']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
+
+// Travel Vouchers (admin + manager only)
+$app->group('/vouchers', function ($group) {
+    $group->get('', [VoucherController::class, 'index']);
+    $group->get('/maker', [VoucherController::class, 'maker']);
+    $group->post('', [VoucherController::class, 'store']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
