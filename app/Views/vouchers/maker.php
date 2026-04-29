@@ -348,6 +348,7 @@ function render() {
     setText('s_amt',    amtStr);
     setText('s_reason', reason);
     setText('s_vno_bc', vno);
+    setText('s_vno_tag', vno);
 
     try {
         JsBarcode('#barcode', vno, { format:'CODE128', lineColor:'#1e293b', width:1.2, height:36, displayValue:false, margin:0 });
