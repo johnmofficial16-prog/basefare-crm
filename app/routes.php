@@ -111,6 +111,8 @@ $app->group('/vouchers', function ($group) {
     $group->get('', [VoucherController::class, 'index']);
     $group->get('/maker', [VoucherController::class, 'maker']);
     $group->post('', [VoucherController::class, 'store']);
+    $group->get('/{id}', [VoucherController::class, 'show']);
+    $group->delete('/{id}', [VoucherController::class, 'destroy']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())

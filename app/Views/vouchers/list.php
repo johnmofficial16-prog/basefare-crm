@@ -47,12 +47,13 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               <th class="px-6 py-3 font-semibold">Issue Date</th>
               <th class="px-6 py-3 font-semibold">Status</th>
               <th class="px-6 py-3 font-semibold">Issued By</th>
+              <th class="px-6 py-3 font-semibold text-right">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
             <?php if (empty($vouchers)): ?>
             <tr>
-              <td colspan="6" class="px-6 py-8 text-center text-slate-400">
+              <td colspan="7" class="px-6 py-8 text-center text-slate-400">
                 <span class="material-symbols-outlined text-4xl opacity-50 mb-2 block">receipt_long</span>
                 No vouchers have been issued yet.
               </td>
@@ -82,6 +83,16 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
                 <td class="px-6 py-4 text-xs text-slate-500">
                   <?= htmlspecialchars($v->creator->full_name ?? 'System') ?>
                 </td>
+                <td class="px-6 py-4 text-right space-x-2">
+                  <a href="/vouchers/<?= $v->id ?>" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-600 hover:bg-primary hover:text-white transition-all shadow-sm" title="View Details">
+                    <span class="material-symbols-outlined text-base">visibility</span>
+                  </a>
+                  <?php if ($_SESSION['role'] === 'admin'): ?>
+                    <button onclick="deleteVoucher(<?= $v->id ?>)" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-sm" title="Delete Voucher">
+                      <span class="material-symbols-outlined text-base">delete</span>
+                    </button>
+                  <?php endif; ?>
+                </td>
               </tr>
               <?php endforeach; ?>
             <?php endif; ?>
@@ -91,5 +102,28 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     </div>
   </div>
 </main>
+
+<script>
+async function deleteVoucher(id) {
+    if (!confirm('Are you absolutely sure you want to delete this voucher? This cannot be undone.')) return;
+
+    try {
+        const res = await fetch(`/vouchers/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>'
+            }
+        });
+        const data = await res.json();
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert(data.error);
+        }
+    } catch (err) {
+        alert('Error deleting voucher: ' + err.message);
+    }
+}
+</script>
 </body>
 </html>

@@ -91,4 +91,58 @@ class VoucherController
             return $response->withHeader('Content-Type', 'application/json')->withStatus(500);
         }
     }
+
+    /**
+     * Display a specific voucher
+     */
+    public function show(Request $request, Response $response, array $args): Response
+    {
+        $role = $_SESSION['role'] ?? '';
+        if (!in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            return $response->withHeader('Location', '/dashboard')->withStatus(302);
+        }
+
+        $id = $args['id'];
+        $voucher = TravelVoucher::find($id);
+        
+        if (!$voucher) {
+            return $response->withHeader('Location', '/vouchers')->withStatus(302);
+        }
+
+        $activePage = 'vouchers';
+        ob_start();
+        require __DIR__ . '/../Views/vouchers/view.php';
+        $html = ob_get_clean();
+        $response->getBody()->write($html);
+        return $response;
+    }
+
+    /**
+     * API: Delete a voucher (Admin Only)
+     */
+    public function destroy(Request $request, Response $response, array $args): Response
+    {
+        $role = $_SESSION['role'] ?? '';
+        if ($role !== User::ROLE_ADMIN) {
+            $response->getBody()->write(json_encode(['success' => false, 'error' => 'Unauthorized. Admin access required.']));
+            return $response->withHeader('Content-Type', 'application/json')->withStatus(403);
+        }
+
+        $id = $args['id'];
+        $voucher = TravelVoucher::find($id);
+
+        if (!$voucher) {
+            $response->getBody()->write(json_encode(['success' => false, 'error' => 'Voucher not found']));
+            return $response->withHeader('Content-Type', 'application/json')->withStatus(404);
+        }
+
+        try {
+            $voucher->delete();
+            $response->getBody()->write(json_encode(['success' => true, 'message' => 'Voucher deleted successfully']));
+            return $response->withHeader('Content-Type', 'application/json');
+        } catch (\Exception $e) {
+            $response->getBody()->write(json_encode(['success' => false, 'error' => $e->getMessage()]));
+            return $response->withHeader('Content-Type', 'application/json')->withStatus(500);
+        }
+    }
 }
