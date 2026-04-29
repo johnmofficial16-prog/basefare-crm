@@ -53,10 +53,27 @@ class IpRestrictionMiddleware
         foreach ($whitelistedRecords as $allowedValue) {
             $allowedValue = trim($allowedValue);
             
-            // If it's a direct IP match
+            // 1. Direct IP match
             if ($clientIp === $allowedValue) {
                 $isAllowed = true;
                 break;
+            }
+
+            // 2. Wildcard match (e.g., 192.168.1.* or 2401:4900:8836:2b55:*)
+            if (str_ends_with($allowedValue, '*')) {
+                $prefix = rtrim($allowedValue, '*');
+                if (str_starts_with($clientIp, $prefix)) {
+                    $isAllowed = true;
+                    break;
+                }
+            }
+
+            // 3. IPv6 Prefix match without asterisk (e.g. 2401:4900:8836:2b55:)
+            if (str_contains($clientIp, ':') && str_ends_with($allowedValue, ':')) {
+                if (str_starts_with($clientIp, $allowedValue)) {
+                    $isAllowed = true;
+                    break;
+                }
             }
 
             // If it's a hostname (e.g., DDNS), try to resolve it
