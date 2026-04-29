@@ -118,24 +118,34 @@ class DashboardController
             $todayBase        = fn() => Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
                                     ->where('status', '!=', Transaction::STATUS_VOIDED);
             $todayTxnCount    = $todayBase()->count();
-            $todayRevenue     = (float) $todayBase()->sum('total_amount');
-            $todayCost        = (float) $todayBase()->sum('cost_amount');
             $todayProfit      = (float) $todayBase()->sum('profit_mco');
+            $todayGrossProfit = (float) $todayBase()->get()->sum(function($t) {
+                $d = is_string($t->data) ? json_decode($t->data, true) : $t->data;
+                $gross = (isset($d['fare_breakdown'][0]['amount'])) ? $d['fare_breakdown'][0]['amount'] : null;
+                return (float) ($gross ?? $t->profit_mco);
+            });
             $pendingTxnCount  = Transaction::where('status', Transaction::STATUS_PENDING)->count();
 
             // Transaction KPIs — this month
             $monthBase      = fn() => Transaction::whereBetween('created_at', [$monthStart, $monthEnd])
                                   ->where('status', '!=', Transaction::STATUS_VOIDED);
             $monthTxnCount  = $monthBase()->count();
-            $monthRevenue   = (float) $monthBase()->sum('total_amount');
-            $monthCost      = (float) $monthBase()->sum('cost_amount');
             $monthProfit    = (float) $monthBase()->sum('profit_mco');
+            $monthGrossProfit = (float) $monthBase()->get()->sum(function($t) {
+                $d = is_string($t->data) ? json_decode($t->data, true) : $t->data;
+                $gross = (isset($d['fare_breakdown'][0]['amount'])) ? $d['fare_breakdown'][0]['amount'] : null;
+                return (float) ($gross ?? $t->profit_mco);
+            });
 
             // All-time totals (non-voided)
             $allBase        = fn() => Transaction::where('status', '!=', Transaction::STATUS_VOIDED);
             $allTxnCount    = $allBase()->count();
-            $allRevenue     = (float) $allBase()->sum('total_amount');
             $allProfit      = (float) $allBase()->sum('profit_mco');
+            $allGrossProfit = (float) $allBase()->get()->sum(function($t) {
+                $d = is_string($t->data) ? json_decode($t->data, true) : $t->data;
+                $gross = (isset($d['fare_breakdown'][0]['amount'])) ? $d['fare_breakdown'][0]['amount'] : null;
+                return (float) ($gross ?? $t->profit_mco);
+            });
 
             // Agent leaderboard — today
             $leaderboard = Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
@@ -179,10 +189,13 @@ class DashboardController
                 'today_approved_acc'  => $todayApprAcc, 'expiring_soon'      => $expiringSoon,
                 'today_txn_count'     => $todayTxnCount,'today_revenue'      => $todayRevenue,
                 'today_cost'          => $todayCost,    'today_profit'       => $todayProfit,
+                'today_gross_profit'  => $todayGrossProfit,
                 'pending_txn_count'   => $pendingTxnCount,
                 'month_txn_count' => $monthTxnCount, 'month_revenue' => $monthRevenue,
                 'month_cost'      => $monthCost,     'month_profit'  => $monthProfit,
-                'all_txn_count'   => $allTxnCount,  'all_revenue'  => $allRevenue, 'all_profit' => $allProfit,
+                'month_gross_profit'  => $monthGrossProfit,
+                'all_txn_count'   => $allTxnCount,  'all_revenue'  => $allRevenue, 
+                'all_profit'      => $allProfit,    'all_gross_profit' => $allGrossProfit,
                 'leaderboard'         => $leaderboard,
                 'month_leaderboard'   => $monthLeaderboard,
                 'top_airline'         => $topAirline,
