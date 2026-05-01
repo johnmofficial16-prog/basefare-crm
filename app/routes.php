@@ -25,6 +25,13 @@ $app->post('/login', [AuthController::class, 'processLogin']);
 $app->get('/logout', [AuthController::class, 'logout']);
 
 // ==========================================================================
+// Live Scoreboard routes (public — no middleware, PIN protected)
+// ==========================================================================
+$app->get('/liveboard/score', [\App\Controllers\LiveBoardController::class, 'page']);
+$app->post('/liveboard/score/auth', [\App\Controllers\LiveBoardController::class, 'auth']);
+$app->get('/api/liveboard/feed', [\App\Controllers\LiveBoardController::class, 'feed']);
+
+// ==========================================================================
 // Attendance routes — require auth but OUTSIDE the AttendanceGate
 // ==========================================================================
 $app->group('', function ($group) {
