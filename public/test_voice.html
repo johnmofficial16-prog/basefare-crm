@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Voice Test</title>
+  <style>
+    body { font-family: sans-serif; padding: 50px; background: #f8fafc; text-align: center; }
+    button { background: #3b82f6; color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+    button:hover { background: #2563eb; }
+    #status { margin-top: 20px; color: #64748b; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>Premium Voice Test</h1>
+  <p>Click the button below to hear the new cheerful TTS voice setting!</p>
+  <button id="btn">Play Announcement</button>
+  <div id="status">Waiting for voices to load...</div>
+
+  <script>
+    let selectedVoice = null;
+    const synth = window.speechSynthesis;
+    
+    const pick = () => {
+      const v = synth.getVoices();
+      selectedVoice = v.find(x => x.name.includes('Natural') && x.lang.startsWith('en'))
+                   || v.find(x => (x.name.includes('Aria') || x.name.includes('Jenny') || x.name.includes('Samantha')) && x.lang.startsWith('en'))
+                   || v.find(x => /zira|female|google uk english female/i.test(x.name) && x.lang.startsWith('en'))
+                   || v.find(x => x.lang.startsWith('en'))
+                   || v[0];
+      if (selectedVoice) {
+         document.getElementById('status').innerText = "Currently using: " + selectedVoice.name;
+      } else {
+         document.getElementById('status').innerText = "No voices found. Make sure audio is enabled.";
+      }
+    };
+    
+    // Some browsers need a slight delay to load voices
+    if (synth.onvoiceschanged !== undefined) {
+      synth.onvoiceschanged = pick;
+    }
+    setTimeout(pick, 500);
+    
+    document.getElementById('btn').addEventListener('click', () => {
+      pick(); // Re-pick just in case
+      const msg = new SpeechSynthesisUtterance("Troy Baker just closed a Seat Purchase for 305 dollars!");
+      if (selectedVoice) msg.voice = selectedVoice;
+      msg.rate = 1.05; 
+      msg.pitch = 1.25;
+      synth.speak(msg);
+    });
+  </script>
+</body>
+</html>
