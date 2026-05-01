@@ -146,7 +146,7 @@ class LiveBoardController
             ->with('agent:id,name')
             ->orderByDesc('approved_at')
             ->limit(12)
-            ->get(['id', 'agent_id', 'type', 'currency', 'approved_at']);
+            ->get(['id', 'agent_id', 'type', 'total_amount', 'currency', 'approved_at']);
 
         $events = collect();
 
@@ -169,7 +169,7 @@ class LiveBoardController
                 'agent_name' => $a->agent->name ?? 'Agent',
                 'kind'       => 'acceptance',
                 'label'      => $this->typeLabel($a->type),
-                'profit'     => null,
+                'profit'     => (int) round((float) $a->total_amount),
                 'currency'   => $a->currency ?? 'USD',
                 'time'       => $a->approved_at ? Carbon::parse($a->approved_at, 'UTC')->setTimezone('Asia/Kolkata')->toIso8601String() : null,
             ]);

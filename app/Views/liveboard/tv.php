@@ -290,10 +290,11 @@ async function fetchFeed() {
 
     if (!firstLoad && data.last_event_id && data.last_event_id !== lastEventId) {
       const ev = data.events[0];
+      const amountStr = ev.profit ? `for ${ev.profit} dollars` : '';
       if (ev.kind === 'transaction') {
-        announce(`${ev.agent_name} just closed a ${ev.label}!`, 'NEW SALE!', '🎉');
+        announce(`${ev.agent_name} just closed a ${ev.label} ${amountStr}!`, 'NEW SALE!', '🎉');
       } else {
-        announce(`Authorization for ${ev.agent_name} was just approved!`, 'AUTHORIZED!', '✅');
+        announce(`Authorization ${amountStr} for ${ev.agent_name} was just approved!`, 'AUTHORIZED!', '✅');
       }
     }
 
