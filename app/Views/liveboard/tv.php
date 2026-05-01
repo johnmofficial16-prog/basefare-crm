@@ -1,288 +1,311 @@
 <?php
-// PIN Protection Screen
-if (!$pinVerified):
+// Ensure CSRF token exists for PIN form
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TV Scoreboard - PIN Required</title>
-  <link href="/assets/css/tailwind.css" rel="stylesheet">
+  <title>Base Fare — Live Scoreboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', sans-serif; box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #0a0f1e; }
+
+    /* ── Announcement banner ── */
+    #ann-banner {
+      transform: translateY(110%);
+      transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    #ann-banner.show { transform: translateY(0); }
+
+    /* ── New-item flash ── */
+    @keyframes flash-in {
+      0%   { background: rgba(99,102,241,.35); transform: scale(1.015); }
+      100% { background: rgba(30,41,59,.4);   transform: scale(1); }
+    }
+    .flash { animation: flash-in 2.5s ease-out forwards; }
+
+    /* ── Scrollbar hide ── */
+    .no-scroll { overflow: hidden; }
+    #feed-wrap { overflow-y: auto; scrollbar-width: none; }
+    #feed-wrap::-webkit-scrollbar { display: none; }
+    #lb-wrap   { overflow-y: auto; scrollbar-width: none; }
+    #lb-wrap::-webkit-scrollbar { display: none; }
+  </style>
 </head>
-<body class="bg-slate-900 h-screen flex items-center justify-center font-sans text-slate-100">
-  <div class="bg-slate-800 p-8 rounded-3xl shadow-2xl max-w-sm w-full border border-slate-700 text-center">
-    <div class="w-16 h-16 bg-slate-700 rounded-2xl flex items-center justify-center mx-auto mb-6">
-      <span class="text-3xl">🔒</span>
-    </div>
-    <h2 class="text-xl font-bold text-white mb-2">Live Scoreboard</h2>
-    <p class="text-sm text-slate-400 mb-6">Enter the TV PIN to view the live dashboard.</p>
-    
-    <?php if ($pinError): ?>
-      <div class="bg-rose-500/10 text-rose-400 text-sm p-3 rounded-xl mb-6 border border-rose-500/20">
+<body class="no-scroll text-white">
+
+<?php if (!$pinVerified): ?>
+<!-- ═══════════════════════ PIN SCREEN ═══════════════════════ -->
+<div class="min-h-screen flex items-center justify-center" style="background:#0a0f1e;">
+  <div style="background:#111827; border:1px solid #1f2937; border-radius:24px; padding:48px 40px; width:360px; text-align:center; box-shadow:0 25px 60px rgba(0,0,0,.5);">
+    <div style="width:64px;height:64px;background:#1f2937;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 24px;">🔒</div>
+    <h1 style="font-size:22px;font-weight:800;margin:0 0 8px;">Live Scoreboard</h1>
+    <p style="color:#6b7280;font-size:14px;margin:0 0 28px;">Enter the TV PIN to unlock.</p>
+
+    <?php if (!empty($pinError)): ?>
+      <div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:12px;padding:10px 14px;color:#f87171;font-size:13px;margin-bottom:20px;">
         <?= htmlspecialchars($pinError) ?>
       </div>
     <?php endif; ?>
 
     <form action="/liveboard/score/auth" method="POST">
-      <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
-      <input type="password" name="pin" autofocus placeholder="• • • •" 
-             class="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-center text-2xl tracking-[0.5em] text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 mb-6">
-      <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+      <input type="password" name="pin" autofocus placeholder="••••"
+             style="width:100%;background:#0a0f1e;border:1px solid #374151;border-radius:12px;padding:14px;text-align:center;font-size:28px;letter-spacing:.4em;color:white;outline:none;margin-bottom:16px;display:block;">
+      <button type="submit"
+              style="width:100%;background:#4f46e5;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;color:white;cursor:pointer;">
         Unlock Dashboard
       </button>
     </form>
-  <script>
-    // --- CLOCK ---
-    function updateClock() {
-      const now = new Date();
-      document.getElementById('clock-time').textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute:'2-digit', hour12: true });
-      document.getElementById('clock-date').textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
-
-    // --- VOICE (Web Speech API) ---
-    let voiceReady = false;
-    let selectedVoice = null;
-
-    document.getElementById('audio-unlock').addEventListener('click', function() {
-      this.classList.add('hidden');
-      voiceReady = true;
-      
-      // Initialize speech synthesis and find a female english voice if possible
-      const synth = window.speechSynthesis;
-      const findVoice = () => {
-        const voices = synth.getVoices();
-        if (voices.length > 0) {
-          selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Google US English'))) || voices[0];
-        }
-      };
-      findVoice();
-      if (speechSynthesis.onvoiceschanged !== undefined) {
-        speechSynthesis.onvoiceschanged = findVoice;
-      }
-      
-      // Silent speak to unlock context
-      const u = new SpeechSynthesisUtterance('');
-      synth.speak(u);
-    });
-
-    function announce(msg, typeLabel) {
-      if (!voiceReady) return;
-      
-      // Visual Banner
-      const banner = document.getElementById('announcement-banner');
-      document.getElementById('ann-type').textContent = typeLabel;
-      document.getElementById('ann-msg').textContent = msg;
-      banner.classList.add('show');
-      
-      // Audio
-      const synth = window.speechSynthesis;
-      const utterance = new SpeechSynthesisUtterance(msg);
-      if (selectedVoice) utterance.voice = selectedVoice;
-      utterance.rate = 0.95;
-      utterance.pitch = 1.1;
-      
-      utterance.onend = function() {
-        setTimeout(() => banner.classList.remove('show'), 2000);
-      };
-      
-      synth.speak(utterance);
-    }
-
-    // --- DATA FEED POLLING ---
-    let lastEventId = null;
-    let firstLoad = true;
-
-    async function fetchFeed() {
-      try {
-        const res = await fetch('/api/liveboard/feed');
-        if (res.status === 403) {
-          window.location.reload(); // PIN expired
-          return;
-        }
-        const data = await res.json();
-        
-        // Update Totals
-        document.getElementById('stat-profit').textContent = data.currency + ' ' + data.total_profit.toLocaleString();
-        document.getElementById('stat-txns').textContent = data.total_txns;
-
-        // Render Leaderboard
-        const lbHtml = data.leaderboard.map((a, i) => `
-          <div class="bg-slate-800/50 rounded-2xl p-4 flex items-center gap-4 border border-slate-700/50 transition-all ${i===0 ? 'ring-1 ring-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : ''}">
-            <div class="w-10 h-10 rounded-full flex items-center justify-center font-black text-xl shrink-0 ${i===0 ? 'bg-amber-500 text-white' : (i===1 ? 'bg-slate-400 text-white' : (i===2 ? 'bg-amber-700 text-white' : 'bg-slate-800 text-slate-500'))}">
-              ${i+1}
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="font-bold text-white truncate text-lg">${a.display}</p>
-              <p class="text-xs text-slate-400 mt-0.5">${a.txn_count} Txns ${a.acc_count > 0 ? `· ${a.acc_count} Accs` : ''}</p>
-            </div>
-            <div class="text-right shrink-0">
-              <p class="font-black text-emerald-400 text-xl tracking-tight">${a.profit > 0 ? '+'+a.profit.toLocaleString() : '0'}</p>
-            </div>
-          </div>
-        `).join('');
-        document.getElementById('leaderboard-container').innerHTML = lbHtml;
-
-        // Check for new event
-        if (!firstLoad && data.last_event_id && data.last_event_id !== lastEventId) {
-          // Find the new event to announce
-          const ev = data.events[0];
-          let msg = '';
-          let typeLabel = 'NEW SALE!';
-          if (ev.kind === 'transaction') {
-            msg = `${ev.agent_name} just closed a ${ev.label}!`;
-          } else {
-            typeLabel = 'AUTHORIZATION APPROVED!';
-            msg = `A ${ev.label} authorization was just signed for ${ev.agent_name}!`;
-          }
-          announce(msg, typeLabel);
-        }
-
-        lastEventId = data.last_event_id;
-        firstLoad = false;
-
-        // Render Feed
-        const feedHtml = data.events.map(ev => `
-          <div class="bg-slate-800/30 rounded-2xl p-4 border border-slate-700/30 border-l-4 ${ev.kind === 'transaction' ? 'border-l-blue-500' : 'border-l-violet-500'} ${data.last_event_id === ev.id && !firstLoad ? 'new-item' : ''}">
-            <div class="flex items-center justify-between mb-1">
-              <p class="font-bold text-white text-sm">${ev.agent_name}</p>
-              <p class="text-xs text-slate-500">${new Date(ev.time).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'})}</p>
-            </div>
-            <div class="flex items-center justify-between">
-              <p class="text-xs font-semibold ${ev.kind === 'transaction' ? 'text-blue-400' : 'text-violet-400'} uppercase tracking-wider">${ev.kind === 'transaction' ? 'Recorded' : 'Approved'}: ${ev.label}</p>
-              ${ev.profit !== null ? `<p class="font-black text-emerald-400 text-sm">+${ev.profit.toLocaleString()}</p>` : ''}
-            </div>
-          </div>
-        `).join('');
-        document.getElementById('feed-container').innerHTML = feedHtml;
-
-      } catch (err) {
-        console.error('Feed error:', err);
-      }
-    }
-
-    // Start polling every 15 seconds
-    fetchFeed();
-    setInterval(fetchFeed, 15000);
-
-  </script>
-</body>
-</html>
+  </div>
+</div>
 <?php return; endif; ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live Sales Scoreboard</title>
-  <link href="/assets/css/tailwind.css" rel="stylesheet">
-  <style>
-    body { font-family: 'Inter', sans-serif; background-color: #0f172a; overflow: hidden; }
-    .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.05); }
-    .neon-text { text-shadow: 0 0 10px rgba(99, 102, 241, 0.5); }
-    .neon-text-green { text-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
-    
-    /* Announcement Banner */
-    #announcement-banner {
-      transform: translateY(100%);
-      transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    #announcement-banner.show {
-      transform: translateY(0);
-    }
-
-    /* Pulse animation for new items */
-    @keyframes pulse-row {
-      0% { background-color: rgba(99, 102, 241, 0.4); transform: scale(1.02); }
-      100% { background-color: transparent; transform: scale(1); }
-    }
-    .new-item { animation: pulse-row 3s ease-out forwards; }
-  </style>
-</head>
-<body class="text-slate-200 h-screen flex flex-col">
+<!-- ═══════════════════════ TV DASHBOARD ═══════════════════════ -->
+<div style="display:flex;flex-direction:column;height:100vh;">
 
   <!-- TOP BAR -->
-  <header class="glass px-8 py-4 flex items-center justify-between shrink-0 border-b border-slate-800">
-    <div class="flex items-center gap-4">
-      <div class="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-xl text-white shadow-[0_0_15px_rgba(79,70,229,0.5)]">BF</div>
+  <header style="background:rgba(17,24,39,.8);backdrop-filter:blur(12px);border-bottom:1px solid #1f2937;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+    <!-- Brand -->
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div style="width:46px;height:46px;background:#4f46e5;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:17px;box-shadow:0 0 18px rgba(79,70,229,.5);">BF</div>
       <div>
-        <h1 class="text-2xl font-black text-white tracking-tight uppercase">Base Fare</h1>
-        <p class="text-indigo-400 text-sm font-semibold tracking-widest uppercase">Live Scoreboard</p>
+        <div style="font-weight:900;font-size:20px;letter-spacing:-.02em;">Base Fare</div>
+        <div style="color:#818cf8;font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;">Live Sales Board</div>
       </div>
     </div>
-    <div class="flex items-center gap-8">
-      <div class="text-center">
-        <p class="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Today's Sales</p>
-        <p class="text-3xl font-black text-white neon-text-green" id="stat-profit">USD 0</p>
+
+    <!-- Stats -->
+    <div style="display:flex;align-items:center;gap:36px;">
+      <div style="text-align:center;">
+        <div style="color:#6b7280;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">Today's Profit</div>
+        <div id="stat-profit" style="font-size:28px;font-weight:900;color:#34d399;text-shadow:0 0 12px rgba(52,211,153,.4);">USD 0</div>
       </div>
-      <div class="text-center">
-        <p class="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Transactions</p>
-        <p class="text-3xl font-black text-white" id="stat-txns">0</p>
+      <div style="text-align:center;">
+        <div style="color:#6b7280;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">Transactions</div>
+        <div id="stat-txns" style="font-size:28px;font-weight:900;color:#fff;">0</div>
       </div>
-      <div class="text-right ml-4 border-l border-slate-700 pl-8">
-        <p class="text-3xl font-black text-white tracking-tight" id="clock-time">--:--</p>
-        <p class="text-sm text-slate-400 font-medium" id="clock-date">---</p>
+      <div style="text-align:center;">
+        <div style="color:#6b7280;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">Authorizations</div>
+        <div id="stat-accs" style="font-size:28px;font-weight:900;color:#a78bfa;">0</div>
+      </div>
+      <!-- Clock -->
+      <div style="text-align:right;padding-left:28px;border-left:1px solid #1f2937;">
+        <div id="clock-time" style="font-size:30px;font-weight:900;letter-spacing:-.02em;">--:--</div>
+        <div id="clock-date" style="color:#6b7280;font-size:12px;font-weight:600;">---</div>
       </div>
     </div>
   </header>
 
-  <!-- MAIN CONTENT -->
-  <main class="flex-1 p-8 flex gap-8 min-h-0">
-    
-    <!-- LEADERBOARD (Left) -->
-    <section class="flex-1 glass rounded-3xl p-6 flex flex-col min-h-0 border-t border-white/5">
-      <div class="flex items-center justify-between mb-6 shrink-0">
-        <h2 class="text-xl font-bold text-white flex items-center gap-2">
-          <span class="text-amber-400 text-2xl">🏆</span> Today's Leaderboard
+  <!-- MAIN AREA -->
+  <main style="flex:1;display:flex;gap:24px;padding:24px;min-height:0;">
+
+    <!-- LEADERBOARD -->
+    <section style="flex:1;background:rgba(17,24,39,.6);backdrop-filter:blur(12px);border:1px solid #1f2937;border-radius:20px;padding:24px;display:flex;flex-direction:column;min-height:0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-shrink:0;">
+        <h2 style="margin:0;font-size:18px;font-weight:800;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;">🏆</span> Today's Leaderboard
         </h2>
-        <div class="px-3 py-1 bg-slate-800 rounded-full text-xs font-semibold text-slate-300 border border-slate-700 flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Live
+        <div style="background:#111827;border:1px solid #374151;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#d1d5db;display:flex;align-items:center;gap:6px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;animation:pulse 1.5s infinite;"></span> Live
         </div>
       </div>
-      
-      <div class="flex-1 overflow-hidden">
-        <div class="flex flex-col gap-3" id="leaderboard-container">
-          <!-- Rendered by JS -->
+      <div id="lb-wrap" style="flex:1;overflow-y:auto;">
+        <div id="lb-container" style="display:flex;flex-direction:column;gap:12px;">
+          <div style="color:#4b5563;text-align:center;padding:40px 0;font-size:14px;">Waiting for today's first sale...</div>
         </div>
       </div>
     </section>
 
-    <!-- RECENT EVENTS (Right) -->
-    <section class="w-[450px] glass rounded-3xl p-6 flex flex-col min-h-0 border-t border-white/5">
-      <h2 class="text-xl font-bold text-white mb-6 shrink-0 flex items-center gap-2">
-        <span class="text-blue-400 text-2xl">⚡</span> Live Feed
+    <!-- FEED -->
+    <section style="width:420px;background:rgba(17,24,39,.6);backdrop-filter:blur(12px);border:1px solid #1f2937;border-radius:20px;padding:24px;display:flex;flex-direction:column;min-height:0;">
+      <h2 style="margin:0 0 20px;font-size:18px;font-weight:800;display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <span style="font-size:22px;">⚡</span> Live Feed
       </h2>
-      
-      <div class="flex-1 overflow-hidden relative">
-        <!-- Fading gradient at bottom -->
-        <div class="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-[#141b2c] to-transparent z-10 pointer-events-none"></div>
-        <div class="flex flex-col gap-4" id="feed-container">
-          <!-- Rendered by JS -->
+      <div style="flex:1;position:relative;overflow:hidden;">
+        <div style="position:absolute;bottom:0;left:0;right:0;height:80px;background:linear-gradient(to top,#0a0f1e,transparent);z-index:5;pointer-events:none;"></div>
+        <div id="feed-wrap" style="height:100%;overflow-y:auto;">
+          <div id="feed-container" style="display:flex;flex-direction:column;gap:12px;">
+            <div style="color:#4b5563;text-align:center;padding:40px 0;font-size:14px;">No events yet today.</div>
+          </div>
         </div>
       </div>
     </section>
 
   </main>
+</div>
 
-  <!-- ANNOUNCEMENT BANNER (Hidden by default) -->
-  <div id="announcement-banner" class="fixed bottom-0 left-0 w-full bg-indigo-600/90 backdrop-blur-xl border-t border-indigo-400/30 p-8 shadow-[0_-10px_50px_rgba(79,70,229,0.3)] z-50 flex items-center justify-center gap-8">
-    <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center text-4xl shadow-inner shrink-0 animate-bounce">
-      🎉
-    </div>
-    <div>
-      <p class="text-indigo-200 text-lg font-bold uppercase tracking-widest mb-1" id="ann-type">NEW SALE!</p>
-      <p class="text-5xl font-black text-white tracking-tight" id="ann-msg">David Smith just closed a booking!</p>
-    </div>
+<!-- ANNOUNCEMENT BANNER -->
+<div id="ann-banner" style="position:fixed;bottom:0;left:0;right:0;background:rgba(67,56,202,.92);backdrop-filter:blur(16px);border-top:1px solid rgba(165,180,252,.25);padding:24px 40px;z-index:100;display:flex;align-items:center;gap:28px;box-shadow:0 -8px 40px rgba(79,70,229,.35);">
+  <div id="ann-emoji" style="width:72px;height:72px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;flex-shrink:0;">🎉</div>
+  <div>
+    <div id="ann-type" style="color:#c7d2fe;font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;margin-bottom:6px;">NEW SALE!</div>
+    <div id="ann-msg" style="font-size:38px;font-weight:900;line-height:1.1;"></div>
   </div>
+</div>
 
-  <!-- INITIALIZATION OVERLAY (To unlock Audio Context) -->
-  <div id="audio-unlock" class="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[100] flex flex-col items-center justify-center cursor-pointer">
-    <div class="w-24 h-24 bg-indigo-600 rounded-full flex items-center justify-center text-white mb-6 animate-pulse">
-      <svg class="w-10 h-10" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clip-rule="evenodd"></path></svg>
-    </div>
-    <h2 class="text-3xl font-bold text-white mb-2">Click anywhere to start</h2>
-    <p class="text-slate-400 text-lg">Browser requires a click to enable voice announcements.</p>
+<!-- AUDIO UNLOCK OVERLAY -->
+<div id="audio-unlock" style="position:fixed;inset:0;background:rgba(10,15,30,.88);backdrop-filter:blur(6px);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;">
+  <div style="width:90px;height:90px;background:#4f46e5;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:24px;animation:pulse-grow 1.8s ease-in-out infinite;">
+    <svg width="38" height="38" fill="white" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clip-rule="evenodd"></path></svg>
   </div>
+  <h2 style="font-size:28px;font-weight:900;margin:0 0 10px;">Click anywhere to start</h2>
+  <p style="color:#6b7280;font-size:16px;margin:0;">Browser requires one click to enable voice announcements.</p>
+</div>
+
+<style>
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+@keyframes pulse-grow { 0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(79,70,229,.5)} 50%{transform:scale(1.05);box-shadow:0 0 0 14px rgba(79,70,229,0)} }
+</style>
+
+<script>
+// ── CLOCK ──────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock-time').textContent = now.toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit',hour12:true});
+  document.getElementById('clock-date').textContent  = now.toLocaleDateString('en-US', {weekday:'long',month:'short',day:'numeric'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── VOICE ──────────────────────────────────────────────────────
+let voiceReady = false, selectedVoice = null;
+
+document.getElementById('audio-unlock').addEventListener('click', function () {
+  this.style.display = 'none';
+  voiceReady = true;
+  const synth = window.speechSynthesis;
+  const pick = () => {
+    const v = synth.getVoices();
+    selectedVoice = v.find(x => x.lang.startsWith('en') && /samantha|zira|female|google uk english female/i.test(x.name))
+                 || v.find(x => x.lang.startsWith('en'))
+                 || v[0];
+  };
+  pick();
+  if ('onvoiceschanged' in speechSynthesis) speechSynthesis.onvoiceschanged = pick;
+  const u = new SpeechSynthesisUtterance(' ');
+  synth.speak(u);
+});
+
+function announce(msg, typeLabel, emoji) {
+  document.getElementById('ann-emoji').textContent = emoji || '🎉';
+  document.getElementById('ann-type').textContent  = typeLabel;
+  document.getElementById('ann-msg').textContent   = msg;
+  const banner = document.getElementById('ann-banner');
+  banner.classList.add('show');
+
+  if (voiceReady) {
+    const synth = window.speechSynthesis;
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(msg);
+    if (selectedVoice) u.voice = selectedVoice;
+    u.rate = 0.93; u.pitch = 1.05;
+    u.onend = () => setTimeout(() => banner.classList.remove('show'), 2500);
+    synth.speak(u);
+  } else {
+    setTimeout(() => banner.classList.remove('show'), 6000);
+  }
+}
+
+// ── FEED POLLING ───────────────────────────────────────────────
+let lastEventId = null, firstLoad = true;
+
+const MEDALS = ['🥇','🥈','🥉'];
+const RANK_COLORS = [
+  'background:#d97706;color:#fff;',
+  'background:#6b7280;color:#fff;',
+  'background:#92400e;color:#fff;',
+];
+
+function renderLeaderboard(lb) {
+  const el = document.getElementById('lb-container');
+  if (!lb.length) {
+    el.innerHTML = '<div style="color:#4b5563;text-align:center;padding:40px 0;font-size:14px;">Waiting for today\'s first sale...</div>';
+    return;
+  }
+  el.innerHTML = lb.map((a, i) => {
+    const rankStyle = RANK_COLORS[i] || 'background:#1f2937;color:#6b7280;';
+    const isFirst = i === 0;
+    return `
+      <div style="background:rgba(30,41,59,${isFirst?'.8':'.4'});border:1px solid ${isFirst?'rgba(217,119,6,.4)':'#1f2937'};border-radius:16px;padding:16px 20px;display:flex;align-items:center;gap:16px;${isFirst?'box-shadow:0 0 20px rgba(217,119,6,.15);':''}">
+        <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;flex-shrink:0;${rankStyle}">${i < 3 ? MEDALS[i] : i+1}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:800;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.display}</div>
+          <div style="color:#6b7280;font-size:12px;margin-top:2px;">${a.txn_count} txn${a.txn_count!==1?'s':''}${a.acc_count>0?' · '+a.acc_count+' auth'+( a.acc_count!==1?'s':''):''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-weight:900;font-size:22px;color:#34d399;">${a.profit > 0 ? '+'+a.profit.toLocaleString() : '0'}</div>
+          <div style="color:#6b7280;font-size:11px;">USD</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderFeed(events) {
+  const el = document.getElementById('feed-container');
+  if (!events.length) {
+    el.innerHTML = '<div style="color:#4b5563;text-align:center;padding:40px 0;font-size:14px;">No events yet today.</div>';
+    return;
+  }
+  el.innerHTML = events.map((ev, idx) => {
+    const isTxn   = ev.kind === 'transaction';
+    const accent  = isTxn ? '#3b82f6' : '#8b5cf6';
+    const badge   = isTxn ? 'Recorded' : 'Approved';
+    const timeStr = ev.time ? new Date(ev.time).toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'}) : '';
+    return `
+      <div class="${idx===0&&!firstLoad?'flash':''}" style="background:rgba(30,41,59,.4);border:1px solid #1f2937;border-left:3px solid ${accent};border-radius:14px;padding:14px 16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-weight:700;font-size:14px;">${ev.agent_name}</span>
+          <span style="color:#4b5563;font-size:12px;">${timeStr}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="color:${accent};font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">${badge}: ${ev.label}</span>
+          ${ev.profit !== null ? `<span style="color:#34d399;font-weight:900;font-size:14px;">+${ev.profit.toLocaleString()}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function fetchFeed() {
+  try {
+    const res = await fetch('/api/liveboard/feed');
+    if (res.status === 403) { window.location.reload(); return; }
+    const data = await res.json();
+
+    document.getElementById('stat-profit').textContent = 'USD ' + data.total_profit.toLocaleString();
+    document.getElementById('stat-txns').textContent   = data.total_txns;
+    document.getElementById('stat-accs').textContent   = data.total_accs;
+
+    renderLeaderboard(data.leaderboard || []);
+    renderFeed(data.events || []);
+
+    if (!firstLoad && data.last_event_id && data.last_event_id !== lastEventId) {
+      const ev = data.events[0];
+      if (ev.kind === 'transaction') {
+        announce(`${ev.agent_name} just closed a ${ev.label}!`, 'NEW SALE!', '🎉');
+      } else {
+        announce(`Authorization for ${ev.agent_name} was just approved!`, 'AUTHORIZED!', '✅');
+      }
+    }
+
+    lastEventId = data.last_event_id;
+    firstLoad   = false;
+  } catch (e) {
+    console.error('Feed error', e);
+  }
+}
+
+fetchFeed();
+setInterval(fetchFeed, 15000);
+</script>
+</body>
+</html>
