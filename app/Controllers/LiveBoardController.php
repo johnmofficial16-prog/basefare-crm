@@ -86,46 +86,61 @@ class LiveBoardController
             $shiftEnd   = $now->copy()->startOfDay()->addHours(18)->subSecond(); // Today 5:59:59 PM
         }
 
+        // DB strings need to be in UTC because Hostinger MySQL runs in UTC by default
+        $shiftStartDb = $shiftStart->copy()->setTimezone('UTC');
+        $shiftEndDb   = $shiftEnd->copy()->setTimezone('UTC');
+
         // ── Leaderboard: approved transactions today ──────────────────────────
-        $txnRows = Transaction::whereBetween('created_at', [$shiftStart, $shiftEnd])
+        $txnRows = Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', Transaction::STATUS_APPROVED)
             ->selectRaw('agent_id, COUNT(*) as txn_count, SUM(profit_mco) as profit, MAX(currency) as currency')
             ->groupBy('agent_id')
             ->with('agent:id,name')
-            ->get();
+            ->get()
+            ->keyBy('agent_id');
 
         // Approved acceptances today per agent
-        $accRows = AcceptanceRequest::whereBetween('approved_at', [$shiftStart, $shiftEnd])
+        $accRows = AcceptanceRequest::whereBetween('approved_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', 'APPROVED')
             ->where('is_preauth', false)
             ->selectRaw('agent_id, COUNT(*) as acc_count')
             ->groupBy('agent_id')
+            ->with('agent:id,name')
             ->get()
             ->keyBy('agent_id');
 
-        $leaderboard = $txnRows->map(function ($row) use ($accRows) {
-            $name     = $row->agent->name ?? 'Agent';
-            $parts    = explode(' ', trim($name));
-            $display  = $parts[0] . (isset($parts[1]) ? ' ' . strtoupper($parts[1][0]) . '.' : '');
+        // Merge all unique agent IDs
+        $allAgentIds = $txnRows->keys()->merge($accRows->keys())->unique();
+
+        $leaderboard = $allAgentIds->map(function ($agentId) use ($txnRows, $accRows) {
+            $tRow = $txnRows[$agentId] ?? null;
+            $aRow = $accRows[$agentId] ?? null;
+            
+            // Get name from either relation
+            $agentName = ($tRow->agent->name ?? ($aRow->agent->name ?? 'Agent'));
+            
+            $parts   = explode(' ', trim($agentName));
+            $display = $parts[0] . (isset($parts[1]) ? ' ' . strtoupper($parts[1][0]) . '.' : '');
+            
             return [
-                'full_name' => $name,
+                'full_name' => $agentName,
                 'display'   => $display,
-                'txn_count' => (int) $row->txn_count,
-                'acc_count' => (int) ($accRows[$row->agent_id]->acc_count ?? 0),
-                'profit'    => (int) round((float) $row->profit),
-                'currency'  => $row->currency ?? 'USD',
+                'txn_count' => (int) ($tRow->txn_count ?? 0),
+                'acc_count' => (int) ($aRow->acc_count ?? 0),
+                'profit'    => (int) round((float) ($tRow->profit ?? 0)),
+                'currency'  => $tRow->currency ?? ($aRow->currency ?? 'USD'),
             ];
         })->sortByDesc('profit')->values();
 
         // ── Recent events feed ────────────────────────────────────────────────
-        $recentTxns = Transaction::whereBetween('created_at', [$shiftStart, $shiftEnd])
+        $recentTxns = Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', Transaction::STATUS_APPROVED)
             ->with('agent:id,name')
             ->orderByDesc('updated_at')
             ->limit(12)
             ->get(['id', 'agent_id', 'type', 'profit_mco', 'currency', 'updated_at']);
 
-        $recentAccs = AcceptanceRequest::whereBetween('approved_at', [$shiftStart, $shiftEnd])
+        $recentAccs = AcceptanceRequest::whereBetween('approved_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', 'APPROVED')
             ->where('is_preauth', false)
             ->with('agent:id,name')
@@ -143,7 +158,8 @@ class LiveBoardController
                 'label'      => $this->typeLabel($t->type),
                 'profit'     => (int) round((float) $t->profit_mco),
                 'currency'   => $t->currency ?? 'USD',
-                'time'       => $t->updated_at ? Carbon::parse($t->updated_at)->toIso8601String() : null,
+                // convert UTC back to IST for frontend display
+                'time'       => $t->updated_at ? Carbon::parse($t->updated_at, 'UTC')->setTimezone('Asia/Kolkata')->toIso8601String() : null,
             ]);
         }
 
@@ -155,18 +171,18 @@ class LiveBoardController
                 'label'      => $this->typeLabel($a->type),
                 'profit'     => null,
                 'currency'   => $a->currency ?? 'USD',
-                'time'       => $a->approved_at ? Carbon::parse($a->approved_at)->toIso8601String() : null,
+                'time'       => $a->approved_at ? Carbon::parse($a->approved_at, 'UTC')->setTimezone('Asia/Kolkata')->toIso8601String() : null,
             ]);
         }
 
         $events = $events->sortByDesc('time')->take(15)->values();
 
         // ── Summary totals ────────────────────────────────────────────────────
-        $totalTxns   = Transaction::whereBetween('created_at', [$shiftStart, $shiftEnd])
+        $totalTxns   = Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', Transaction::STATUS_APPROVED)->count();
-        $totalAccs   = AcceptanceRequest::whereBetween('approved_at', [$shiftStart, $shiftEnd])
+        $totalAccs   = AcceptanceRequest::whereBetween('approved_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', 'APPROVED')->where('is_preauth', false)->count();
-        $totalProfit = (int) round((float) Transaction::whereBetween('created_at', [$shiftStart, $shiftEnd])
+        $totalProfit = (int) round((float) Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', Transaction::STATUS_APPROVED)->sum('profit_mco'));
 
         $payload = [
