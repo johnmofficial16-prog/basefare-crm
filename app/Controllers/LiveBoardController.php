@@ -77,11 +77,17 @@ class LiveBoardController
             return $response->withHeader('Content-Type', 'application/json')->withStatus(403);
         }
 
-        $todayStart = Carbon::today()->startOfDay();
-        $todayEnd   = Carbon::today()->endOfDay();
+        $now = Carbon::now();
+        if ($now->hour >= 18) {
+            $shiftStart = $now->copy()->startOfDay()->addHours(18); // Today 6 PM
+            $shiftEnd   = $now->copy()->addDay()->startOfDay()->addHours(18)->subSecond(); // Tomorrow 5:59:59 PM
+        } else {
+            $shiftStart = $now->copy()->subDay()->startOfDay()->addHours(18); // Yesterday 6 PM
+            $shiftEnd   = $now->copy()->startOfDay()->addHours(18)->subSecond(); // Today 5:59:59 PM
+        }
 
         // ── Leaderboard: approved transactions today ──────────────────────────
-        $txnRows = Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
+        $txnRows = Transaction::whereBetween('created_at', [$shiftStart, $shiftEnd])
             ->where('status', Transaction::STATUS_APPROVED)
             ->selectRaw('agent_id, COUNT(*) as txn_count, SUM(profit_mco) as profit, MAX(currency) as currency')
             ->groupBy('agent_id')
@@ -89,7 +95,7 @@ class LiveBoardController
             ->get();
 
         // Approved acceptances today per agent
-        $accRows = AcceptanceRequest::whereBetween('approved_at', [$todayStart, $todayEnd])
+        $accRows = AcceptanceRequest::whereBetween('approved_at', [$shiftStart, $shiftEnd])
             ->where('status', 'APPROVED')
             ->where('is_preauth', false)
             ->selectRaw('agent_id, COUNT(*) as acc_count')
@@ -112,14 +118,14 @@ class LiveBoardController
         })->sortByDesc('profit')->values();
 
         // ── Recent events feed ────────────────────────────────────────────────
-        $recentTxns = Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
+        $recentTxns = Transaction::whereBetween('created_at', [$shiftStart, $shiftEnd])
             ->where('status', Transaction::STATUS_APPROVED)
             ->with('agent:id,name')
             ->orderByDesc('updated_at')
             ->limit(12)
             ->get(['id', 'agent_id', 'type', 'profit_mco', 'currency', 'updated_at']);
 
-        $recentAccs = AcceptanceRequest::whereBetween('approved_at', [$todayStart, $todayEnd])
+        $recentAccs = AcceptanceRequest::whereBetween('approved_at', [$shiftStart, $shiftEnd])
             ->where('status', 'APPROVED')
             ->where('is_preauth', false)
             ->with('agent:id,name')
@@ -156,11 +162,11 @@ class LiveBoardController
         $events = $events->sortByDesc('time')->take(15)->values();
 
         // ── Summary totals ────────────────────────────────────────────────────
-        $totalTxns   = Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
+        $totalTxns   = Transaction::whereBetween('created_at', [$shiftStart, $shiftEnd])
             ->where('status', Transaction::STATUS_APPROVED)->count();
-        $totalAccs   = AcceptanceRequest::whereBetween('approved_at', [$todayStart, $todayEnd])
+        $totalAccs   = AcceptanceRequest::whereBetween('approved_at', [$shiftStart, $shiftEnd])
             ->where('status', 'APPROVED')->where('is_preauth', false)->count();
-        $totalProfit = (int) round((float) Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
+        $totalProfit = (int) round((float) Transaction::whereBetween('created_at', [$shiftStart, $shiftEnd])
             ->where('status', Transaction::STATUS_APPROVED)->sum('profit_mco'));
 
         $payload = [

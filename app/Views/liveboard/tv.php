@@ -12,10 +12,10 @@ if (empty($_SESSION['csrf_token'])) {
   <title>Base Fare — Live Scoreboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     * { font-family: 'Inter', sans-serif; box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; height: 100%; background: #0a0f1e; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #f8fafc; }
 
     /* ── Announcement banner ── */
     #ann-banner {
@@ -26,8 +26,8 @@ if (empty($_SESSION['csrf_token'])) {
 
     /* ── New-item flash ── */
     @keyframes flash-in {
-      0%   { background: rgba(99,102,241,.35); transform: scale(1.015); }
-      100% { background: rgba(30,41,59,.4);   transform: scale(1); }
+      0%   { background: rgba(59,130,246,.15); transform: scale(1.015); }
+      100% { background: #ffffff;   transform: scale(1); }
     }
     .flash { animation: flash-in 2.5s ease-out forwards; }
 
@@ -39,18 +39,18 @@ if (empty($_SESSION['csrf_token'])) {
     #lb-wrap::-webkit-scrollbar { display: none; }
   </style>
 </head>
-<body class="no-scroll text-white">
+<body class="no-scroll text-slate-900">
 
 <?php if (!$pinVerified): ?>
 <!-- ═══════════════════════ PIN SCREEN ═══════════════════════ -->
-<div class="min-h-screen flex items-center justify-center" style="background:#0a0f1e;">
-  <div style="background:#111827; border:1px solid #1f2937; border-radius:24px; padding:48px 40px; width:360px; text-align:center; box-shadow:0 25px 60px rgba(0,0,0,.5);">
-    <div style="width:64px;height:64px;background:#1f2937;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 24px;">🔒</div>
-    <h1 style="font-size:22px;font-weight:800;margin:0 0 8px;">Live Scoreboard</h1>
-    <p style="color:#6b7280;font-size:14px;margin:0 0 28px;">Enter the TV PIN to unlock.</p>
+<div class="min-h-screen flex items-center justify-center" style="background:#f1f5f9;">
+  <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:24px; padding:48px 40px; width:360px; text-align:center; box-shadow:0 15px 35px rgba(0,0,0,.05);">
+    <div style="width:64px;height:64px;background:#f1f5f9;border:radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 24px;">🔒</div>
+    <h1 style="font-size:22px;font-weight:800;color:#0f172a;margin:0 0 8px;">Live Scoreboard</h1>
+    <p style="color:#64748b;font-size:14px;margin:0 0 28px;">Enter the TV PIN to unlock.</p>
 
     <?php if (!empty($pinError)): ?>
-      <div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:12px;padding:10px 14px;color:#f87171;font-size:13px;margin-bottom:20px;">
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:10px 14px;color:#ef4444;font-size:13px;margin-bottom:20px;">
         <?= htmlspecialchars($pinError) ?>
       </div>
     <?php endif; ?>
@@ -58,9 +58,9 @@ if (empty($_SESSION['csrf_token'])) {
     <form action="/liveboard/score/auth" method="POST">
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
       <input type="password" name="pin" autofocus placeholder="••••"
-             style="width:100%;background:#0a0f1e;border:1px solid #374151;border-radius:12px;padding:14px;text-align:center;font-size:28px;letter-spacing:.4em;color:white;outline:none;margin-bottom:16px;display:block;">
+             style="width:100%;background:#f8fafc;border:1px solid #cbd5e1;border-radius:12px;padding:14px;text-align:center;font-size:28px;letter-spacing:.4em;color:#0f172a;outline:none;margin-bottom:16px;display:block;">
       <button type="submit"
-              style="width:100%;background:#4f46e5;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;color:white;cursor:pointer;">
+              style="width:100%;background:#2563eb;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;color:white;cursor:pointer;box-shadow:0 4px 6px rgba(37,99,235,.2);">
         Unlock Dashboard
       </button>
     </form>
@@ -72,34 +72,34 @@ if (empty($_SESSION['csrf_token'])) {
 <div style="display:flex;flex-direction:column;height:100vh;">
 
   <!-- TOP BAR -->
-  <header style="background:rgba(17,24,39,.8);backdrop-filter:blur(12px);border-bottom:1px solid #1f2937;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+  <header style="background:#ffffff;border-bottom:1px solid #e2e8f0;padding:16px 32px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.05);">
     <!-- Brand -->
     <div style="display:flex;align-items:center;gap:14px;">
-      <div style="width:46px;height:46px;background:#4f46e5;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:17px;box-shadow:0 0 18px rgba(79,70,229,.5);">BF</div>
+      <div style="width:46px;height:46px;background:#2563eb;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:17px;box-shadow:0 4px 10px rgba(37,99,235,.3);">BF</div>
       <div>
-        <div style="font-weight:900;font-size:20px;letter-spacing:-.02em;">Base Fare</div>
-        <div style="color:#818cf8;font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;">Live Sales Board</div>
+        <div style="font-weight:900;font-size:20px;letter-spacing:-.02em;color:#0f172a;">Base Fare</div>
+        <div style="color:#64748b;font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;">Live Sales Board</div>
       </div>
     </div>
 
     <!-- Stats -->
     <div style="display:flex;align-items:center;gap:36px;">
       <div style="text-align:center;">
-        <div style="color:#6b7280;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">Today's Profit</div>
-        <div id="stat-profit" style="font-size:28px;font-weight:900;color:#34d399;text-shadow:0 0 12px rgba(52,211,153,.4);">USD 0</div>
+        <div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">Today's Profit</div>
+        <div id="stat-profit" style="font-size:28px;font-weight:900;color:#10b981;">USD 0</div>
       </div>
       <div style="text-align:center;">
-        <div style="color:#6b7280;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">Transactions</div>
-        <div id="stat-txns" style="font-size:28px;font-weight:900;color:#fff;">0</div>
+        <div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">Transactions</div>
+        <div id="stat-txns" style="font-size:28px;font-weight:900;color:#0f172a;">0</div>
       </div>
       <div style="text-align:center;">
-        <div style="color:#6b7280;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">Authorizations</div>
-        <div id="stat-accs" style="font-size:28px;font-weight:900;color:#a78bfa;">0</div>
+        <div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">Authorizations</div>
+        <div id="stat-accs" style="font-size:28px;font-weight:900;color:#8b5cf6;">0</div>
       </div>
       <!-- Clock -->
-      <div style="text-align:right;padding-left:28px;border-left:1px solid #1f2937;">
-        <div id="clock-time" style="font-size:30px;font-weight:900;letter-spacing:-.02em;">--:--</div>
-        <div id="clock-date" style="color:#6b7280;font-size:12px;font-weight:600;">---</div>
+      <div style="text-align:right;padding-left:28px;border-left:1px solid #e2e8f0;">
+        <div id="clock-time" style="font-size:30px;font-weight:900;letter-spacing:-.02em;color:#0f172a;">--:--</div>
+        <div id="clock-date" style="color:#64748b;font-size:12px;font-weight:600;">---</div>
       </div>
     </div>
   </header>
@@ -108,32 +108,32 @@ if (empty($_SESSION['csrf_token'])) {
   <main style="flex:1;display:flex;gap:24px;padding:24px;min-height:0;">
 
     <!-- LEADERBOARD -->
-    <section style="flex:1;background:rgba(17,24,39,.6);backdrop-filter:blur(12px);border:1px solid #1f2937;border-radius:20px;padding:24px;display:flex;flex-direction:column;min-height:0;">
+    <section style="flex:1;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;padding:24px;display:flex;flex-direction:column;min-height:0;box-shadow:0 4px 6px rgba(0,0,0,.02);">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-shrink:0;">
-        <h2 style="margin:0;font-size:18px;font-weight:800;display:flex;align-items:center;gap:8px;">
+        <h2 style="margin:0;font-size:18px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:8px;">
           <span style="font-size:22px;">🏆</span> Today's Leaderboard
         </h2>
-        <div style="background:#111827;border:1px solid #374151;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#d1d5db;display:flex;align-items:center;gap:6px;">
+        <div style="background:#f1f5f9;border:1px solid #cbd5e1;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#475569;display:flex;align-items:center;gap:6px;">
           <span style="width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;animation:pulse 1.5s infinite;"></span> Live
         </div>
       </div>
       <div id="lb-wrap" style="flex:1;overflow-y:auto;">
         <div id="lb-container" style="display:flex;flex-direction:column;gap:12px;">
-          <div style="color:#4b5563;text-align:center;padding:40px 0;font-size:14px;">Waiting for today's first sale...</div>
+          <div style="color:#64748b;text-align:center;padding:40px 0;font-size:14px;">Waiting for today's first sale...</div>
         </div>
       </div>
     </section>
 
     <!-- FEED -->
-    <section style="width:420px;background:rgba(17,24,39,.6);backdrop-filter:blur(12px);border:1px solid #1f2937;border-radius:20px;padding:24px;display:flex;flex-direction:column;min-height:0;">
-      <h2 style="margin:0 0 20px;font-size:18px;font-weight:800;display:flex;align-items:center;gap:8px;flex-shrink:0;">
+    <section style="width:420px;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;padding:24px;display:flex;flex-direction:column;min-height:0;box-shadow:0 4px 6px rgba(0,0,0,.02);">
+      <h2 style="margin:0 0 20px;font-size:18px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:8px;flex-shrink:0;">
         <span style="font-size:22px;">⚡</span> Live Feed
       </h2>
       <div style="flex:1;position:relative;overflow:hidden;">
-        <div style="position:absolute;bottom:0;left:0;right:0;height:80px;background:linear-gradient(to top,#0a0f1e,transparent);z-index:5;pointer-events:none;"></div>
+        <div style="position:absolute;bottom:0;left:0;right:0;height:80px;background:linear-gradient(to top,#ffffff,transparent);z-index:5;pointer-events:none;"></div>
         <div id="feed-wrap" style="height:100%;overflow-y:auto;">
           <div id="feed-container" style="display:flex;flex-direction:column;gap:12px;">
-            <div style="color:#4b5563;text-align:center;padding:40px 0;font-size:14px;">No events yet today.</div>
+            <div style="color:#64748b;text-align:center;padding:40px 0;font-size:14px;">No events yet today.</div>
           </div>
         </div>
       </div>
@@ -143,26 +143,26 @@ if (empty($_SESSION['csrf_token'])) {
 </div>
 
 <!-- ANNOUNCEMENT BANNER -->
-<div id="ann-banner" style="position:fixed;bottom:0;left:0;right:0;background:rgba(67,56,202,.92);backdrop-filter:blur(16px);border-top:1px solid rgba(165,180,252,.25);padding:24px 40px;z-index:100;display:flex;align-items:center;gap:28px;box-shadow:0 -8px 40px rgba(79,70,229,.35);">
+<div id="ann-banner" style="position:fixed;bottom:0;left:0;right:0;background:rgba(37,99,235,.95);backdrop-filter:blur(16px);border-top:1px solid rgba(96,165,250,.3);padding:24px 40px;z-index:100;display:flex;align-items:center;gap:28px;box-shadow:0 -8px 40px rgba(37,99,235,.25);">
   <div id="ann-emoji" style="width:72px;height:72px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;flex-shrink:0;">🎉</div>
   <div>
-    <div id="ann-type" style="color:#c7d2fe;font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;margin-bottom:6px;">NEW SALE!</div>
-    <div id="ann-msg" style="font-size:38px;font-weight:900;line-height:1.1;"></div>
+    <div id="ann-type" style="color:#bfdbfe;font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;margin-bottom:6px;">NEW SALE!</div>
+    <div id="ann-msg" style="color:#ffffff;font-size:38px;font-weight:900;line-height:1.1;"></div>
   </div>
 </div>
 
 <!-- AUDIO UNLOCK OVERLAY -->
-<div id="audio-unlock" style="position:fixed;inset:0;background:rgba(10,15,30,.88);backdrop-filter:blur(6px);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;">
-  <div style="width:90px;height:90px;background:#4f46e5;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:24px;animation:pulse-grow 1.8s ease-in-out infinite;">
+<div id="audio-unlock" style="position:fixed;inset:0;background:rgba(248,250,252,.95);backdrop-filter:blur(6px);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;">
+  <div style="width:90px;height:90px;background:#2563eb;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:24px;animation:pulse-grow 1.8s ease-in-out infinite;">
     <svg width="38" height="38" fill="white" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clip-rule="evenodd"></path></svg>
   </div>
-  <h2 style="font-size:28px;font-weight:900;margin:0 0 10px;">Click anywhere to start</h2>
-  <p style="color:#6b7280;font-size:16px;margin:0;">Browser requires one click to enable voice announcements.</p>
+  <h2 style="color:#0f172a;font-size:28px;font-weight:900;margin:0 0 10px;">Click anywhere to start</h2>
+  <p style="color:#64748b;font-size:16px;margin:0;">Browser requires one click to enable voice announcements.</p>
 </div>
 
 <style>
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-@keyframes pulse-grow { 0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(79,70,229,.5)} 50%{transform:scale(1.05);box-shadow:0 0 0 14px rgba(79,70,229,0)} }
+@keyframes pulse-grow { 0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(37,99,235,.3)} 50%{transform:scale(1.05);box-shadow:0 0 0 14px rgba(37,99,235,0)} }
 </style>
 
 <script>
@@ -219,30 +219,30 @@ let lastEventId = null, firstLoad = true;
 
 const MEDALS = ['🥇','🥈','🥉'];
 const RANK_COLORS = [
-  'background:#d97706;color:#fff;',
-  'background:#6b7280;color:#fff;',
-  'background:#92400e;color:#fff;',
+  'background:#fef3c7;color:#d97706;border:1px solid #fde68a;',
+  'background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;',
+  'background:#ffedd5;color:#9a3412;border:1px solid #fed7aa;',
 ];
 
 function renderLeaderboard(lb) {
   const el = document.getElementById('lb-container');
   if (!lb.length) {
-    el.innerHTML = '<div style="color:#4b5563;text-align:center;padding:40px 0;font-size:14px;">Waiting for today\'s first sale...</div>';
+    el.innerHTML = '<div style="color:#64748b;text-align:center;padding:40px 0;font-size:14px;">Waiting for today\'s first sale...</div>';
     return;
   }
   el.innerHTML = lb.map((a, i) => {
-    const rankStyle = RANK_COLORS[i] || 'background:#1f2937;color:#6b7280;';
+    const rankStyle = RANK_COLORS[i] || 'background:#f8fafc;color:#64748b;border:1px solid #f1f5f9;';
     const isFirst = i === 0;
     return `
-      <div style="background:rgba(30,41,59,${isFirst?'.8':'.4'});border:1px solid ${isFirst?'rgba(217,119,6,.4)':'#1f2937'};border-radius:16px;padding:16px 20px;display:flex;align-items:center;gap:16px;${isFirst?'box-shadow:0 0 20px rgba(217,119,6,.15);':''}">
+      <div style="background:#ffffff;border:1px solid ${isFirst?'#f59e0b':'#e2e8f0'};border-radius:16px;padding:16px 20px;display:flex;align-items:center;gap:16px;${isFirst?'box-shadow:0 4px 15px rgba(245,158,11,.15);':''}">
         <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;flex-shrink:0;${rankStyle}">${i < 3 ? MEDALS[i] : i+1}</div>
         <div style="flex:1;min-width:0;">
-          <div style="font-weight:800;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.display}</div>
-          <div style="color:#6b7280;font-size:12px;margin-top:2px;">${a.txn_count} txn${a.txn_count!==1?'s':''}${a.acc_count>0?' · '+a.acc_count+' auth'+( a.acc_count!==1?'s':''):''}</div>
+          <div style="font-weight:800;font-size:18px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.display}</div>
+          <div style="color:#64748b;font-size:12px;margin-top:2px;">${a.txn_count} txn${a.txn_count!==1?'s':''}${a.acc_count>0?' · '+a.acc_count+' auth'+( a.acc_count!==1?'s':''):''}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
-          <div style="font-weight:900;font-size:22px;color:#34d399;">${a.profit > 0 ? '+'+a.profit.toLocaleString() : '0'}</div>
-          <div style="color:#6b7280;font-size:11px;">USD</div>
+          <div style="font-weight:900;font-size:22px;color:#10b981;">${a.profit > 0 ? '+'+a.profit.toLocaleString() : '0'}</div>
+          <div style="color:#64748b;font-size:11px;">USD</div>
         </div>
       </div>
     `;
@@ -252,23 +252,23 @@ function renderLeaderboard(lb) {
 function renderFeed(events) {
   const el = document.getElementById('feed-container');
   if (!events.length) {
-    el.innerHTML = '<div style="color:#4b5563;text-align:center;padding:40px 0;font-size:14px;">No events yet today.</div>';
+    el.innerHTML = '<div style="color:#64748b;text-align:center;padding:40px 0;font-size:14px;">No events yet today.</div>';
     return;
   }
   el.innerHTML = events.map((ev, idx) => {
     const isTxn   = ev.kind === 'transaction';
-    const accent  = isTxn ? '#3b82f6' : '#8b5cf6';
+    const accent  = isTxn ? '#2563eb' : '#8b5cf6';
     const badge   = isTxn ? 'Recorded' : 'Approved';
     const timeStr = ev.time ? new Date(ev.time).toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'}) : '';
     return `
-      <div class="${idx===0&&!firstLoad?'flash':''}" style="background:rgba(30,41,59,.4);border:1px solid #1f2937;border-left:3px solid ${accent};border-radius:14px;padding:14px 16px;">
+      <div class="${idx===0&&!firstLoad?'flash':''}" style="background:#ffffff;border:1px solid #e2e8f0;border-left:4px solid ${accent};border-radius:14px;padding:14px 16px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-          <span style="font-weight:700;font-size:14px;">${ev.agent_name}</span>
-          <span style="color:#4b5563;font-size:12px;">${timeStr}</span>
+          <span style="font-weight:700;font-size:14px;color:#0f172a;">${ev.agent_name}</span>
+          <span style="color:#64748b;font-size:12px;">${timeStr}</span>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <span style="color:${accent};font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">${badge}: ${ev.label}</span>
-          ${ev.profit !== null ? `<span style="color:#34d399;font-weight:900;font-size:14px;">+${ev.profit.toLocaleString()}</span>` : ''}
+          ${ev.profit !== null ? `<span style="color:#10b981;font-weight:900;font-size:14px;">+${ev.profit.toLocaleString()}</span>` : ''}
         </div>
       </div>
     `;
