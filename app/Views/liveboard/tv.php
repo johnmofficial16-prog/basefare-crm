@@ -184,7 +184,9 @@ document.getElementById('audio-unlock').addEventListener('click', function () {
   const synth = window.speechSynthesis;
   const pick = () => {
     const v = synth.getVoices();
-    selectedVoice = v.find(x => x.lang.startsWith('en') && /samantha|zira|female|google uk english female/i.test(x.name))
+    selectedVoice = v.find(x => x.name.includes('Natural') && x.lang.startsWith('en'))
+                 || v.find(x => (x.name.includes('Aria') || x.name.includes('Jenny') || x.name.includes('Samantha')) && x.lang.startsWith('en'))
+                 || v.find(x => /zira|female|google uk english female/i.test(x.name) && x.lang.startsWith('en'))
                  || v.find(x => x.lang.startsWith('en'))
                  || v[0];
   };
@@ -206,7 +208,7 @@ function announce(msg, typeLabel, emoji) {
     synth.cancel();
     const u = new SpeechSynthesisUtterance(msg);
     if (selectedVoice) u.voice = selectedVoice;
-    u.rate = 0.93; u.pitch = 1.05;
+    u.rate = 1.05; u.pitch = 1.25;
     u.onend = () => setTimeout(() => banner.classList.remove('show'), 2500);
     synth.speak(u);
   } else {
