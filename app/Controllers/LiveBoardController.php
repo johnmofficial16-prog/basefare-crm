@@ -103,7 +103,7 @@ class LiveBoardController
         $accRows = AcceptanceRequest::whereBetween('approved_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', 'APPROVED')
             ->where('is_preauth', false)
-            ->selectRaw('agent_id, COUNT(*) as acc_count')
+            ->selectRaw('agent_id, COUNT(*) as acc_count, SUM(total_amount) as acc_profit')
             ->groupBy('agent_id')
             ->with('agent:id,name')
             ->get()
@@ -122,12 +122,15 @@ class LiveBoardController
             $parts   = explode(' ', trim($agentName));
             $display = $parts[0] . (isset($parts[1]) ? ' ' . strtoupper($parts[1][0]) . '.' : '');
             
+            $tProfit = (float) ($tRow->profit ?? 0);
+            $aProfit = (float) ($aRow->acc_profit ?? 0);
+            
             return [
                 'full_name' => $agentName,
                 'display'   => $display,
                 'txn_count' => (int) ($tRow->txn_count ?? 0),
                 'acc_count' => (int) ($aRow->acc_count ?? 0),
-                'profit'    => (int) round((float) ($tRow->profit ?? 0)),
+                'profit'    => (int) round($tProfit + $aProfit),
                 'currency'  => $tRow->currency ?? ($aRow->currency ?? 'USD'),
             ];
         })->sortByDesc('profit')->values();
@@ -182,8 +185,13 @@ class LiveBoardController
             ->where('status', Transaction::STATUS_APPROVED)->count();
         $totalAccs   = AcceptanceRequest::whereBetween('approved_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', 'APPROVED')->where('is_preauth', false)->count();
-        $totalProfit = (int) round((float) Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
-            ->where('status', Transaction::STATUS_APPROVED)->sum('profit_mco'));
+            
+        $sumTxnProfit = (float) Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
+            ->where('status', Transaction::STATUS_APPROVED)->sum('profit_mco');
+        $sumAccProfit = (float) AcceptanceRequest::whereBetween('approved_at', [$shiftStartDb, $shiftEndDb])
+            ->where('status', 'APPROVED')->where('is_preauth', false)->sum('total_amount');
+            
+        $totalProfit = (int) round($sumTxnProfit + $sumAccProfit);
 
         $payload = [
             'leaderboard'   => $leaderboard,
