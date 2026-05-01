@@ -25,6 +25,7 @@ if (!$pinVerified):
     <?php endif; ?>
 
     <form action="/liveboard/score/auth" method="POST">
+      <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
       <input type="password" name="pin" autofocus placeholder="• • • •" 
              class="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-center text-2xl tracking-[0.5em] text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 mb-6">
       <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors">
