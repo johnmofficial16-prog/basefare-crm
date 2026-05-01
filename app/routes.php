@@ -31,6 +31,31 @@ $app->get('/liveboard/score', [\App\Controllers\LiveBoardController::class, 'pag
 $app->post('/liveboard/score/auth', [\App\Controllers\LiveBoardController::class, 'auth']);
 $app->get('/api/liveboard/feed', [\App\Controllers\LiveBoardController::class, 'feed']);
 
+$app->get('/api/test-shift', function($request, $response) {
+    $now = \Carbon\Carbon::now();
+    if ($now->hour >= 18) {
+        $shiftStart = $now->copy()->startOfDay()->addHours(18); // Today 6 PM
+        $shiftEnd   = $now->copy()->addDay()->startOfDay()->addHours(18)->subSecond(); // Tomorrow 5:59:59 PM
+    } else {
+        $shiftStart = $now->copy()->subDay()->startOfDay()->addHours(18); // Yesterday 6 PM
+        $shiftEnd   = $now->copy()->startOfDay()->addHours(18)->subSecond(); // Today 5:59:59 PM
+    }
+    
+    $txns = \App\Models\Transaction::whereBetween('created_at', [$shiftStart, $shiftEnd])->get();
+    $allTxns = \App\Models\Transaction::orderByDesc('created_at')->limit(10)->get();
+    
+    $payload = [
+        'server_time' => $now->toDateTimeString(),
+        'shift_start' => $shiftStart->toDateTimeString(),
+        'shift_end' => $shiftEnd->toDateTimeString(),
+        'txns_in_current_shift' => count($txns),
+        'last_10_txns_in_database' => $allTxns->map(function($t) { return ['id' => $t->id, 'created_at' => $t->created_at->toDateTimeString(), 'status' => $t->status]; })
+    ];
+    
+    $response->getBody()->write(json_encode($payload, JSON_PRETTY_PRINT));
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
 // ==========================================================================
 // Attendance routes — require auth but OUTSIDE the AttendanceGate
 // ==========================================================================
