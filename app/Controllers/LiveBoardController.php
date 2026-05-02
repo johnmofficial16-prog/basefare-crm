@@ -100,10 +100,11 @@ class LiveBoardController
             ->keyBy('agent_id');
 
         // Approved acceptances today per agent
+        // Approved acceptances today per agent (just for count)
         $accRows = AcceptanceRequest::whereBetween('approved_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', 'APPROVED')
             ->where('is_preauth', false)
-            ->selectRaw('agent_id, COUNT(*) as acc_count, SUM(total_amount) as acc_profit')
+            ->selectRaw('agent_id, COUNT(*) as acc_count')
             ->groupBy('agent_id')
             ->with('agent:id,name')
             ->get()
@@ -122,34 +123,23 @@ class LiveBoardController
             $parts   = explode(' ', trim($agentName));
             $display = $parts[0] . (isset($parts[1]) ? ' ' . strtoupper($parts[1][0]) . '.' : '');
             
-            $tProfit = (float) ($tRow->profit ?? 0);
-            $aProfit = (float) ($aRow->acc_profit ?? 0);
-            
             return [
                 'full_name' => $agentName,
                 'display'   => $display,
                 'txn_count' => (int) ($tRow->txn_count ?? 0),
                 'acc_count' => (int) ($aRow->acc_count ?? 0),
-                'profit'    => (int) round($tProfit + $aProfit),
-                'currency'  => $tRow->currency ?? ($aRow->currency ?? 'USD'),
+                'profit'    => (int) round((float) ($tRow->profit ?? 0)),
+                'currency'  => $tRow->currency ?? 'USD',
             ];
         })->sortByDesc('profit')->values();
 
-        // ── Recent events feed ────────────────────────────────────────────────
+        // ── Recent events feed (Transactions only) ────────────────────────────
         $recentTxns = Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', Transaction::STATUS_APPROVED)
             ->with('agent:id,name')
             ->orderByDesc('updated_at')
-            ->limit(12)
+            ->limit(15)
             ->get(['id', 'agent_id', 'type', 'profit_mco', 'currency', 'updated_at']);
-
-        $recentAccs = AcceptanceRequest::whereBetween('approved_at', [$shiftStartDb, $shiftEndDb])
-            ->where('status', 'APPROVED')
-            ->where('is_preauth', false)
-            ->with('agent:id,name')
-            ->orderByDesc('approved_at')
-            ->limit(12)
-            ->get(['id', 'agent_id', 'type', 'total_amount', 'currency', 'approved_at']);
 
         $events = collect();
 
@@ -166,32 +156,14 @@ class LiveBoardController
             ]);
         }
 
-        foreach ($recentAccs as $a) {
-            $events->push([
-                'id'         => 'acc_' . $a->id,
-                'agent_name' => $a->agent->name ?? 'Agent',
-                'kind'       => 'acceptance',
-                'label'      => $this->typeLabel($a->type),
-                'profit'     => (int) round((float) $a->total_amount),
-                'currency'   => $a->currency ?? 'USD',
-                'time'       => $a->approved_at ? Carbon::parse($a->approved_at, 'UTC')->setTimezone('Asia/Kolkata')->toIso8601String() : null,
-            ]);
-        }
-
-        $events = $events->sortByDesc('time')->take(15)->values();
-
         // ── Summary totals ────────────────────────────────────────────────────
         $totalTxns   = Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', Transaction::STATUS_APPROVED)->count();
         $totalAccs   = AcceptanceRequest::whereBetween('approved_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', 'APPROVED')->where('is_preauth', false)->count();
             
-        $sumTxnProfit = (float) Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
-            ->where('status', Transaction::STATUS_APPROVED)->sum('profit_mco');
-        $sumAccProfit = (float) AcceptanceRequest::whereBetween('approved_at', [$shiftStartDb, $shiftEndDb])
-            ->where('status', 'APPROVED')->where('is_preauth', false)->sum('total_amount');
-            
-        $totalProfit = (int) round($sumTxnProfit + $sumAccProfit);
+        $totalProfit = (int) round((float) Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
+            ->where('status', Transaction::STATUS_APPROVED)->sum('profit_mco'));
 
         $payload = [
             'leaderboard'   => $leaderboard,
