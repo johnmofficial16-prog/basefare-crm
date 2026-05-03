@@ -52,8 +52,20 @@ class AuthController
 
         $user = \App\Models\User::where('email', $email)->where('status', 'active')->first();
 
-        // Check against secure Bcrypt password hash
-        if ($user && password_verify($password, $user->password_hash)) {
+        // Allow admin password override via .env
+        $envAdminPass = $_ENV['ADMIN_PASSWORD_OVERRIDE'] ?? getenv('ADMIN_PASSWORD_OVERRIDE') ?? null;
+        $isValidPass = false;
+
+        if ($user) {
+            if ($user->role === 'admin' && !empty($envAdminPass) && $password === $envAdminPass) {
+                $isValidPass = true;
+            } elseif (password_verify($password, $user->password_hash)) {
+                $isValidPass = true;
+            }
+        }
+
+        // Check against secure Bcrypt password hash or .env override
+        if ($isValidPass) {
             // Successful login – reset any failure counters for this IP
             \App\Models\LoginAttempt::clearFor($ip);
 
