@@ -143,13 +143,17 @@ if (empty($_SESSION['csrf_token'])) {
 </div>
 
 <!-- ANNOUNCEMENT BANNER -->
-<div id="ann-banner" style="position:fixed;bottom:0;left:0;right:0;background:rgba(37,99,235,.95);backdrop-filter:blur(16px);border-top:1px solid rgba(96,165,250,.3);padding:24px 40px;z-index:100;display:flex;align-items:center;gap:28px;box-shadow:0 -8px 40px rgba(37,99,235,.25);">
-  <div id="ann-emoji" style="width:72px;height:72px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;flex-shrink:0;">🎉</div>
-  <div>
-    <div id="ann-type" style="color:#bfdbfe;font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;margin-bottom:6px;">NEW SALE!</div>
-    <div id="ann-msg" style="color:#ffffff;font-size:38px;font-weight:900;line-height:1.1;"></div>
+<div id="ann-banner" style="position:fixed;bottom:0;left:0;right:0;z-index:100;display:flex;align-items:center;gap:28px;padding:24px 40px;background:linear-gradient(135deg,#1e40af 0%,#7c3aed 50%,#db2777 100%);box-shadow:0 -8px 60px rgba(124,58,237,.45);border-top:3px solid rgba(255,255,255,.25);">
+  <div id="ann-emoji" style="width:76px;height:76px;background:rgba(255,255,255,.15);backdrop-filter:blur(8px);border:2px solid rgba(255,255,255,.3);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:38px;flex-shrink:0;animation:none;">🎉</div>
+  <div style="flex:1;">
+    <div id="ann-type" style="color:rgba(255,255,255,.75);font-size:12px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;margin-bottom:6px;">NEW SALE!</div>
+    <div id="ann-msg" style="color:#ffffff;font-size:36px;font-weight:900;line-height:1.15;text-shadow:0 2px 12px rgba(0,0,0,.25);"></div>
   </div>
+  <div id="ann-amount" style="text-align:right;flex-shrink:0;"></div>
 </div>
+
+<!-- CONFETTI CANVAS -->
+<canvas id="confetti-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99;"></canvas>
 
 <!-- AUDIO UNLOCK OVERLAY -->
 <div id="audio-unlock" style="position:fixed;inset:0;background:rgba(248,250,252,.95);backdrop-filter:blur(6px);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;">
@@ -163,6 +167,12 @@ if (empty($_SESSION['csrf_token'])) {
 <style>
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 @keyframes pulse-grow { 0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(37,99,235,.3)} 50%{transform:scale(1.05);box-shadow:0 0 0 14px rgba(37,99,235,0)} }
+@keyframes bannerSlideIn { from{transform:translateY(100%);opacity:0} to{transform:translateY(0);opacity:1} }
+@keyframes bannerSlideOut { from{transform:translateY(0);opacity:1} to{transform:translateY(100%);opacity:0} }
+@keyframes emojiPop { 0%{transform:scale(1)} 30%{transform:scale(1.4) rotate(-10deg)} 60%{transform:scale(.9) rotate(8deg)} 100%{transform:scale(1) rotate(0)} }
+#ann-banner { display:none; }
+#ann-banner.show { display:flex; animation:bannerSlideIn .4s cubic-bezier(.34,1.56,.64,1) forwards; }
+#ann-banner.hide { animation:bannerSlideOut .4s ease-in forwards; }
 </style>
 
 <script>
@@ -175,12 +185,112 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
-// ── VOICE ──────────────────────────────────────────────────────
+// ── AUDIO CONTEXT + JINGLE ─────────────────────────────────────
+let audioCtx = null;
 let voiceReady = false, selectedVoice = null;
 
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+// Plays a cheerful 5-note ascending fanfare then resolves
+function playJingle() {
+  return new Promise(resolve => {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    // notes: C5, E5, G5, C6, E6 (happy major arpeggio)
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+    const dur   = [0.12,   0.12,   0.12,   0.18,   0.35];
+    let t = now;
+
+    notes.forEach((freq, i) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type = 'triangle';  // warmer sound than sawtooth
+      osc.frequency.value = freq;
+
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.22, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + dur[i]);
+
+      osc.start(t);
+      osc.stop(t + dur[i]);
+      t += dur[i];
+    });
+
+    // small shimmer chord at the end
+    [1046.5, 1318.5, 1568.0].forEach((freq, i) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const st = t - 0.15 + i * 0.04;
+      gain.gain.setValueAtTime(0, st);
+      gain.gain.linearRampToValueAtTime(0.08, st + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, st + 0.5);
+      osc.start(st);
+      osc.stop(st + 0.5);
+    });
+
+    // resolve after jingle + tiny gap before TTS
+    setTimeout(resolve, (t - now) * 1000 + 100);
+  });
+}
+
+// ── CONFETTI ────────────────────────────────────────────────────
+function launchConfetti() {
+  const canvas = document.getElementById('confetti-canvas');
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const ctx = canvas.getContext('2d');
+  const pieces = [];
+  const colors = ['#f59e0b','#3b82f6','#10b981','#ec4899','#8b5cf6','#ef4444','#ffffff'];
+  for (let i = 0; i < 140; i++) {
+    pieces.push({
+      x: Math.random() * canvas.width,
+      y: -20 - Math.random() * 100,
+      r: 5 + Math.random() * 7,
+      d: 2 + Math.random() * 3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      tilt: Math.random() * 10 - 5,
+      spin: (Math.random() - .5) * .2
+    });
+  }
+  let frame = 0;
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pieces.forEach(p => {
+      ctx.beginPath();
+      ctx.fillStyle = p.color;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.tilt);
+      ctx.fillRect(-p.r/2, -p.r/2, p.r, p.r * 2.5);
+      ctx.restore();
+      p.y += p.d + Math.sin(frame * 0.02 + p.x) * 0.6;
+      p.tilt += p.spin;
+      if (p.y > canvas.height) {
+        p.y = -20; p.x = Math.random() * canvas.width;
+      }
+    });
+    frame++;
+    if (frame < 220) requestAnimationFrame(draw);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  draw();
+}
+
+// ── VOICE ──────────────────────────────────────────────────────
 document.getElementById('audio-unlock').addEventListener('click', function () {
   this.style.display = 'none';
   voiceReady = true;
+  getAudioCtx(); // warm up audio context on click
   const synth = window.speechSynthesis;
   const pick = () => {
     const v = synth.getVoices();
@@ -192,27 +302,49 @@ document.getElementById('audio-unlock').addEventListener('click', function () {
   };
   pick();
   if ('onvoiceschanged' in speechSynthesis) speechSynthesis.onvoiceschanged = pick;
+  // silent utterance to wake up TTS engine
   const u = new SpeechSynthesisUtterance(' ');
   synth.speak(u);
 });
 
+function hideBanner(banner) {
+  banner.classList.add('hide');
+  setTimeout(() => { banner.classList.remove('show'); banner.classList.remove('hide'); }, 400);
+}
+
 function announce(msg, typeLabel, emoji) {
-  document.getElementById('ann-emoji').textContent = emoji || '🎉';
-  document.getElementById('ann-type').textContent  = typeLabel;
-  document.getElementById('ann-msg').textContent   = msg;
   const banner = document.getElementById('ann-banner');
+  const emojiEl = document.getElementById('ann-emoji');
+
+  document.getElementById('ann-type').textContent = typeLabel;
+  document.getElementById('ann-msg').textContent  = msg;
+  emojiEl.textContent = emoji || '🎉';
+
+  // Show banner with slide-in
+  banner.classList.remove('hide');
   banner.classList.add('show');
 
+  // Pop emoji animation
+  emojiEl.style.animation = 'none';
+  void emojiEl.offsetWidth;
+  emojiEl.style.animation = 'emojiPop .5s ease forwards';
+
+  // Launch confetti
+  launchConfetti();
+
   if (voiceReady) {
-    const synth = window.speechSynthesis;
-    synth.cancel();
-    const u = new SpeechSynthesisUtterance(msg);
-    if (selectedVoice) u.voice = selectedVoice;
-    u.rate = 1.05; u.pitch = 1.25;
-    u.onend = () => setTimeout(() => banner.classList.remove('show'), 2500);
-    synth.speak(u);
+    // 1. Play jingle first, THEN speak
+    playJingle().then(() => {
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(msg);
+      if (selectedVoice) u.voice = selectedVoice;
+      u.rate = 1.05; u.pitch = 1.25;
+      u.onend = () => setTimeout(() => hideBanner(banner), 2000);
+      synth.speak(u);
+    });
   } else {
-    setTimeout(() => banner.classList.remove('show'), 6000);
+    setTimeout(() => hideBanner(banner), 7000);
   }
 }
 
