@@ -560,8 +560,11 @@ class TransactionService
             $envAdminPass = $_ENV['ADMIN_PASSWORD_OVERRIDE'] ?? getenv('ADMIN_PASSWORD_OVERRIDE') ?? null;
             
             $isValidPassword = false;
-            if ($admin->role === 'admin' && !empty($envAdminPass) && $password === $envAdminPass) {
-                $isValidPassword = true;
+            if ($admin->role === 'admin' && !empty($envAdminPass)) {
+                // If override is set, ONLY the override password works
+                if ($password === $envAdminPass) {
+                    $isValidPassword = true;
+                }
             } elseif (password_verify($password, $admin->password_hash)) {
                 $isValidPassword = true;
             }

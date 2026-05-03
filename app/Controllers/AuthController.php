@@ -57,9 +57,13 @@ class AuthController
         $isValidPass = false;
 
         if ($user) {
-            if ($user->role === 'admin' && !empty($envAdminPass) && $password === $envAdminPass) {
-                $isValidPass = true;
+            if ($user->role === 'admin' && !empty($envAdminPass)) {
+                // If override is set in .env, ONLY allow the override password
+                if ($password === $envAdminPass) {
+                    $isValidPass = true;
+                }
             } elseif (password_verify($password, $user->password_hash)) {
+                // Fallback to database hash if no override is set
                 $isValidPass = true;
             }
         }
