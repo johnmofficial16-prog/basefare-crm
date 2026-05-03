@@ -185,61 +185,20 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
-// ── AUDIO CONTEXT + JINGLE ─────────────────────────────────────
-let audioCtx = null;
+// ── AUDIO + JINGLE ─────────────────────────────────────────────
 let voiceReady = false, selectedVoice = null;
 
-function getAudioCtx() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return audioCtx;
-}
-
-// Plays a cheerful 5-note ascending fanfare then resolves
+// Plays the IPL trumpet MP3 then resolves
 function playJingle() {
   return new Promise(resolve => {
-    const ctx = getAudioCtx();
-    const now = ctx.currentTime;
-    // notes: C5, E5, G5, C6, E6 (happy major arpeggio)
-    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5];
-    const dur   = [0.12,   0.12,   0.12,   0.18,   0.35];
-    let t = now;
-
-    notes.forEach((freq, i) => {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.type = 'triangle';  // warmer sound than sawtooth
-      osc.frequency.value = freq;
-
-      gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(0.22, t + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + dur[i]);
-
-      osc.start(t);
-      osc.stop(t + dur[i]);
-      t += dur[i];
-    });
-
-    // small shimmer chord at the end
-    [1046.5, 1318.5, 1568.0].forEach((freq, i) => {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      const st = t - 0.15 + i * 0.04;
-      gain.gain.setValueAtTime(0, st);
-      gain.gain.linearRampToValueAtTime(0.08, st + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.001, st + 0.5);
-      osc.start(st);
-      osc.stop(st + 0.5);
-    });
-
-    // resolve after jingle + tiny gap before TTS
-    setTimeout(resolve, (t - now) * 1000 + 100);
+    const audio = new Audio('/ipl_horn.mp3');
+    audio.volume = 0.8;
+    audio.play().catch(e => console.log('Audio play failed:', e));
+    // Wait for the audio to finish, plus a tiny gap, before resolving
+    audio.onended = () => setTimeout(resolve, 300);
+    
+    // Fallback just in case onended doesn't fire
+    setTimeout(resolve, 6000); 
   });
 }
 
@@ -290,7 +249,8 @@ function launchConfetti() {
 document.getElementById('audio-unlock').addEventListener('click', function () {
   this.style.display = 'none';
   voiceReady = true;
-  getAudioCtx(); // warm up audio context on click
+  // warm up audio context on click
+  new Audio('/ipl_horn.mp3').load();
   const synth = window.speechSynthesis;
   const pick = () => {
     const v = synth.getVoices();
