@@ -10,6 +10,7 @@ use App\Controllers\TransactionController;
 use App\Controllers\UserController;
 use App\Controllers\ETicketController;
 use App\Controllers\AdminController;
+use App\Controllers\MobileAdminController;
 use App\Controllers\PayrollController;
 use App\Controllers\VoucherController;
 use App\Middleware\AuthMiddleware;
@@ -162,6 +163,24 @@ $app->group('/admin', function ($group) {
     $group->post('/error-console/clear', [AdminController::class, 'clearErrorLog']);
 })
 ->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
+
+// ==========================================================================
+// Mobile Admin Quick Panel (admin + manager, NO AttendanceGate — so admin
+// can approve clock-ins without being clocked in themselves)
+// ==========================================================================
+$app->group('/admin/mobile', function ($group) {
+    $group->get('', [MobileAdminController::class, 'page']);
+})
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
+
+$app->group('/api/admin/mobile', function ($group) {
+    $group->get('/data',         [MobileAdminController::class, 'dashboardData']);
+    $group->get('/transactions', [MobileAdminController::class, 'transactionsData']);
+    $group->get('/actions',      [MobileAdminController::class, 'actionsData']);
+})
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
 
