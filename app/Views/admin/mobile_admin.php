@@ -533,11 +533,13 @@ async function saveGw(id) {
 
 // ── UTILS ─────────────────────────────────────────────────────────────────
 async function post(url, data) {
-  data.csrf_token = csrfToken; // Include csrf token in JSON body
   return fetch(url, { 
     method: 'POST', 
     body: JSON.stringify(data), 
-    headers: { 'Content-Type': 'application/json' } 
+    headers: { 
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrfToken
+    } 
   });
 }
 
