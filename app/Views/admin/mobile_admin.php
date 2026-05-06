@@ -38,7 +38,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     <div class="w-8 h-8 rounded bg-primary text-white flex items-center justify-center font-bold text-sm">BF</div>
     <h1 class="font-headline font-bold text-lg text-primary">Admin Panel</h1>
   </div>
-  <a href="/dashboard" class="text-xs font-semibold text-on-surface-variant hover:text-primary">Exit</a>
+  <a href="/logout" class="text-xs font-semibold text-on-surface-variant hover:text-primary">Exit</a>
 </header>
 
 <main class="p-4" id="app-container">
