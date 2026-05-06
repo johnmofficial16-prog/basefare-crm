@@ -22,6 +22,8 @@ class AuthController
         $error = $_SESSION['login_error'] ?? null;
         unset($_SESSION['login_error']);
         
+        $redirect = $request->getQueryParams()['redirect'] ?? '';
+        
         require __DIR__ . '/../Views/login.php';
         $html = ob_get_clean();
 
@@ -37,6 +39,12 @@ class AuthController
         $parsedBody = $request->getParsedBody();
         $email = $parsedBody['email'] ?? '';
         $password = $parsedBody['password'] ?? '';
+        $redirect = $parsedBody['redirect'] ?? '/dashboard';
+        
+        // Ensure redirect is a relative path to prevent open redirect vulnerabilities
+        if (!str_starts_with($redirect, '/')) {
+            $redirect = '/dashboard';
+        }
 
         // -----------------------------------------------------------------
         // Rate limiting – check if this IP is currently locked out
@@ -86,7 +94,7 @@ class AuthController
             $_SESSION['active_session_id'] = session_id(); // Cache it in session to save DB queries
             $_SESSION['last_activity'] = time(); // Initialize inactivity timer
 
-            return $response->withHeader('Location', '/dashboard')->withStatus(302);
+            return $response->withHeader('Location', $redirect)->withStatus(302);
         }
 
         // Failure – record the attempt
