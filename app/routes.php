@@ -250,8 +250,18 @@ $app->get('/auth',           [AcceptanceController::class, 'publicView']);
 $app->post('/auth',          [AcceptanceController::class, 'publicSubmit']);
 $app->get('/auth/confirmed', [AcceptanceController::class, 'publicConfirmed']);
 
-// Redirect root to dashboard
+// Redirect root
 $app->get('/', function ($request, $response) {
+    if (session_status() === PHP_SESSION_NONE) session_start();
+    
+    $userAgent = $request->getHeaderLine('User-Agent');
+    $isMobile = preg_match('/Mobile|Android|iPhone|iPad|iPod/i', $userAgent);
+    $role = $_SESSION['role'] ?? '';
+    
+    if ($isMobile && in_array($role, [\App\Models\User::ROLE_ADMIN, \App\Models\User::ROLE_MANAGER])) {
+        return $response->withHeader('Location', '/admin/mobile')->withStatus(302);
+    }
+    
     return $response->withHeader('Location', '/dashboard')->withStatus(302);
 });
 

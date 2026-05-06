@@ -94,6 +94,14 @@ class AuthController
             $_SESSION['active_session_id'] = session_id(); // Cache it in session to save DB queries
             $_SESSION['last_activity'] = time(); // Initialize inactivity timer
 
+            // Auto-redirect mobile admins to the mobile panel
+            if ($redirect === '/dashboard' && in_array($user->role, [\App\Models\User::ROLE_ADMIN, \App\Models\User::ROLE_MANAGER])) {
+                $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+                if (preg_match('/Mobile|Android|iPhone|iPad|iPod/i', $userAgent)) {
+                    $redirect = '/admin/mobile';
+                }
+            }
+
             return $response->withHeader('Location', $redirect)->withStatus(302);
         }
 
