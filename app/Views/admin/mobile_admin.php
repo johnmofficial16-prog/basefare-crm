@@ -129,6 +129,16 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <h3 class="text-sm font-bold text-slate-400 uppercase mb-2">On Break</h3>
       <div id="att-break-list" class="space-y-2"></div>
     </div>
+
+    <div class="mt-6">
+      <h3 class="text-sm font-bold text-slate-400 uppercase mb-2">Absent / Not Clocked In</h3>
+      <div id="att-absent-list" class="space-y-2"></div>
+    </div>
+
+    <div class="mt-6">
+      <h3 class="text-sm font-bold text-slate-400 uppercase mb-2">Completed Today</h3>
+      <div id="att-completed-list" class="space-y-2"></div>
+    </div>
   </section>
 
   <!-- TRANSACTIONS TAB -->
@@ -256,14 +266,11 @@ async function loadDashboard() {
 // ── LIVE BOARD ────────────────────────────────────────────────────────────
 async function loadLiveBoard() {
   try {
-    const r = await fetch('/api/liveboard/feed');
+    const r = await fetch('/api/admin/mobile/data');
     const d = await r.json();
 
-    let totalProfit = 0;
-    d.recent.forEach(i => totalProfit += i.profit);
-
-    document.getElementById('live-profit').textContent = '+' + totalProfit.toFixed(0);
-    document.getElementById('live-txns').textContent = d.recent.length;
+    document.getElementById('live-profit').textContent = '+' + d.today_profit.toFixed(0);
+    document.getElementById('live-txns').textContent = d.today_txns;
 
     const feed = document.getElementById('live-feed');
     feed.innerHTML = d.recent.map(item => `
@@ -272,9 +279,9 @@ async function loadLiveBoard() {
           <span class="material-symbols-outlined">paid</span>
         </div>
         <div class="flex-1">
-          <p class="text-xs text-slate-400">${item.time} — ${item.agent}</p>
-          <p class="font-bold text-sm text-slate-800">Approved: ${item.typeLabel || 'Booking'}</p>
-          <p class="font-bold text-emerald-600">+${item.profit.toFixed(2)}</p>
+          <p class="text-xs text-slate-400">${item.created_at} — ${item.agent}</p>
+          <p class="font-bold text-sm text-slate-800">Approved: ${item.type || 'Booking'}</p>
+          <p class="font-bold text-emerald-600">+${item.mco.toFixed(2)}</p>
         </div>
       </div>
     `).join('');
@@ -298,7 +305,7 @@ async function loadAttendance() {
     const ovl = document.getElementById('att-override-list');
     if (d.pending_count > 0) {
       ovc.classList.remove('hidden');
-      ovl.innerHTML = d.pending_override.map(a => `
+      ovl.innerHTML = d.pending_agents.map(a => `
         <div class="bg-red-50 rounded-xl p-3 border border-red-200">
           <div class="flex justify-between items-center mb-2">
             <p class="font-bold text-red-900">${a.name}</p>
@@ -316,13 +323,13 @@ async function loadAttendance() {
     }
 
     // Working
-    document.getElementById('att-working-list').innerHTML = d.in.map(i => `
+    document.getElementById('att-working-list').innerHTML = d.in_agents.map(i => `
       <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
         <div>
-          <p class="font-bold text-sm text-slate-800">${i.agent.name}</p>
-          <p class="text-[10px] text-slate-400">In since ${new Date(i.session.clock_in).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+          <p class="font-bold text-sm text-slate-800">${i.name}</p>
+          <p class="text-[10px] text-slate-400">In since ${new Date(i.clock_in).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
         </div>
-        <button onclick="clkOut(${i.agent.id}, '${i.agent.name.replace(/'/g, "\\'")}')" class="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+        <button onclick="clkOut(${i.id}, '${i.name.replace(/'/g, "\\'")}')" class="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
           <span class="material-symbols-outlined text-[18px]">logout</span>
         </button>
       </div>
@@ -341,7 +348,25 @@ async function loadAttendance() {
         <button onclick="endBrk(${a.id}, '${a.name.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-lg bg-orange-100 text-orange-700 text-xs font-bold">End</button>
       </div>
       `;
-    }).join('');
+    }).join('') || '<p class="text-xs text-slate-400">No one on break</p>';
+
+    // Absent
+    document.getElementById('att-absent-list').innerHTML = (d.absent_agents || []).map(a => `
+      <div class="bg-slate-50 rounded-xl p-3 shadow-sm border border-slate-200 flex items-center justify-between">
+        <p class="font-bold text-sm text-slate-700">${a.name}</p>
+        <button onclick="clkIn(${a.id}, '${a.name.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center gap-1">
+          <span class="material-symbols-outlined text-[14px]">login</span> Clock In
+        </button>
+      </div>
+    `).join('') || '<p class="text-xs text-slate-400">None</p>';
+
+    // Completed
+    document.getElementById('att-completed-list').innerHTML = (d.completed_agents || []).map(a => `
+      <div class="bg-blue-50 rounded-xl p-3 shadow-sm border border-blue-100">
+        <p class="font-bold text-sm text-blue-900">${a.name}</p>
+        <p class="text-[10px] text-blue-700">${Math.floor(a.work_mins/60)}h ${a.work_mins%60}m worked · Out at ${new Date(a.clock_out).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+      </div>
+    `).join('') || '<p class="text-xs text-slate-400">None</p>';
 
   } catch(e) { console.error(e); }
 }
@@ -390,7 +415,7 @@ async function loadTransactions(status = txnStatus, page = 1) {
     const d = await r.json();
 
     const html = d.data.map(t => `
-      <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100" onclick="window.location.href='/transactions/${t.id}'">
+      <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100" onclick="toggleTxnDetail(${t.id})">
         <div class="flex justify-between items-start mb-2">
           <div>
             <p class="font-bold text-sm text-slate-800">${t.customer_name}</p>
@@ -403,6 +428,13 @@ async function loadTransactions(status = txnStatus, page = 1) {
             <p class="text-[10px] text-slate-400">${t.agent} · ${t.created_at}</p>
           </div>
           <p class="font-bold text-sm ${t.mco>=0?'text-emerald-600':'text-red-600'}">${t.mco>=0?'+':''}${t.currency} ${t.mco.toFixed(2)}</p>
+        </div>
+        
+        <div id="txn-detail-${t.id}" class="hidden mt-3 pt-3 border-t border-slate-100">
+          <p class="text-xs text-slate-600 mb-1"><strong>Type:</strong> ${t.type}</p>
+          <p class="text-xs text-slate-600 mb-1"><strong>Total:</strong> ${t.amount.toFixed(2)} ${t.currency}</p>
+          <p class="text-xs text-slate-600 mb-2"><strong>Gateway:</strong> ${t.gateway_status || 'Pending'}</p>
+          <a href="/transactions/${t.id}" class="text-xs font-bold text-primary flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">open_in_new</span> Open Full View</a>
         </div>
       </div>
     `).join('');
@@ -458,12 +490,19 @@ async function loadActions() {
 
     // Pending Acceptances
     document.getElementById('act-acc-list').innerHTML = d.pending_acc.map(a => `
-      <div class="bg-blue-50 rounded-xl p-3 shadow-sm border border-blue-200 flex justify-between items-center" onclick="window.location.href='/acceptance/${a.id}'">
-        <div>
-          <p class="font-bold text-sm text-blue-900">${a.customer_name}</p>
-          <p class="text-[10px] text-blue-700">${a.pnr} · ${a.amount} ${a.currency}</p>
+      <div class="bg-blue-50 rounded-xl p-3 shadow-sm border border-blue-200" onclick="toggleAccDetail(${a.id})">
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="font-bold text-sm text-blue-900">${a.customer_name}</p>
+            <p class="text-[10px] text-blue-700">${a.pnr} · ${a.amount} ${a.currency}</p>
+          </div>
+          <span class="material-symbols-outlined text-blue-400">expand_more</span>
         </div>
-        <span class="material-symbols-outlined text-blue-400">chevron_right</span>
+        <div id="acc-detail-${a.id}" class="hidden mt-3 pt-3 border-t border-blue-100">
+           <p class="text-xs text-blue-800 mb-1"><strong>Agent:</strong> ${a.agent}</p>
+           <p class="text-xs text-blue-800 mb-2"><strong>Time:</strong> ${a.created_at}</p>
+           <a href="/acceptance/${a.id}" class="text-xs font-bold text-primary flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">open_in_new</span> Open Full View</a>
+        </div>
       </div>
     `).join('') || '<p class="text-xs text-slate-400">No pending acceptances.</p>';
 
@@ -494,10 +533,28 @@ async function saveGw(id) {
 
 // ── UTILS ─────────────────────────────────────────────────────────────────
 async function post(url, data) {
-  const fd = new URLSearchParams();
-  fd.append('csrf_token', csrfToken);
-  for (let k in data) fd.append(k, data[k]);
-  return fetch(url, { method: 'POST', body: fd, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+  data.csrf_token = csrfToken; // Include csrf token in JSON body
+  return fetch(url, { 
+    method: 'POST', 
+    body: JSON.stringify(data), 
+    headers: { 'Content-Type': 'application/json' } 
+  });
+}
+
+function toggleTxnDetail(id) {
+  const el = document.getElementById('txn-detail-'+id);
+  el.classList.toggle('hidden');
+}
+
+function toggleAccDetail(id) {
+  const el = document.getElementById('acc-detail-'+id);
+  el.classList.toggle('hidden');
+}
+
+async function clkIn(id, name) {
+  if(!confirm('Force clock in '+name+'?')) return;
+  await post('/attendance/admin/clock-in', {agent_id: id});
+  loadAttendance();
 }
 
 // Auto-refresh loops

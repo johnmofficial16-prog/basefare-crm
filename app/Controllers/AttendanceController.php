@@ -292,18 +292,29 @@ class AttendanceController
             'absent_count'    => count($boardData['absent']),
             'pending_count'   => count($boardData['pending_override']),
             'abuse_count'     => $abuseAlerts->count(),
-            'pending_agents' => array_map(fn($a) => ['id' => $a->id, 'name' => $a->name], $boardData['pending_override']),
-            'in_agents'      => array_map(fn($i) => [
-                'name' => $i['agent']->name,
+            'pending_agents'  => array_map(fn($a) => ['id' => $a->id, 'name' => $a->name], $boardData['pending_override']),
+            'in_agents'       => array_map(fn($i) => [
+                'id'       => $i['agent']->id,
+                'name'     => $i['agent']->name,
                 'clock_in' => $i['session']->clock_in,
-                'late' => $i['session']->late_minutes ?? 0,
+                'late'     => $i['session']->late_minutes ?? 0,
             ], $boardData['in']),
-            'break_agents'   => array_map(fn($i) => [
+            'break_agents'    => array_map(fn($i) => [
                 'id'    => $i['agent']->id,
                 'name'  => $i['agent']->name,
                 'type'  => $i['break']->break_type,
                 'start' => $i['break']->break_start,
             ], $boardData['on_break']),
+            'absent_agents'   => array_map(fn($a) => [
+                'id'   => $a->id,
+                'name' => $a->name,
+            ], $boardData['absent']),
+            'completed_agents' => array_map(fn($i) => [
+                'id'       => $i['agent']->id,
+                'name'     => $i['agent']->name,
+                'work_mins'=> $i['session']->total_work_mins ?? 0,
+                'clock_out'=> $i['session']->clock_out,
+            ], $boardData['completed']),
         ];
 
         return $this->jsonResponse($response, $data);
