@@ -29,6 +29,14 @@ class DashboardController
         $userId = $_SESSION['user_id'];
         $role   = $_SESSION['role'] ?? 'agent';
 
+        // Auto-redirect mobile admins/managers to the mobile panel
+        if (in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+            $userAgent = $request->getHeaderLine('User-Agent');
+            if (preg_match('/Mobile|Android|iPhone|iPad|iPod/i', $userAgent)) {
+                return $response->withHeader('Location', '/admin/mobile')->withStatus(302);
+            }
+        }
+
         // ── Attendance state + today's session ───────────────────────────────
         $stateInfo    = $this->attendanceService->getCurrentState($userId);
         $todaySession = AttendanceSession::forUser($userId)
