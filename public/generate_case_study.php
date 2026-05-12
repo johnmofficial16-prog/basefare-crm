@@ -379,5 +379,58 @@ strong { color: #0f1e3c; font-weight: 700; }
   </div>
 </div>
 
+<?php
+// ── Attachments / Exhibits Section ──
+$attachments = [];
+if (!empty($acceptance->passport_image)) {
+    $attachments[] = [
+        'title' => 'KYC Verification: Passenger Passport / Government ID',
+        'file'  => __DIR__ . '/../storage/acceptance/evidence/' . $acceptance->passport_image
+    ];
+}
+if (!empty($acceptance->card_image_front)) {
+    $attachments[] = [
+        'title' => 'Proof of Payment Method: Credit Card (Front)',
+        'file'  => __DIR__ . '/../storage/acceptance/evidence/' . $acceptance->card_image_front
+    ];
+}
+
+if (!empty($attachments)):
+?>
+<!-- Page Break for Exhibits -->
+<div class="page-break"></div>
+
+<div class="page" style="margin-top: 30px;">
+  <div class="receipt-header" style="background: linear-gradient(135deg, #0f1e3c 0%, #1a3a6b 100%);">
+    <div class="brand-block">
+      <div class="brand-name">Appendix A: Supporting Documentation</div>
+      <div class="brand-sub">Exhibits for Transaction <?= htmlspecialchars($pnr) ?></div>
+    </div>
+  </div>
+  <div class="body">
+    <p>The following images were securely uploaded by the cardholder during the digital authorization flow.</p>
+    
+    <?php foreach ($attachments as $att): 
+      if (file_exists($att['file'])):
+        $imgData = base64_encode(file_get_contents($att['file']));
+        $mime = 'image/jpeg';
+        if (str_ends_with(strtolower($att['file']), 'png')) $mime = 'image/png';
+        if (str_ends_with(strtolower($att['file']), 'pdf')) $mime = 'application/pdf'; // Note: PDF rendering via img won't work perfectly, but usually these are images.
+    ?>
+    <div class="section" style="margin-top: 30px;">
+      <div class="section-title"><?= htmlspecialchars($att['title']) ?></div>
+      <div style="text-align: center; background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <?php if ($mime === 'application/pdf'): ?>
+            <div style="padding: 40px; color: #64748b;">[ PDF Document Uploaded: <?= htmlspecialchars(basename($att['file'])) ?> ]</div>
+          <?php else: ?>
+            <img src="data:<?= $mime ?>;base64,<?= $imgData ?>" style="max-width: 100%; max-height: 800px; border-radius: 4px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <?php endif; ?>
+      </div>
+    </div>
+    <?php endif; endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
+
 </body>
 </html>
