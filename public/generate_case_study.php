@@ -98,11 +98,18 @@ body {
 }
 
 /* ── Print optimizations ── */
+@page {
+  margin: 1cm;
+  /* Suppress browser default headers/footers (URL, date, page numbers) */
+  size: A4;
+}
 @media print {
   body { background: white; padding: 0; font-size: 12px; }
   .no-print { display: none !important; }
   .page { box-shadow: none !important; max-width: unset !important; border: 1px solid #e2e8f0; }
   .page-break { page-break-before: always; }
+  /* Hide browser-injected running headers */
+  head, header { display: none !important; }
 }
 
 /* ── Layout ── */
@@ -151,7 +158,7 @@ body {
 .summary-value.highlight { color: #b45309; }
 
 /* ── Sections ── */
-.section { margin-bottom: 28px; }
+.section { margin-bottom: 28px; page-break-inside: avoid; break-inside: avoid; }
 .section-title {
   font-size: 12px;
   font-weight: 800;
@@ -455,16 +462,21 @@ if (!empty($attachments)):
 <div style="padding: 20px 0; text-align: center; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 2px; font-size: 16px;">Exhibit B: Verified Digital Authorization - Mr. Michael Bird</div>
 <?php
     ob_start();
+    // Temporarily disable agent notes so they don't print in the case study
+    $original_agent_notes = $acceptance->agent_notes;
+    $acceptance->agent_notes = null;
+    
     require __DIR__ . '/../app/Views/acceptance/receipt.php';
+    
+    // Restore
+    $acceptance->agent_notes = $original_agent_notes;
     $html = ob_get_clean();
+    
     preg_match('/<style[^>]*>.*?<\/style>/is', $html, $styleMatches);
     preg_match('/<body[^>]*>(.*?)<\/body>/is', $html, $bodyMatches);
     
     // Disable any print buttons
     $bodyHtml = preg_replace('/<button[^>]*onclick="window\.print\(\)"[^>]*>.*?<\/button>/is', '', $bodyMatches[1] ?? '');
-    
-    // Strip the Internal Agent Notes section to ensure it is not shared with the customer/bank
-    $bodyHtml = preg_replace('/<!-- ── AGENT \/ INTERNAL NOTES \(Chargeback Defense\) ── -->.*?<\/div>\s*<\/div>\s*<\/div>/is', '', $bodyHtml);
     
     echo ($styleMatches[0] ?? '') . '<div class="embedded-view">' . $bodyHtml . '</div>';
 ?>
