@@ -265,8 +265,8 @@ strong { color: #0f1e3c; font-weight: 700; }
       <div class="section-title">Requested Services and Seat Assignment</div>
       <p contenteditable="true">The cardholder specifically requested confirmed seat assignments for the passengers. As requested by the customer, the following seats were successfully assigned:</p>
       <ul contenteditable="true">
-        <li>Seat Nos. 19H and 22H</li>
-        <li>Seat Nos. 19K and 22K</li>
+        <li>Seat Nos. <strong style="background-color: #fef08a; padding: 2px 6px; border-radius: 4px;">19H and 22H</strong></li>
+        <li>Seat Nos. <strong style="background-color: #fef08a; padding: 2px 6px; border-radius: 4px;">19K and 22K</strong></li>
       </ul>
       <p contenteditable="true">The requested service was completed successfully and reflected on the updated itinerary and final ticket documents sent to the cardholder.</p>
     </div>
@@ -345,8 +345,13 @@ strong { color: #0f1e3c; font-weight: 700; }
 
     <div class="section">
       <div class="section-title">Dispute Claim Analysis</div>
-      <p contenteditable="true">On May 12th, the merchant received a dispute under reason code C31, where the cardholder claimed that the goods/services received were not as described, defective, or did not match the promised quality or specifications.</p>
-      <p contenteditable="true">However, the evidence clearly demonstrates that the exact service purchased by the cardholder — confirmed airline seat assignment assistance — was fully delivered as agreed.</p>
+      <div class="highlight-box" contenteditable="true" style="padding:15px; border: 2px solid #fbbf24; background-color: #fffbeb; border-radius: 8px; margin-bottom: 16px;">
+        <strong style="background-color: #fef08a; padding: 2px 4px; border-radius: 3px; color: #92400e;">REASON CODE C31:</strong> Goods and services received are not as described, defective, or do not match the promised quality, specifications, or color.
+        <br><br>
+        <strong style="background-color: #fef08a; padding: 2px 4px; border-radius: 3px; font-size: 15px; color: #991b1b;">MERCHANT RESPONSE: INVALID DISPUTE</strong>
+        <br>
+        <span style="font-weight: 600;">We strongly dispute this chargeback.</span> The cardholder authorized this transaction, the travel services (airline tickets) were fully delivered exactly as described, and the customer never contacted us to complain, request a refund, or report any issues prior to initiating this chargeback.
+      </div>
       <p contenteditable="true"><?= htmlspecialchars($dbaName) ?> fulfilled its obligation by successfully securing and confirming the requested seats for the passengers.</p>
     </div>
 
@@ -373,7 +378,7 @@ strong { color: #0f1e3c; font-weight: 700; }
       <div class="section-title">Conclusion and Request for Resolution</div>
       <p contenteditable="true">Based on our internal investigation and the supporting evidence provided, <?= htmlspecialchars($dbaName) ?> fully delivered the agreed-upon service in accordance with the cardholder’s request and authorization.</p>
       <p contenteditable="true">The service was completed successfully, accepted by the cardholder, and no complaint or attempt for amicable resolution was made prior to filing the dispute.</p>
-      <p contenteditable="true" style="font-weight: 700;">Therefore, we respectfully request that this dispute be resolved in favor of <?= htmlspecialchars($dbaName) ?> and that the disputed amount of <?= htmlspecialchars($currency) ?> <?= htmlspecialchars(number_format((float)$totalAmount, 2)) ?> be credited back to the merchant.</p>
+      <p contenteditable="true" style="font-weight: 700; background-color: #fef08a; padding: 10px; border-radius: 6px; border-left: 4px solid #f59e0b;">Therefore, we respectfully request that this dispute be resolved in favor of <?= htmlspecialchars($dbaName) ?> and that the disputed amount of <?= htmlspecialchars($currency) ?> <?= htmlspecialchars(number_format((float)$totalAmount, 2)) ?> be credited back to the merchant.</p>
     </div>
     
   </div>
@@ -382,6 +387,16 @@ strong { color: #0f1e3c; font-weight: 700; }
 <?php
 // ── Attachments / Exhibits Section ──
 $attachments = [];
+
+// Specific Manual Exhibits
+$attachments[] = [
+    'title' => 'Proof of Service / Sale Delivery (Flight Selection Confirmation)',
+    'file'  => __DIR__ . '/case_study_images/quickcapture-5-12-2026_at_12-16-51.png'
+];
+$attachments[] = [
+    'title' => 'Proof of Service / Sale Delivery (Passenger Assignment Confirm)',
+    'file'  => __DIR__ . '/case_study_images/MICHAEL BIRD.PNG'
+];
 
 if (!empty($acceptance->passport_image)) {
     $attachments[] = [
@@ -430,13 +445,13 @@ if (!empty($attachments)):
         if (str_ends_with(strtolower($att['file']), 'png')) $mime = 'image/png';
         if (str_ends_with(strtolower($att['file']), 'pdf')) $mime = 'application/pdf';
     ?>
-    <div class="section" style="margin-top: 30px;">
-      <div class="section-title"><?= htmlspecialchars($att['title']) ?></div>
-      <div style="text-align: center; background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+    <div class="section" style="margin-top: 40px;">
+      <div class="section-title" style="font-size: 14px; background-color: #fef08a; padding: 12px; border-radius: 6px; border: 1px solid #facc15; display: inline-block; color: #854d0e;"><?= htmlspecialchars($att['title']) ?></div>
+      <div style="text-align: center; background: #f8fafc; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 10px;">
           <?php if ($mime === 'application/pdf'): ?>
-            <div style="padding: 40px; color: #64748b;">[ PDF Document Attached Separately: <?= htmlspecialchars(basename($att['file'])) ?> ]</div>
+            <div style="padding: 40px; color: #64748b; font-weight: bold; font-size: 16px;">[ PDF Document Attached Separately: <?= htmlspecialchars(basename($att['file'])) ?> ]</div>
           <?php else: ?>
-            <img src="data:<?= $mime ?>;base64,<?= $imgData ?>" style="max-width: 100%; max-height: 800px; border-radius: 4px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <img src="data:<?= $mime ?>;base64,<?= $imgData ?>" style="max-width: 100%; max-height: 800px; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);">
           <?php endif; ?>
       </div>
     </div>
@@ -448,7 +463,7 @@ if (!empty($attachments)):
 <?php if ($acceptance): ?>
 <!-- Page Break for Acceptance Receipt -->
 <div class="page-break"></div>
-<div style="padding: 20px 0; text-align: center; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 2px;">Exhibit B: Original Acceptance Receipt</div>
+<div style="padding: 20px 0; text-align: center; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 2px; font-size: 16px;">Exhibit B: Original Acceptance Receipt</div>
 <?php
     ob_start();
     require __DIR__ . '/../app/Views/acceptance/receipt.php';
@@ -456,8 +471,11 @@ if (!empty($attachments)):
     preg_match('/<style[^>]*>.*?<\/style>/is', $html, $styleMatches);
     preg_match('/<body[^>]*>(.*?)<\/body>/is', $html, $bodyMatches);
     
-    // Disable any print buttons inside the embedded view so they don't show up twice
+    // Disable any print buttons
     $bodyHtml = preg_replace('/<button[^>]*onclick="window\.print\(\)"[^>]*>.*?<\/button>/is', '', $bodyMatches[1] ?? '');
+    
+    // Strip the Internal Agent Notes section to ensure it is not shared with the customer/bank
+    $bodyHtml = preg_replace('/<!-- ── AGENT \/ INTERNAL NOTES \(Chargeback Defense\) ── -->.*?<\/div>\s*<\/div>\s*<\/div>/is', '', $bodyHtml);
     
     echo ($styleMatches[0] ?? '') . '<div class="embedded-view">' . $bodyHtml . '</div>';
 ?>
@@ -466,7 +484,7 @@ if (!empty($attachments)):
 <?php if ($eticket): ?>
 <!-- Page Break for E-Ticket -->
 <div class="page-break"></div>
-<div style="padding: 20px 0; text-align: center; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 2px;">Exhibit C: Original Electronic Ticket</div>
+<div style="padding: 20px 0; text-align: center; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 2px; font-size: 16px;">Exhibit C: Original Electronic Ticket</div>
 <?php
     ob_start();
     require __DIR__ . '/../app/Views/eticket/public_eticket.php';
@@ -474,7 +492,10 @@ if (!empty($attachments)):
     preg_match('/<style[^>]*>.*?<\/style>/is', $html, $styleMatches);
     preg_match('/<body[^>]*>(.*?)<\/body>/is', $html, $bodyMatches);
     
-    echo ($styleMatches[0] ?? '') . '<div class="embedded-view">' . ($bodyMatches[1] ?? '') . '</div>';
+    // Strip the pending Acknowledgement section checkbox since this is just a record
+    $bodyHtml = preg_replace('/<!-- ── ACKNOWLEDGMENT SECTION ────────────────────────── -->.*?<\/div><!-- \/ticket-body -->/is', '</div><!-- /ticket-body -->', $bodyMatches[1] ?? '');
+    
+    echo ($styleMatches[0] ?? '') . '<div class="embedded-view">' . $bodyHtml . '</div>';
 ?>
 <?php endif; ?>
 
