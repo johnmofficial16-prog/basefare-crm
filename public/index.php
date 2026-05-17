@@ -25,14 +25,18 @@ $capsule->addConnection([
 $capsule->setAsGlobal();
 $capsule->bootEloquent();
 
+// Detect HTTPS — covers direct TLS and Hostinger's reverse proxy (X-Forwarded-Proto)
+$isHttps = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+        || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+
 // Secure session configuration
 session_set_cookie_params([
     'lifetime' => 0,
     'path'     => '/',
     'domain'   => '',
-    'secure'   => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on', // Enforce secure cookie if running on HTTPS
-    'httponly' => true, // Prevents Javascript from accessing session cookie
-    'samesite' => 'Lax' // Protects against broad cross-site attacks
+    'secure'   => $isHttps,   // Cookie only sent over HTTPS
+    'httponly' => true,        // JS cannot access the session cookie
+    'samesite' => 'Strict',   // Blocks cookie on all cross-site requests (CSRF defence in depth)
 ]);
 
 // Start PHP session

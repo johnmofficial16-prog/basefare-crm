@@ -1,0 +1,21 @@
+# PROJECT ROOT .htaccess
+# Required because the web root points to the project root instead of /public.
+# This blocks all sensitive files and funnels traffic into public/.
+
+RewriteEngine On
+
+# ── 1. Block sensitive files (env, composer, scripts, docs) ────────────────────
+<FilesMatch "(^\.env|composer\.(json|lock)|README\.md|\.bat|\.sh|\.phar|\.sql|\.log)$">
+    Require all denied
+</FilesMatch>
+
+# ── 2. Block direct HTTP access to sensitive directories ───────────────────────
+#    app/, vendor/, storage/, database/, scripts/, cron/, .git/
+RewriteRule ^(app|vendor|storage|database|scripts|cron|\.git)(\/.*)?$ - [F,L]
+
+# ── 3. If the request already points inside public/, leave it alone ────────────
+RewriteCond %{REQUEST_URI} ^/public/
+RewriteRule ^ - [L]
+
+# ── 4. Route everything else through public/ ───────────────────────────────────
+RewriteRule ^(.*)$ public/$1 [L,QSA]

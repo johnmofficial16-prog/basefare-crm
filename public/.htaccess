@@ -1,0 +1,58 @@
+# ── Front controller — route everything through Slim ───────────────────────────
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
+
+# ── Block directory listings ────────────────────────────────────────────────────
+Options -Indexes
+
+# ── Hide PHP version (also set expose_php = Off in php.ini if possible) ────────
+<IfModule mod_php.c>
+    php_flag expose_php Off
+</IfModule>
+<IfModule mod_php8.c>
+    php_flag expose_php Off
+</IfModule>
+
+# ── Block direct access to sensitive files in the public dir ───────────────────
+<FilesMatch "(\.env|composer\.(json|lock)|\.git|README\.md|\.bat|\.sh|\.phar)$">
+    Require all denied
+</FilesMatch>
+
+# ── Security Headers ────────────────────────────────────────────────────────────
+<IfModule mod_headers.c>
+
+    # Prevent clickjacking — no one may embed this app in an iframe
+    Header always set X-Frame-Options "DENY"
+
+    # Prevent MIME-type sniffing attacks
+    Header always set X-Content-Type-Options "nosniff"
+
+    # Control referrer information leakage
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Disable browser features not needed by a CRM
+    Header always set Permissions-Policy "geolocation=(), camera=(), microphone=(), payment=(), usb=(), bluetooth=()"
+
+    # Force HTTPS for 1 year (only activates once the browser visits via HTTPS)
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+    # Content Security Policy
+    # - script-src: allows inline scripts (required by views) + Tailwind CDN
+    # - style-src:  allows inline styles + Google Fonts
+    # - font-src:   Google Fonts files
+    # - img-src:    self + data URIs (signature canvas) + gstatic airline logos
+    # - frame-ancestors: blocks iframe embedding (redundant with X-Frame-Options, belt-and-suspenders)
+    # - form-action: forms only submit to this same origin
+    # - base-uri:   prevents base tag injection attacks
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://www.gstatic.com; connect-src 'self'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
+
+    # Strip server identification headers
+    Header always unset X-Powered-By
+    Header always unset Server
+
+</IfModule>
+
+# ── Disable server signature in error pages ────────────────────────────────────
+ServerSignature Off
