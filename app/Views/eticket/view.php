@@ -464,9 +464,9 @@ tailwind.config = {
                 default        => ['●',  ucfirst($et->ack_type), 'bg-slate-50 text-slate-500 border-slate-100'],
             };
           ?>
-          <div class="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full border text-[11px] font-semibold <?= $ackTypeLabel[2] ?>">
+          <a href="#customer-replies" class="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full border text-[11px] font-bold hover:underline <?= $ackTypeLabel[2] ?>" title="Jump to Customer Replies">
             <span><?= $ackTypeLabel[0] ?></span> <?= $ackTypeLabel[1] ?>
-          </div>
+          </a>
           <?php endif; ?>
         </div>
         <p class="text-[10px] text-slate-400">IP: <?= htmlspecialchars($et->acknowledged_ip ?? 'N/A') ?></p>
@@ -511,7 +511,7 @@ tailwind.config = {
 
       <?php if ($isAdmin): ?>
       <!-- Customer Replies — admin/manager/supervisor only -->
-      <div class="bg-white border border-slate-200 rounded-xl p-5">
+      <div id="customer-replies" class="bg-white border border-slate-200 rounded-xl p-5">
         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Customer Replies</p>
         <?php
           $replies = $et->replies()->get();

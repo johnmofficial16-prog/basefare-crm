@@ -246,7 +246,7 @@ class ETicketService
             'ack_type'        => 'button',
         ]);
 
-        RecordNote::log('eticket', $eticket->id, 0,
+        RecordNote::log('eticket', $eticket->id, null,
             'E-Ticket acknowledged by customer. IP: ' . ($forensicData['ip'] ?? 'unknown'), 'acknowledged');
 
         return true;
@@ -291,7 +291,7 @@ class ETicketService
         RecordNote::log(
             'eticket',
             $eticket->id,
-            0,
+            null,
             'Customer sent a contact message via the e-ticket page. IP: ' . ($ip ?? 'unknown'),
             'acknowledged'
         );
@@ -342,7 +342,7 @@ class ETicketService
         RecordNote::log(
             'eticket',
             $eticket->id,
-            0,
+            null,
             'Customer replied via email. From: ' . $senderEmail . ' | Subject: ' . $subject,
             'acknowledged'
         );

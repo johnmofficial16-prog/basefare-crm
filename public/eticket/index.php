@@ -67,7 +67,7 @@ function recordAcknowledgment(ETicket $eticket, string $rawToken): void {
     ]);
 
     try {
-        RecordNote::log('eticket', $eticket->id, 0,
+        RecordNote::log('eticket', $eticket->id, null,
             "E-Ticket acknowledged by customer. IP: {$ip}", 'acknowledged');
     } catch (\Throwable $e) {}
 

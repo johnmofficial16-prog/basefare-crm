@@ -141,9 +141,9 @@ tailwind.config = {
               <?php if ($isAdmin && $et->ack_type && $et->ack_type !== 'button'): ?>
               <div class="text-[10px] mt-0.5">
                 <?php if ($et->ack_type === 'web_contact'): ?>
-                <span class="text-blue-500" title="Acknowledged via Contact Form">💬 Contact Form</span>
+                <a href="/etickets/<?= $et->id ?>#customer-replies" onclick="event.stopPropagation();" class="text-blue-500 hover:underline font-semibold" title="View Contact Form Message">💬 Contact Form</a>
                 <?php elseif ($et->ack_type === 'email_reply'): ?>
-                <span class="text-violet-500" title="Acknowledged via Email Reply">📧 Email Reply</span>
+                <a href="/etickets/<?= $et->id ?>#customer-replies" onclick="event.stopPropagation();" class="text-violet-500 hover:underline font-semibold" title="View Email Reply">📧 Email Reply</a>
                 <?php endif; ?>
               </div>
               <?php endif; ?>

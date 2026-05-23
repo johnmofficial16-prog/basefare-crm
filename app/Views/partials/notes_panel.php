@@ -134,12 +134,12 @@ function submitModalNote() {
           <!-- Avatar -->
           <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-black text-white"
             style="background:<?= $badge['color'] === 'emerald' ? '#059669' : ($badge['color'] === 'rose' ? '#e11d48' : ($badge['color'] === 'blue' ? '#2563eb' : ($badge['color'] === 'amber' ? '#d97706' : '#7c3aed'))) ?>;">
-            <?= strtoupper(substr($n->user->name ?? 'U', 0, 1)) ?>
+            <?= strtoupper(substr($n->user?->name ?? 'System', 0, 1)) ?>
           </div>
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-sm font-bold text-slate-800"><?= htmlspecialchars($n->user->name ?? 'Unknown') ?></span>
-              <span class="text-[10px] text-slate-400 uppercase tracking-wider"><?= ucfirst($n->user->role ?? '') ?></span>
+              <span class="text-sm font-bold text-slate-800"><?= htmlspecialchars($n->user?->name ?? 'System') ?></span>
+              <span class="text-[10px] text-slate-400 uppercase tracking-wider"><?= ucfirst($n->user?->role ?? '') ?></span>
               <!-- Badge -->
               <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold
                 <?= $badge['color'] === 'emerald' ? 'bg-emerald-100 text-emerald-700' :

@@ -65,7 +65,7 @@ class RecordNote extends Model
     public static function log(
         string $entityType,
         int    $entityId,
-        int    $userId,
+        ?int   $userId,
         string $note,
         string $action = 'note'
     ): self {
