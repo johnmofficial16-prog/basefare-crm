@@ -455,6 +455,19 @@ tailwind.config = {
           <span class="material-symbols-outlined text-3xl text-emerald-500 block mb-1">verified</span>
           <p class="text-sm font-extrabold text-emerald-700">Acknowledged</p>
           <p class="text-[10px] text-emerald-600 mt-0.5"><?= $et->acknowledged_at->format('F j, Y \a\t g:i A') ?></p>
+          <?php if ($et->ack_type): ?>
+          <?php
+            $ackTypeLabel = match($et->ack_type) {
+                'web_contact'  => ['💬', 'Via Contact Form',  'bg-blue-50 text-blue-600 border-blue-100'],
+                'email_reply'  => ['📧', 'Via Email Reply',   'bg-violet-50 text-violet-600 border-violet-100'],
+                'button'       => ['✓',  'Via Ack. Button',   'bg-emerald-50 text-emerald-600 border-emerald-100'],
+                default        => ['●',  ucfirst($et->ack_type), 'bg-slate-50 text-slate-500 border-slate-100'],
+            };
+          ?>
+          <div class="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full border text-[11px] font-semibold <?= $ackTypeLabel[2] ?>">
+            <span><?= $ackTypeLabel[0] ?></span> <?= $ackTypeLabel[1] ?>
+          </div>
+          <?php endif; ?>
         </div>
         <p class="text-[10px] text-slate-400">IP: <?= htmlspecialchars($et->acknowledged_ip ?? 'N/A') ?></p>
         <?php else: ?>
@@ -495,6 +508,49 @@ tailwind.config = {
           <div>Updated: <strong class="text-slate-700"><?= $et->updated_at->format('M j, Y g:i A') ?></strong></div>
         </div>
       </div>
+
+      <?php if ($isAdmin): ?>
+      <!-- Customer Replies — admin/manager/supervisor only -->
+      <div class="bg-white border border-slate-200 rounded-xl p-5">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Customer Replies</p>
+        <?php
+          $replies = $et->replies()->get();
+        ?>
+        <?php if ($replies->isEmpty()): ?>
+        <div class="text-center bg-slate-50 border border-slate-100 rounded-xl p-4">
+          <span class="material-symbols-outlined text-2xl text-slate-300 block mb-1">mark_email_unread</span>
+          <p class="text-xs text-slate-400">No customer messages received.</p>
+        </div>
+        <?php else: ?>
+        <div class="space-y-3">
+          <?php foreach ($replies as $i => $reply): ?>
+          <div class="border border-slate-100 rounded-xl overflow-hidden">
+            <!-- Reply header -->
+            <div class="flex items-center gap-2 px-3 py-2 bg-slate-50 border-b border-slate-100">
+              <?php if ($reply->source === 'email_reply'): ?>
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 border border-violet-100 text-[10px] font-bold text-violet-600">📧 Email Reply</span>
+              <?php else: ?>
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-100 text-[10px] font-bold text-blue-600">💬 Web Form</span>
+              <?php endif; ?>
+              <span class="text-[10px] text-slate-400 ml-auto">#<?= $i + 1 ?> &nbsp;&middot;&nbsp; <?= $reply->created_at->format('M j, g:i A') ?></span>
+            </div>
+            <!-- Reply body -->
+            <div class="px-3 py-2.5">
+              <?php if ($reply->source === 'email_reply' && $reply->sender_email): ?>
+              <p class="text-[10px] text-slate-400 mb-1.5">From: <strong class="text-slate-600"><?= htmlspecialchars($reply->sender_email) ?></strong></p>
+              <?php endif; ?>
+              <?php if ($reply->subject): ?>
+              <p class="text-[10px] text-slate-400 mb-1.5">Subject: <strong class="text-slate-600"><?= htmlspecialchars($reply->subject) ?></strong></p>
+              <?php endif; ?>
+              <p class="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed"><?= htmlspecialchars($reply->body) ?></p>
+            </div>
+          </div>
+          <?php endforeach; ?>
+        </div>
+        <p class="text-[10px] text-slate-400 text-right mt-2"><?= $replies->count() ?> message<?= $replies->count() !== 1 ? 's' : '' ?> total</p>
+        <?php endif; ?>
+      </div>
+      <?php endif; ?>
 
     </div><!-- /right col -->
   </div><!-- /grid -->

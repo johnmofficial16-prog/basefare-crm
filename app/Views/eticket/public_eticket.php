@@ -691,5 +691,410 @@ function confirmAck() {
 }
 </script>
 
+<!-- ========================================================
+     CONTACT US — Floating button + modal dialog
+     Appended after existing page content, does not alter
+     any existing HTML above.
+     ======================================================== -->
+<style>
+/* ── Contact Button ── */
+#contact-fab {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: #1a3a6b;
+  color: #fff;
+  border: none;
+  border-radius: 50px;
+  padding: 13px 20px 13px 16px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(26,58,107,0.45);
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  z-index: 900;
+  letter-spacing: 0.2px;
+}
+#contact-fab:hover {
+  background: #0f2a52;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 32px rgba(26,58,107,0.55);
+}
+#contact-fab .fab-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* ── Modal Overlay ── */
+#contact-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(10,18,40,0.55);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+#contact-overlay.active {
+  display: flex;
+}
+
+/* ── Modal Box ── */
+#contact-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 20px 60px rgba(10,18,40,0.3);
+  overflow: hidden;
+  animation: modal-in 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.92) translateY(16px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.cm-header {
+  background: linear-gradient(135deg, #1a3a6b 0%, #0f2a52 100%);
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cm-header-icon {
+  width: 40px; height: 40px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+.cm-header-title {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.cm-header-sub {
+  color: rgba(255,255,255,0.65);
+  font-size: 11.5px;
+  margin-top: 2px;
+}
+.cm-close {
+  margin-left: auto;
+  background: rgba(255,255,255,0.1);
+  border: none;
+  color: #fff;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.cm-close:hover { background: rgba(255,255,255,0.22); }
+
+.cm-body { padding: 22px 24px 20px; }
+
+.cm-info-strip {
+  background: #f0f6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #1e40af;
+  margin-bottom: 16px;
+  line-height: 1.55;
+}
+
+.cm-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+#cm-message {
+  width: 100%;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px;
+  color: #1e293b;
+  resize: vertical;
+  min-height: 120px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+#cm-message:focus {
+  border-color: #1a3a6b;
+  box-shadow: 0 0 0 3px rgba(26,58,107,0.1);
+}
+.cm-char-count {
+  text-align: right;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 5px;
+}
+.cm-char-count.over { color: #ef4444; }
+
+.cm-footer {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+.cm-btn-cancel {
+  flex: 0 0 auto;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cm-btn-cancel:hover { background: #e2e8f0; }
+.cm-btn-send {
+  flex: 1;
+  background: linear-gradient(135deg, #1a3a6b 0%, #0f2a52 100%);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+}
+.cm-btn-send:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0f2a52 0%, #081a36 100%);
+  transform: translateY(-1px);
+}
+.cm-btn-send:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+/* ── Success state ── */
+#cm-success {
+  display: none;
+  text-align: center;
+  padding: 32px 24px 28px;
+}
+.cm-success-icon {
+  width: 62px; height: 62px;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 14px;
+  font-size: 28px;
+  box-shadow: 0 6px 20px rgba(22,163,74,0.35);
+  animation: pop-in 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+@keyframes pop-in {
+  from { transform: scale(0.4); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+.cm-success-title {
+  font-size: 17px; font-weight: 800; color: #0f1e3c; margin-bottom: 8px;
+}
+.cm-success-sub {
+  font-size: 13px; color: #64748b; line-height: 1.6; max-width: 340px; margin: 0 auto;
+}
+.cm-success-close {
+  margin-top: 20px;
+  background: #f1f5f9;
+  color: #1e293b;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 9px 24px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cm-success-close:hover { background: #e2e8f0; }
+
+/* ── Error banner ── */
+#cm-error-banner {
+  display: none;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: #991b1b;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+</style>
+
+<!-- Floating Contact Button -->
+<button id="contact-fab" onclick="openContactModal()" type="button" aria-label="Contact reservation desk">
+  <span class="fab-icon">✉</span>
+  Contact Reservation Desk
+</button>
+
+<!-- Modal Overlay -->
+<div id="contact-overlay" role="dialog" aria-modal="true" aria-labelledby="cm-title">
+  <div id="contact-modal">
+
+    <div class="cm-header">
+      <div class="cm-header-icon">✉</div>
+      <div>
+        <div class="cm-header-title" id="cm-title">Message Reservation Desk</div>
+        <div class="cm-header-sub">We'll reply to your registered email address</div>
+      </div>
+      <button class="cm-close" onclick="closeContactModal()" title="Close" aria-label="Close dialog">✕</button>
+    </div>
+
+    <!-- Form view -->
+    <div id="cm-form-view">
+      <div class="cm-body">
+        <div class="cm-info-strip">
+          ℹ️ Your message will be sent to our reservation team at <strong>reservation@base-fare.com</strong>
+          and linked to your e-ticket automatically.
+        </div>
+
+        <label class="cm-label" for="cm-message">Your Message</label>
+        <textarea
+          id="cm-message"
+          placeholder="Type your question, concern, or note here…"
+          maxlength="3000"
+          oninput="updateCharCount(this)"
+          aria-describedby="cm-char-count"
+        ></textarea>
+        <div class="cm-char-count" id="cm-char-count">0 / 3000</div>
+
+        <div id="cm-error-banner" role="alert"></div>
+
+        <div class="cm-footer">
+          <button class="cm-btn-cancel" onclick="closeContactModal()" type="button">Cancel</button>
+          <button class="cm-btn-send" id="cm-send-btn" onclick="submitContactForm()" type="button">
+            <span>📤</span> Send Message
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success view (shown after send) -->
+    <div id="cm-success">
+      <div class="cm-success-icon">✓</div>
+      <div class="cm-success-title">Message Sent!</div>
+      <div class="cm-success-sub">
+        Your message has been received by our reservation team.<br>
+        We'll follow up at <strong><?= htmlspecialchars($eticket->customer_email) ?></strong>.
+      </div>
+      <button class="cm-success-close" onclick="closeContactModal()" type="button">Close</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Contact Modal Logic ───────────────────────────────────────────────────────
+const ETICKET_TOKEN = <?= json_encode($eticket->token) ?>;
+
+function openContactModal() {
+    document.getElementById('contact-overlay').classList.add('active');
+    setTimeout(() => document.getElementById('cm-message').focus(), 50);
+}
+
+function closeContactModal() {
+    document.getElementById('contact-overlay').classList.remove('active');
+    // Reset to form view for next open
+    document.getElementById('cm-form-view').style.display = '';
+    document.getElementById('cm-success').style.display = 'none';
+    document.getElementById('cm-message').value = '';
+    document.getElementById('cm-char-count').textContent = '0 / 3000';
+    document.getElementById('cm-char-count').classList.remove('over');
+    document.getElementById('cm-error-banner').style.display = 'none';
+    document.getElementById('cm-send-btn').disabled = false;
+}
+
+function updateCharCount(el) {
+    const len = el.value.length;
+    const counter = document.getElementById('cm-char-count');
+    counter.textContent = len + ' / 3000';
+    counter.classList.toggle('over', len >= 3000);
+}
+
+async function submitContactForm() {
+    const message = document.getElementById('cm-message').value.trim();
+    const sendBtn = document.getElementById('cm-send-btn');
+    const errBanner = document.getElementById('cm-error-banner');
+
+    // Client-side validation
+    if (!message) {
+        showContactError('Please enter a message before sending.');
+        return;
+    }
+    if (message.length > 3000) {
+        showContactError('Message exceeds the 3000 character limit.');
+        return;
+    }
+
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '<span>⏳</span> Sending…';
+    errBanner.style.display = 'none';
+
+    try {
+        const formData = new FormData();
+        formData.append('token', ETICKET_TOKEN);
+        formData.append('message', message);
+
+        const res = await fetch('/eticket/contact', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            // Show success panel
+            document.getElementById('cm-form-view').style.display = 'none';
+            document.getElementById('cm-success').style.display = 'block';
+        } else {
+            showContactError(data.error || 'Something went wrong. Please try again.');
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = '<span>📤</span> Send Message';
+        }
+    } catch (err) {
+        showContactError('Network error. Please check your connection and try again.');
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = '<span>📤</span> Send Message';
+    }
+}
+
+function showContactError(msg) {
+    const el = document.getElementById('cm-error-banner');
+    el.textContent = '⚠ ' + msg;
+    el.style.display = 'block';
+}
+
+// Close modal on overlay click (not on modal itself)
+document.getElementById('contact-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeContactModal();
+});
+
+// Close on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('contact-overlay').classList.contains('active')) {
+        closeContactModal();
+    }
+});
+</script>
+
 </body>
 </html>

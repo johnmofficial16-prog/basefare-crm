@@ -121,8 +121,116 @@ class ETicketEmailService
     }
 
     // =========================================================================
+    // SEND CONTACT FORM MESSAGE NOTICE TO FIRM
+    // =========================================================================
+
+    /**
+     * Send notification to reservation@base-fare.com when a customer sends
+     * a message via the public e-ticket "Contact Us" dialog.
+     *
+     * Contains the customer's full message text so the team can action it.
+     *
+     * @param  ETicket $eticket
+     * @param  string  $customerMessage  The message the customer typed
+     * @return array {success}
+     */
+    public function sendContactNotice(ETicket $eticket, string $customerMessage): array
+    {
+        $subject = sprintf(
+            'E-Ticket Contact Message — %s | PNR: %s',
+            $eticket->customer_name,
+            $eticket->pnr
+        );
+
+        try {
+            $mail = $this->getMailer();
+            $mail->addAddress(self::SUPPORT_EMAIL, self::SUPPORT_NAME);
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body    = $this->buildContactNoticeHtml($eticket, $customerMessage);
+            $mail->AltBody = $this->buildContactNoticePlain($eticket, $customerMessage);
+            $mail->send();
+
+            $this->log($eticket, $subject, self::SUPPORT_EMAIL, 'CONTACT_NOTICE_SENT');
+            return ['success' => true];
+
+        } catch (Exception $e) {
+            $this->log($eticket, $subject, self::SUPPORT_EMAIL, 'CONTACT_NOTICE_ERROR: ' . ($mail->ErrorInfo ?? $e->getMessage()));
+            return ['success' => false, 'error' => $mail->ErrorInfo ?? $e->getMessage()];
+        }
+    }
+
+    /**
+     * Build the HTML body for the internal contact notice email.
+     */
+    private function buildContactNoticeHtml(ETicket $eticket, string $customerMessage): string
+    {
+        $name   = htmlspecialchars($eticket->customer_name);
+        $email  = htmlspecialchars($eticket->customer_email);
+        $pnr    = htmlspecialchars($eticket->pnr);
+        $id     = 'ET-' . str_pad($eticket->id, 6, '0', STR_PAD_LEFT);
+        $msg    = nl2br(htmlspecialchars($customerMessage));
+        $sentAt = date('F j, Y \a\t g:i:s A T');
+
+        return <<<HTML
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>E-Ticket Contact Message</title></head>
+<body style="font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;margin:0;padding:20px;">
+  <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+    <div style="background:#1a3a6b;padding:20px 28px;">
+      <div style="color:#fff;font-size:16px;font-weight:800;">&#128172; Customer Contact Message</div>
+      <div style="color:#93c5fd;font-size:12px;margin-top:3px;">Customer sent a message via their e-ticket page.</div>
+    </div>
+    <div style="padding:24px 28px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <tr><td style="padding:8px 0;color:#94a3b8;width:140px;">E-Ticket ID</td><td style="padding:8px 0;font-weight:700;color:#0f1e3c;font-family:monospace;">{$id}</td></tr>
+        <tr><td style="padding:8px 0;color:#94a3b8;">Customer</td><td style="padding:8px 0;font-weight:600;color:#1e293b;">{$name}</td></tr>
+        <tr><td style="padding:8px 0;color:#94a3b8;">Email</td><td style="padding:8px 0;color:#1e293b;">{$email}</td></tr>
+        <tr><td style="padding:8px 0;color:#94a3b8;">PNR</td><td style="padding:8px 0;font-weight:700;font-family:monospace;color:#0f1e3c;">{$pnr}</td></tr>
+        <tr><td style="padding:8px 0;color:#94a3b8;">Sent At</td><td style="padding:8px 0;font-weight:600;color:#1a3a6b;">{$sentAt}</td></tr>
+      </table>
+      <div style="margin-top:20px;">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:8px;">Customer's Message</div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 18px;font-size:13px;color:#1e293b;line-height:1.75;">{$msg}</div>
+      </div>
+      <div style="margin-top:16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;font-size:12px;color:#1e40af;line-height:1.6;">
+        This message has been stored in the CRM. E-ticket status updated to <strong>Acknowledged</strong>.
+      </div>
+    </div>
+    <div style="background:#f8fafc;padding:12px 28px;text-align:center;font-size:10px;color:#94a3b8;border-top:1px solid #e2e8f0;">
+      Lets Fly Travel DBA Base Fare &mdash; Internal CRM Notification
+    </div>
+  </div>
+</body>
+</html>
+HTML;
+    }
+
+    /**
+     * Build the plain text fallback for the internal contact notice email.
+     */
+    private function buildContactNoticePlain(ETicket $eticket, string $customerMessage): string
+    {
+        $id   = 'ET-' . str_pad($eticket->id, 6, '0', STR_PAD_LEFT);
+        $body  = "CUSTOMER CONTACT MESSAGE\n";
+        $body .= "========================\n\n";
+        $body .= "E-Ticket ID: {$id}\n";
+        $body .= "Customer:    {$eticket->customer_name}\n";
+        $body .= "Email:       {$eticket->customer_email}\n";
+        $body .= "PNR:         {$eticket->pnr}\n";
+        $body .= "Sent At:     " . date('Y-m-d H:i:s') . "\n\n";
+        $body .= "--- Customer Message ---\n";
+        $body .= $customerMessage . "\n";
+        $body .= "------------------------\n\n";
+        $body .= "This message has been stored in the CRM. E-ticket status set to Acknowledged.\n";
+        return $body;
+    }
+
+    // =========================================================================
     // SUBJECT LINE
     // =========================================================================
+
 
     public function buildSubject(ETicket $eticket): string
     {

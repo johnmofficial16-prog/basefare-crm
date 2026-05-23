@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ETicket;
+use App\Models\ETicketReply;
 use App\Models\Transaction;
 use App\Models\AcceptanceRequest;
 use App\Models\RecordNote;
@@ -242,10 +243,109 @@ class ETicketService
             'acknowledged_at' => Carbon::now(),
             'acknowledged_ip' => $forensicData['ip']         ?? null,
             'acknowledged_ua' => $forensicData['user_agent'] ?? null,
+            'ack_type'        => 'button',
         ]);
 
         RecordNote::log('eticket', $eticket->id, 0,
             'E-Ticket acknowledged by customer. IP: ' . ($forensicData['ip'] ?? 'unknown'), 'acknowledged');
+
+        return true;
+    }
+
+    /**
+     * Process acknowledgment via the public web contact form.
+     *
+     * Always stores a reply in eticket_replies (even if already acknowledged).
+     * Only sets status to 'acknowledged' and ack_type on the first acknowledgment.
+     *
+     * @param  ETicket $eticket
+     * @param  string  $message     The customer's typed message
+     * @param  array   $forensicData IP + user_agent from the request
+     * @return bool
+     */
+    public function processContactAcknowledgment(ETicket $eticket, string $message, array $forensicData): bool
+    {
+        $ip = $forensicData['ip'] ?? null;
+        $ua = $forensicData['user_agent'] ?? null;
+
+        // Store the reply regardless of current status
+        ETicketReply::createWebContact(
+            eticketId:   $eticket->id,
+            body:        $message,
+            senderEmail: $eticket->customer_email,
+            senderIp:    $ip    ?? 'unknown',
+            senderUa:    $ua    ?? 'unknown'
+        );
+
+        // Only update status + ack_type on the first acknowledgment
+        if (!$eticket->isAcknowledged()) {
+            $eticket->update([
+                'status'          => ETicket::STATUS_ACKNOWLEDGED,
+                'acknowledged_at' => Carbon::now(),
+                'acknowledged_ip' => $ip,
+                'acknowledged_ua' => $ua,
+                'ack_type'        => 'web_contact',
+            ]);
+        }
+
+        RecordNote::log(
+            'eticket',
+            $eticket->id,
+            0,
+            'Customer sent a contact message via the e-ticket page. IP: ' . ($ip ?? 'unknown'),
+            'acknowledged'
+        );
+
+        return true;
+    }
+
+    /**
+     * Process acknowledgment via a parsed inbound email reply.
+     *
+     * Called by the IMAP cron script. Same logic as processContactAcknowledgment:
+     * always stores the reply, only flips status on the first acknowledgment.
+     *
+     * @param  ETicket      $eticket
+     * @param  string       $subject      Email subject line
+     * @param  string       $body         Decoded email body (plain text)
+     * @param  string       $senderEmail  The From address of the inbound email
+     * @param  string|null  $rawHeaders   Full raw headers for audit trail
+     * @return bool
+     */
+    public function processEmailReplyAcknowledgment(
+        ETicket $eticket,
+        string  $subject,
+        string  $body,
+        string  $senderEmail,
+        ?string $rawHeaders = null
+    ): bool {
+        // Store the reply regardless of current status
+        ETicketReply::createEmailReply(
+            eticketId:   $eticket->id,
+            body:        $body,
+            senderEmail: $senderEmail,
+            subject:     $subject,
+            rawHeaders:  $rawHeaders
+        );
+
+        // Only update status + ack_type on the first acknowledgment
+        if (!$eticket->isAcknowledged()) {
+            $eticket->update([
+                'status'          => ETicket::STATUS_ACKNOWLEDGED,
+                'acknowledged_at' => Carbon::now(),
+                'acknowledged_ip' => null, // IP not available for email replies
+                'acknowledged_ua' => null,
+                'ack_type'        => 'email_reply',
+            ]);
+        }
+
+        RecordNote::log(
+            'eticket',
+            $eticket->id,
+            0,
+            'Customer replied via email. From: ' . $senderEmail . ' | Subject: ' . $subject,
+            'acknowledged'
+        );
 
         return true;
     }

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
+use App\Models\ETicketReply;
 
 /**
  * ETicket — Electronic Ticket record.
@@ -106,6 +107,7 @@ class ETicket extends Model
         'acknowledged_at',
         'acknowledged_ip',
         'acknowledged_ua',
+        'ack_type',
     ];
 
     // =========================================================================
@@ -141,6 +143,15 @@ class ETicket extends Model
     public function agent()
     {
         return $this->belongsTo(User::class, 'agent_id');
+    }
+
+    /**
+     * Customer replies — web contact form messages and email replies.
+     * One e-ticket can have many replies (append-only).
+     */
+    public function replies()
+    {
+        return $this->hasMany(ETicketReply::class, 'eticket_id')->orderBy('created_at', 'asc');
     }
 
     // =========================================================================

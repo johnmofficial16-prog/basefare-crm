@@ -288,4 +288,5 @@ $app->group('/etickets', function ($group) {
 // ==========================================================================
 $app->get('/eticket',             [ETicketController::class, 'publicView']);
 $app->post('/eticket/acknowledge',[ETicketController::class, 'publicAcknowledge']);
+$app->post('/eticket/contact',    [ETicketController::class, 'publicContact']);
 $app->get('/eticket/confirmed',   [ETicketController::class, 'publicConfirmed']);

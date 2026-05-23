@@ -138,6 +138,15 @@ tailwind.config = {
               <?php if ($et->acknowledged_at): ?>
               <div class="text-[10px] text-slate-400 mt-0.5"><?= $et->acknowledged_at->format('M j, g:i A') ?></div>
               <?php endif; ?>
+              <?php if ($isAdmin && $et->ack_type && $et->ack_type !== 'button'): ?>
+              <div class="text-[10px] mt-0.5">
+                <?php if ($et->ack_type === 'web_contact'): ?>
+                <span class="text-blue-500" title="Acknowledged via Contact Form">💬 Contact Form</span>
+                <?php elseif ($et->ack_type === 'email_reply'): ?>
+                <span class="text-violet-500" title="Acknowledged via Email Reply">📧 Email Reply</span>
+                <?php endif; ?>
+              </div>
+              <?php endif; ?>
             </td>
             <?php if ($isAdmin): ?>
             <td class="px-4 py-3 text-xs text-slate-500"><?= htmlspecialchars($et->agent?->name ?? '—') ?></td>

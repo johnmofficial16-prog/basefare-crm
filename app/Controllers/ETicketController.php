@@ -358,6 +358,71 @@ class ETicketController
     }
 
     // =========================================================================
+    // PUBLIC — CONTACT FORM (POST /eticket/contact)
+    // =========================================================================
+
+    /**
+     * Handle the customer's "Contact Us" message submitted on the public e-ticket page.
+     *
+     * - Validates token and message.
+     * - Calls ETicketService::processContactAcknowledgment() (stores reply + flips status once).
+     * - Calls ETicketEmailService::sendContactNotice() (internal email to reservation@).
+     * - Returns JSON {success: true} — consumed by the page AJAX handler.
+     *
+     * Rate-limiting protection: if the customer sends more than 10 messages
+     * in a single session the request is rejected to prevent abuse.
+     */
+    public function publicContact(Request $request, Response $response): Response
+    {
+        $body    = $request->getParsedBody() ?? [];
+        $token   = trim($body['token']   ?? '');
+        $message = trim($body['message'] ?? '');
+
+        // --- Validate inputs ---
+        if (empty($token)) {
+            return $this->jsonError($response, 'Invalid request.', 400);
+        }
+        if (empty($message)) {
+            return $this->jsonError($response, 'Please enter a message before sending.', 422);
+        }
+        if (mb_strlen($message) > 3000) {
+            return $this->jsonError($response, 'Message is too long (max 3000 characters).', 422);
+        }
+
+        // --- Rate-limit: max 10 contact messages per session ---
+        $sessionKey = 'eticket_contact_count_' . md5($token);
+        $count = (int) ($_SESSION[$sessionKey] ?? 0);
+        if ($count >= 10) {
+            return $this->jsonError($response, 'Too many messages sent. Please contact us directly.', 429);
+        }
+
+        // --- Find the e-ticket ---
+        $eticket = $this->service->findByToken($token);
+        if (!$eticket) {
+            return $this->jsonError($response, 'E-ticket not found.', 404);
+        }
+
+        // --- Process the reply (stores in eticket_replies, flips status if first time) ---
+        $forensic = $this->service->collectForensicData();
+        $this->service->processContactAcknowledgment($eticket, $message, $forensic);
+
+        // --- Notify the firm via email (fire and forget — failure is non-fatal) ---
+        try {
+            $this->emailService->sendContactNotice($eticket->fresh(), $message);
+        } catch (\Throwable $e) {
+            // Email failure must not break the customer-facing response
+            error_log('[ETicket] sendContactNotice failed: ' . $e->getMessage());
+        }
+
+        // --- Increment session counter ---
+        $_SESSION[$sessionKey] = $count + 1;
+
+        // --- Return success JSON ---
+        $response->getBody()->write(json_encode(['success' => true]));
+        return $response->withHeader('Content-Type', 'application/json')->withStatus(200);
+    }
+
+    // =========================================================================
     // PRIVATE HELPERS
     // =========================================================================
 
