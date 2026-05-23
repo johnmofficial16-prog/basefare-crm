@@ -455,7 +455,7 @@ tailwind.config = {
           <span class="material-symbols-outlined text-3xl text-emerald-500 block mb-1">verified</span>
           <p class="text-sm font-extrabold text-emerald-700">Acknowledged</p>
           <p class="text-[10px] text-emerald-600 mt-0.5"><?= $et->acknowledged_at->format('F j, Y \a\t g:i A') ?></p>
-          <?php if ($et->ack_type): ?>
+          <?php if ($isAdmin && $et->ack_type): ?>
           <?php
             $ackTypeLabel = match($et->ack_type) {
                 'web_contact'  => ['💬', 'Via Contact Form',  'bg-blue-50 text-blue-600 border-blue-100'],
