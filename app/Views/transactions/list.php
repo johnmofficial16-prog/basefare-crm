@@ -17,9 +17,10 @@ $page    = $data['page'];
 $filters = $filters ?? [];
 $userId  = $_SESSION['user_id'];
 $userRole = $_SESSION['role'] ?? 'agent';
-$isAdmin = in_array($userRole, ['admin','manager']);
+$isAdmin = ($userRole === 'admin');
+$isManager = ($userRole === 'manager');
 // Universal search: agents can search all records (read-only). Only used for display column logic.
-$isSearchingAll = !$isAdmin && !empty($filters['search']);
+$isSearchingAll = !$isAdmin && !$isManager && !empty($filters['search']);
 
 // Quick stats
 $todayCount   = 0;
@@ -55,6 +56,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
 <?php if ($isAdmin): ?>
 <?php $activePage = 'transactions'; require __DIR__ . '/../partials/admin_sidebar.php'; ?>
+<?php elseif ($isManager): ?>
+<?php $activePage = 'transactions'; require __DIR__ . '/../partials/manager_sidebar.php'; ?>
 <?php else: ?>
 <?php $activePage = 'transactions'; require __DIR__ . '/../partials/agent_sidebar.php'; ?>
 <?php endif; ?>
@@ -79,10 +82,12 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         <span class="material-symbols-outlined text-base">download</span> Export CSV
       </a>
       <?php endif; ?>
+      <?php if (!$isManager): ?>
       <a href="/transactions/create"
         class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary-container shadow-lg shadow-primary/20 transition-all text-sm">
         <span class="material-symbols-outlined text-base">add_card</span> Record Transaction
       </a>
+      <?php endif; ?>
     </div>
   </div>
 
@@ -179,7 +184,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">MCO</th>
             <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Card</th>
             <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
-            <?php if ($isAdmin || $isSearchingAll): ?>
+            <?php if ($isAdmin || $isManager || $isSearchingAll): ?>
             <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Agent</th>
             <?php endif; ?>
             <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date</th>
@@ -244,7 +249,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               <span class="ml-1 inline-block px-2 py-0.5 text-[10px] font-bold rounded-full <?= $dc ?>"><?= htmlspecialchars($dl) ?></span>
               <?php endif; ?>
             </td>
-            <?php if ($isAdmin || $isSearchingAll): ?>
+            <?php if ($isAdmin || $isManager || $isSearchingAll): ?>
             <td class="px-4 py-3 text-xs text-slate-500"><?= htmlspecialchars($t->agent->name ?? '—') ?></td>
             <?php endif; ?>
             <td class="px-4 py-3 text-xs text-slate-400"><?= date('M d, Y g:i A', strtotime($t->created_at)) ?></td>

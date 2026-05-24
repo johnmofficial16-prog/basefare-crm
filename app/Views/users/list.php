@@ -80,6 +80,7 @@ tailwind.config = {
         <p class="text-slate-500 text-sm mt-1"><?= number_format($total) ?> user<?= $total !== 1 ? 's' : '' ?> total</p>
       </div>
       <div class="flex items-center gap-2">
+        <?php if ($actorRole === 'admin'): ?>
         <a id="btn-csv-users"
            href="/users/export?<?= http_build_query(array_filter($filters)) ?>"
            class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-colors shadow-sm"
@@ -92,6 +93,7 @@ tailwind.config = {
           <span class="material-symbols-outlined text-base">person_add</span>
           Add User
         </a>
+        <?php endif; ?>
       </div>
     </div>
 

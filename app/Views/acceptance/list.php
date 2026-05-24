@@ -17,7 +17,8 @@ $totalPages = $data['total_pages'];
 $filters    = $filters ?? [];
 
 $userRole   = $_SESSION['role'] ?? 'agent';
-$isAdmin    = in_array($userRole, ['admin', 'manager']);
+$isAdmin    = ($userRole === 'admin');
+$isManager  = ($userRole === 'manager');
 
 $flashError   = $_SESSION['flash_error'] ?? null;
 $flashSuccess = $_SESSION['flash_success'] ?? null;
@@ -109,6 +110,7 @@ tailwind.config = {
           Export CSV
         </a>
         <?php endif; ?>
+        <?php if (!$isManager): ?>
         <a href="/acceptance/create?mode=preauth"
            class="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-colors shadow-sm"
            title="Quick Pre-Authorization — no fare breakdown, just total amount">
@@ -120,6 +122,7 @@ tailwind.config = {
           <span class="material-symbols-outlined text-base">add_circle</span>
           Full Acceptance
         </a>
+        <?php endif; ?>
       </div>
     </div>
 
@@ -232,10 +235,12 @@ tailwind.config = {
               <td colspan="10" class="py-20 text-center">
                 <div class="flex flex-col items-center gap-3 text-slate-400">
                   <span class="material-symbols-outlined text-5xl opacity-30">inbox</span>
-                  <p class="font-semibold text-slate-500">No acceptance requests found.</p>
-                  <a href="/acceptance/create" class="text-primary-600 text-sm font-semibold hover:underline">
-                    Create your first one →
-                  </a>
+                   <p class="font-semibold text-slate-500">No acceptance requests found.</p>
+                   <?php if (!$isManager): ?>
+                   <a href="/acceptance/create" class="text-primary-600 text-sm font-semibold hover:underline">
+                     Create your first one &rarr;
+                   </a>
+                   <?php endif; ?>
                 </div>
               </td>
             </tr>
@@ -327,14 +332,14 @@ tailwind.config = {
                   </a>
                   <?php endif; ?>
 
-                  <?php if (in_array($row->email_status, ['PENDING', 'FAILED']) && $row->status === 'PENDING'): ?>
+                  <?php if (in_array($row->email_status, ['PENDING', 'FAILED']) && $row->status === 'PENDING' && !$isManager): ?>
                   <button onclick="resendAcceptance(<?= $row->id ?>)"
                           class="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors">
                     <span class="material-symbols-outlined text-sm">send</span> Resend
                   </button>
                   <?php endif; ?>
 
-                  <?php if (!empty($row->is_preauth) && $row->status === 'APPROVED'): ?>
+                  <?php if (!empty($row->is_preauth) && $row->status === 'APPROVED' && !$isManager): ?>
                   <a href="/acceptance/create?from_preauth=<?= $row->id ?>"
                      class="inline-flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold py-1.5 px-2.5 rounded-lg text-xs transition-colors"
                      title="Create Full Acceptance from this pre-auth">

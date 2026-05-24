@@ -1074,7 +1074,7 @@ tailwind.config = {
           <p class="text-xs text-slate-500 mt-1"><?= $expiryLabel ?></p>
           <?php endif; ?>
         </div>
-        <?php if ($isPending): ?>
+        <?php if ($isPending && !in_array($_SESSION['role'] ?? '', ['manager'])): ?>
         <div class="border-t border-slate-100 px-4 py-3">
           <button onclick="doResend()" class="w-full bg-primary-600 hover:bg-primary-500 text-white font-bold text-sm py-2.5 rounded-lg transition-colors">
             Resend Link Now
