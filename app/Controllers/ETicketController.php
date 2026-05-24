@@ -35,7 +35,7 @@ class ETicketController
     {
         $role     = $_SESSION['role']    ?? 'agent';
         $userId   = (int)($_SESSION['user_id'] ?? 0);
-        $isAdmin  = in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR]);
+        $isAdmin  = in_array($role, [User::ROLE_ADMIN, User::ROLE_SUPERVISOR]);
 
         $params  = $request->getQueryParams();
         $page    = max(1, (int)($params['page'] ?? 1));
@@ -47,12 +47,17 @@ class ETicketController
             'date_to'   => $params['date_to']    ?? '',
         ];
 
-        // Supervisors scoped to team — simplified: use agentId for non-admins
-        $agentId = ($isAdmin || $role === User::ROLE_CSA) ? null : $userId;
+        if ($role === User::ROLE_MANAGER) {
+            // Managers see only their team's e-tickets
+            $teamIds = $this->getManagerTeamIds($userId);
+            $result  = $this->service->list($page, 25, $filters, null, $teamIds);
+        } elseif ($isAdmin || $role === User::ROLE_CSA) {
+            $result = $this->service->list($page, 25, $filters, null);
+        } else {
+            $result = $this->service->list($page, 25, $filters, $userId);
+        }
 
-        $result = $this->service->list($page, 25, $filters, $agentId);
-
-        $view = $result + ['filters' => $filters, 'role' => $role, 'isAdmin' => $isAdmin];
+        $view = $result + ['filters' => $filters, 'role' => $role, 'isAdmin' => ($isAdmin || $role === User::ROLE_MANAGER)];
         return $this->render($response, 'eticket/list.php', $view);
     }
 
@@ -64,10 +69,11 @@ class ETicketController
     {
         $role    = $_SESSION['role']    ?? 'agent';
         $userId  = (int)($_SESSION['user_id'] ?? 0);
-        $isAdmin = in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
+        $isAdmin = ($role === User::ROLE_ADMIN);
 
-        if ($role === User::ROLE_CSA) {
-            $_SESSION['flash_error'] = 'Access denied. CSA cannot create e-tickets.';
+        // Managers and CSA cannot create e-tickets
+        if ($role === User::ROLE_CSA || $role === User::ROLE_MANAGER) {
+            $_SESSION['flash_error'] = 'Access denied.';
             return $response->withHeader('Location', '/etickets')->withStatus(302);
         }
 
@@ -92,8 +98,8 @@ class ETicketController
         $role    = $_SESSION['role'] ?? 'agent';
         $body    = $request->getParsedBody() ?? [];
 
-        if ($role === User::ROLE_CSA) {
-            return $response->withHeader('Location', '/etickets?error=' . urlencode('Access denied. CSA cannot create e-tickets.'))->withStatus(302);
+        if ($role === User::ROLE_CSA || $role === User::ROLE_MANAGER) {
+            return $response->withHeader('Location', '/etickets?error=' . urlencode('Access denied.'))->withStatus(302);
         }
 
         // CSRF
@@ -182,7 +188,20 @@ class ETicketController
 
     public function view(Request $request, Response $response, array $args): Response
     {
+        $role   = $_SESSION['role'] ?? 'agent';
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+
         $eticket = ETicket::with(['agent', 'transaction'])->findOrFail((int)$args['id']);
+
+        // Manager: only allow access to own team's e-tickets
+        if ($role === User::ROLE_MANAGER) {
+            $teamIds = $this->getManagerTeamIds($userId);
+            if (!in_array($eticket->agent_id, $teamIds)) {
+                $_SESSION['flash_error'] = 'Access denied.';
+                return $response->withHeader('Location', '/etickets')->withStatus(302);
+            }
+        }
+
         $notes   = RecordNote::where('entity_type', 'eticket')
             ->where('entity_id', $eticket->id)
             ->orderBy('created_at', 'asc')
@@ -206,7 +225,8 @@ class ETicketController
         $body    = $request->getParsedBody() ?? [];
         $role    = $_SESSION['role'] ?? 'agent';
 
-        if ($role === User::ROLE_CSA) {
+        // Managers and CSA cannot send e-ticket emails
+        if ($role === User::ROLE_CSA || $role === User::ROLE_MANAGER) {
             return $response->withHeader('Location', '/etickets/' . $eticket->id . '?send_error=1')->withStatus(302);
         }
 
@@ -264,7 +284,7 @@ class ETicketController
     {
         $role    = $_SESSION['role']    ?? 'agent';
         $userId  = (int)($_SESSION['user_id'] ?? 0);
-        $isAdmin = in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
+        $isAdmin = ($role === User::ROLE_ADMIN);
         $agentId = $isAdmin ? null : $userId;
 
         $options = $this->service->getAutofillOptions($agentId);
@@ -450,5 +470,17 @@ class ETicketController
     {
         $response->getBody()->write(json_encode(['success' => false, 'error' => $message]));
         return $response->withHeader('Content-Type', 'application/json')->withStatus($status);
+    }
+
+    /**
+     * Returns the IDs of agents directly reporting to the given manager.
+     * Returns [-1] if the manager has no assigned agents.
+     */
+    private function getManagerTeamIds(int $managerId): array
+    {
+        $manager = \App\Models\User::find($managerId);
+        if (!$manager) return [-1];
+        $ids = $manager->getTeamAgentIds();
+        return empty($ids) ? [-1] : $ids;
     }
 }

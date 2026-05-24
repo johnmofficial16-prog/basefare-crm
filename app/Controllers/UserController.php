@@ -24,6 +24,7 @@ class UserController
     {
         $this->requireAdminOrManager($response);
 
+        $actorId   = (int)$_SESSION['user_id'];
         $actorRole = $_SESSION['role'] ?? 'agent';
         $params    = $request->getQueryParams();
         $page      = max(1, (int) ($params['page'] ?? 1));
@@ -33,8 +34,12 @@ class UserController
             'status' => $params['status'] ?? '',
         ];
 
-        // Non-admins cannot see admin accounts at all
-        if ($actorRole !== 'admin') {
+        if ($actorRole === User::ROLE_MANAGER) {
+            // Managers only see agents directly assigned to them
+            $teamIds = $this->getManagerTeamIds($actorId);
+            $filters['only_ids'] = $teamIds;
+        } elseif ($actorRole !== User::ROLE_ADMIN) {
+            // Non-admins cannot see admin accounts
             $filters['exclude_roles'] = ['admin'];
         }
 
@@ -60,6 +65,12 @@ class UserController
     public function createForm(Request $request, Response $response): Response
     {
         $this->requireAdminOrManager($response);
+
+        // Managers cannot create users
+        if (($_SESSION['role'] ?? '') === User::ROLE_MANAGER) {
+            $_SESSION['flash_error'] = 'Managers cannot create users.';
+            return $response->withHeader('Location', '/users')->withStatus(302);
+        }
 
         $activePage = 'users';
         $actorRole  = $_SESSION['role'] ?? 'agent';
@@ -90,6 +101,12 @@ class UserController
     {
         $this->requireAdminOrManager($response);
 
+        // Managers cannot create users
+        if (($_SESSION['role'] ?? '') === User::ROLE_MANAGER) {
+            $_SESSION['flash_error'] = 'Managers cannot create users.';
+            return $response->withHeader('Location', '/users')->withStatus(302);
+        }
+
         $body   = $request->getParsedBody() ?? [];
         $result = $this->svc->create($body, (int) $_SESSION['user_id']);
 
@@ -110,6 +127,12 @@ class UserController
     public function editForm(Request $request, Response $response, array $args): Response
     {
         $this->requireAdminOrManager($response);
+
+        // Managers cannot edit users
+        if (($_SESSION['role'] ?? '') === User::ROLE_MANAGER) {
+            $_SESSION['flash_error'] = 'Managers cannot edit user accounts.';
+            return $response->withHeader('Location', '/users')->withStatus(302);
+        }
 
         $userId = (int) ($args['id'] ?? 0);
         $user   = User::whereNull('deleted_at')->find($userId);
@@ -155,6 +178,12 @@ class UserController
     {
         $this->requireAdminOrManager($response);
 
+        // Managers cannot edit users
+        if (($_SESSION['role'] ?? '') === User::ROLE_MANAGER) {
+            $_SESSION['flash_error'] = 'Managers cannot edit user accounts.';
+            return $response->withHeader('Location', '/users')->withStatus(302);
+        }
+
         $userId = (int) ($args['id'] ?? 0);
         $body   = $request->getParsedBody() ?? [];
         $result = $this->svc->update($userId, $body, (int) $_SESSION['user_id']);
@@ -177,6 +206,12 @@ class UserController
     {
         $this->requireAdminOrManager($response);
 
+        // Managers cannot toggle status
+        if (($_SESSION['role'] ?? '') === User::ROLE_MANAGER) {
+            $response->getBody()->write(json_encode(['success' => false, 'error' => 'Managers cannot change user status.']));
+            return $response->withHeader('Content-Type', 'application/json')->withStatus(403);
+        }
+
         $userId = (int) ($args['id'] ?? 0);
         $result = $this->svc->toggleStatus($userId, (int) $_SESSION['user_id']);
 
@@ -190,17 +225,26 @@ class UserController
 
     public function resetPassword(Request $request, Response $response, array $args): Response
     {
-        // Password reset is admin-only
-        if (($_SESSION['role'] ?? '') !== User::ROLE_ADMIN) {
-            $response->getBody()->write(json_encode(['success' => false, 'error' => 'Admins only.']));
+        $actorId   = (int)$_SESSION['user_id'];
+        $actorRole = $_SESSION['role'] ?? '';
+        $targetId  = (int) ($args['id'] ?? 0);
+
+        if ($actorRole === User::ROLE_MANAGER) {
+            // Managers can only reset passwords for their direct-report agents
+            $teamIds = $this->getManagerTeamIds($actorId);
+            if (!in_array($targetId, $teamIds)) {
+                $response->getBody()->write(json_encode(['success' => false, 'error' => 'You can only reset passwords for agents assigned to you.']));
+                return $response->withHeader('Content-Type', 'application/json')->withStatus(403);
+            }
+        } elseif ($actorRole !== User::ROLE_ADMIN) {
+            $response->getBody()->write(json_encode(['success' => false, 'error' => 'Access denied.']));
             return $response->withHeader('Content-Type', 'application/json')->withStatus(403);
         }
 
-        $userId  = (int) ($args['id'] ?? 0);
         $body    = $request->getParsedBody() ?? [];
         $newPass = $body['new_password'] ?? '';
 
-        $result = $this->svc->resetPassword($userId, $newPass, (int) $_SESSION['user_id']);
+        $result = $this->svc->resetPassword($targetId, $newPass, $actorId);
 
         $response->getBody()->write(json_encode($result));
         return $response->withHeader('Content-Type', 'application/json');
@@ -213,6 +257,12 @@ class UserController
     public function delete(Request $request, Response $response, array $args): Response
     {
         $this->requireAdminOrManager($response);
+
+        // Managers cannot delete users
+        if (($_SESSION['role'] ?? '') === User::ROLE_MANAGER) {
+            $_SESSION['flash_error'] = 'Managers cannot delete user accounts.';
+            return $response->withHeader('Location', '/users')->withStatus(302);
+        }
 
         $userId = (int) ($args['id'] ?? 0);
         $result = $this->svc->delete($userId, (int) $_SESSION['user_id']);
@@ -233,6 +283,12 @@ class UserController
     public function exportCsv(Request $request, Response $response): Response
     {
         $this->requireAdminOrManager($response);
+
+        // Managers cannot export the user list
+        if (($_SESSION['role'] ?? '') === User::ROLE_MANAGER) {
+            $response->getBody()->write('Access denied.');
+            return $response->withStatus(403);
+        }
 
         $params  = $request->getQueryParams();
         $filters = [
@@ -291,7 +347,7 @@ class UserController
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Guards
+    // Guards & Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
     /** Allows admin and manager. Supervisor/agent are denied. */
@@ -303,5 +359,18 @@ class UserController
             header('Location: /dashboard');
             exit;
         }
+    }
+
+    /**
+     * Returns the IDs of agents directly reporting to the given manager.
+     * Returns [-1] if the manager has no assigned agents, ensuring queries
+     * return empty results rather than all records.
+     */
+    private function getManagerTeamIds(int $managerId): array
+    {
+        $manager = User::find($managerId);
+        if (!$manager) return [-1];
+        $ids = $manager->getTeamAgentIds();
+        return empty($ids) ? [-1] : $ids;
     }
 }

@@ -35,6 +35,11 @@ class UserService
             }
         }
 
+        // Scope to a specific set of user IDs (used by manager to show only their team)
+        if (!empty($filters['only_ids']) && is_array($filters['only_ids'])) {
+            $query->whereIn('id', $filters['only_ids']);
+        }
+
         // Search by name or email
         if (!empty($filters['search'])) {
             $s = '%' . $filters['search'] . '%';

@@ -15,11 +15,13 @@
 $userName = $_SESSION['user_name'] ?? 'User';
 $role     = $_SESSION['role']     ?? 'agent';
 
-$isAdmin      = in_array($role, ['admin', 'manager']);
-$isSupervisor = $role === 'supervisor';
+$isAdmin      = ($role === 'admin');
+$isManager    = ($role === 'manager');
+$isSupervisor = ($role === 'supervisor');
 $isAgent      = in_array($role, ['agent', 'csa']);
 
 $dd  = $dashboardData  ?? [];
+$md  = $managerData    ?? [];
 $sd  = $supervisorData ?? [];
 $ad  = $agentData      ?? [];
 
@@ -73,6 +75,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 <?php $activePage = 'dashboard'; ?>
 <?php if ($isAdmin): ?>
   <?php require __DIR__ . '/partials/admin_sidebar.php'; ?>
+<?php elseif ($isManager): ?>
+  <?php require __DIR__ . '/partials/manager_sidebar.php'; ?>
 <?php elseif ($isSupervisor): ?>
   <?php require __DIR__ . '/partials/supervisor_sidebar.php'; ?>
 <?php else: ?>
@@ -89,7 +93,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       </h1>
       <p class="text-[#434653] font-medium opacity-70"><?= date('l, F j, Y') ?></p>
     </div>
-    <?php if ($isAdmin || $isSupervisor): ?>
+    <?php if ($isAdmin || $isSupervisor || $isManager): ?>
     <div class="flex gap-2">
       <a href="/acceptance/create" class="inline-flex items-center gap-1.5 bg-primary text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-[#314a8d] transition-colors shadow-sm">
         <span class="material-symbols-outlined text-base">add</span> New Acceptance
@@ -366,6 +370,121 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
   </div>
 
   <?php endif; /* end admin section */ ?>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- MANAGER SECTION (team-scoped KPIs, no company financials) -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <?php if ($isManager && !empty($md)): ?>
+
+  <!-- Team KPI Cards -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+    <a href="/acceptance?status=PENDING" class="kpi-card bg-white border <?= $md['team_pending_acc'] > 0 ? 'border-rose-300 ring-2 ring-rose-200' : 'border-slate-200' ?> rounded-2xl p-4 shadow-sm">
+      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Team Pending Auth</p>
+      <p class="text-3xl font-headline font-extrabold <?= $md['team_pending_acc'] > 0 ? 'text-rose-600' : 'text-slate-400' ?>"><?= $md['team_pending_acc'] ?></p>
+    </a>
+    <a href="/acceptance" class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Team Auth Today</p>
+      <p class="text-3xl font-headline font-extrabold text-violet-700"><?= $md['team_today_new_acc'] ?></p>
+    </a>
+    <a href="/transactions" class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Team Txns Today</p>
+      <p class="text-3xl font-headline font-extrabold text-blue-700"><?= $md['team_today_count'] ?></p>
+      <?php if ($md['team_pending_rev'] > 0): ?><p class="text-[10px] text-amber-600 font-bold mt-1"><?= $md['team_pending_rev'] ?> need review</p><?php endif; ?>
+    </a>
+    <div class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Team Revenue Today</p>
+      <p class="text-xl font-headline font-extrabold text-primary"><?= htmlspecialchars($currency) ?> <?= number_format($md['team_today_rev'], 0) ?></p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+
+    <!-- Team Members Status -->
+    <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/60 flex items-center gap-2">
+        <span class="material-symbols-outlined text-primary text-xl">group</span>
+        <h2 class="font-headline font-extrabold text-slate-900">My Team</h2>
+      </div>
+      <div class="divide-y divide-slate-50">
+        <?php if (empty($md['agent_statuses'])): ?>
+        <div class="text-center py-8 text-slate-400 text-sm">No agents assigned to you yet</div>
+        <?php endif; ?>
+        <?php foreach ($md['agent_statuses'] as $agent): ?>
+        <div class="flex items-center gap-3 px-5 py-3">
+          <div class="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-primary font-bold text-xs flex-none">
+            <?= strtoupper(substr($agent['name'], 0, 1)) ?>
+          </div>
+          <div class="flex-1 min-w-0"><p class="text-sm font-semibold text-slate-900 truncate"><?= htmlspecialchars($agent['name']) ?></p></div>
+          <div><?= dbAttBadge($agent['state'] ?? 'not_clocked_in', $agent['late_min'] ?? 0) ?></div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+
+    <!-- Pending Transactions (read-only for manager) -->
+    <div class="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-amber-500 text-xl">pending_actions</span>
+          <h2 class="font-headline font-extrabold text-slate-900">Team Pending Transactions</h2>
+        </div>
+        <a href="/transactions?status=pending_review" class="text-xs font-semibold text-primary hover:underline">View all</a>
+      </div>
+      <div class="divide-y divide-slate-50">
+        <?php if ($md['pending_approvals']->isEmpty()): ?>
+        <div class="text-center py-8 text-slate-400"><span class="material-symbols-outlined text-3xl mb-2 block">task_alt</span><p class="text-sm font-semibold">No pending transactions</p></div>
+        <?php endif; ?>
+        <?php foreach ($md['pending_approvals'] as $txn): ?>
+        <a href="/transactions/<?= $txn->id ?>" class="flex items-center gap-4 px-6 py-3 hover:bg-amber-50 transition-colors">
+          <div class="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center flex-none"><span class="material-symbols-outlined text-amber-600 text-sm">payments</span></div>
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold text-slate-900 truncate"><?= htmlspecialchars($txn->customer_name) ?></p>
+            <p class="text-[11px] text-slate-500">Txn #<?= $txn->id ?> · <?= dbTypeLabel($txn->type) ?> · by <?= $txn->agent?->name ?? '—' ?></p>
+          </div>
+          <div class="text-right flex-none">
+            <p class="text-sm font-bold text-slate-800"><?= $txn->currency ?> <?= number_format($txn->total_amount, 2) ?></p>
+            <p class="text-[10px] text-slate-400"><?= date('g:i A', strtotime($txn->created_at)) ?></p>
+          </div>
+          <span class="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">View →</span>
+        </a>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  </div>
+
+  <!-- Team Recent Transactions -->
+  <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
+      <div class="flex items-center gap-2"><span class="material-symbols-outlined text-primary text-xl">history</span><h2 class="font-headline font-extrabold text-slate-900">Team Recent Transactions</h2></div>
+      <a href="/transactions" class="text-xs font-semibold text-primary hover:underline">All transactions →</a>
+    </div>
+    <div class="divide-y divide-slate-50">
+      <?php if ($md['team_recent_txns']->isEmpty()): ?>
+      <div class="text-center py-8 text-slate-400 text-sm">No transactions recorded yet</div>
+      <?php endif; ?>
+      <?php foreach ($md['team_recent_txns'] as $txn): ?>
+      <a href="/transactions/<?= $txn->id ?>" class="flex items-center gap-4 px-6 py-3 hover:bg-slate-50/80 transition-colors">
+        <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-none"><span class="material-symbols-outlined text-blue-600 text-sm">payments</span></div>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold text-slate-900 truncate"><?= htmlspecialchars($txn->customer_name) ?></p>
+          <p class="text-[11px] text-slate-500">Txn #<?= $txn->id ?> · <?= dbTypeLabel($txn->type) ?> · <?= $txn->agent?->name ?? '—' ?></p>
+        </div>
+        <div class="text-right flex-none">
+          <p class="text-sm font-bold text-slate-800"><?= $txn->currency ?> <?= number_format($txn->total_amount, 2) ?></p>
+          <p class="text-[10px] text-slate-400"><?= date('M j, g:i A', strtotime($txn->created_at)) ?></p>
+        </div>
+        <div><?= dbStatusBadge($txn->status) ?></div>
+      </a>
+      <?php endforeach; ?>
+    </div>
+  </div>
+
+  <?php elseif ($isManager): ?>
+  <div class="bg-amber-50 border border-amber-200 rounded-2xl p-6 mb-8 flex items-center gap-3">
+    <span class="material-symbols-outlined text-amber-600 text-2xl">info</span>
+    <div><p class="font-bold text-amber-900">No team members assigned yet</p><p class="text-sm text-amber-700">Ask an admin to assign agents to you via User Management.</p></div>
+  </div>
+  <?php endif; ?>
 
   <!-- ═══════════════════════════════════════════════════════════════════════ -->
   <!-- SUPERVISOR SECTION -->

@@ -131,15 +131,15 @@ $app->group('/users', function ($group) {
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
 
-// Payroll / Salary Slip Maker (admin + manager only)
+// Payroll / Salary Slip Maker (admin only)
 $app->group('/payroll', function ($group) {
     $group->get('', [PayrollController::class, 'slipMaker']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
-->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
 
-// Travel Vouchers (admin + manager only)
+// Travel Vouchers (admin only)
 $app->group('/vouchers', function ($group) {
     $group->get('', [VoucherController::class, 'index']);
     $group->get('/maker', [VoucherController::class, 'maker']);
@@ -149,7 +149,7 @@ $app->group('/vouchers', function ($group) {
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
-->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
 
 $app->group('/admin', function ($group) {
     $group->get('/settings', [AdminController::class, 'settings']);
@@ -164,7 +164,7 @@ $app->group('/admin', function ($group) {
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
-->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
 
 // ==========================================================================
 // Mobile Admin Quick Panel (admin + manager, NO AttendanceGate — so admin
@@ -174,7 +174,7 @@ $app->group('/admin/mobile', function ($group) {
     $group->get('', [MobileAdminController::class, 'page']);
 })
 ->add(new IpRestrictionMiddleware())
-->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
 
 $app->group('/api/admin/mobile', function ($group) {
     $group->get('/data',         [MobileAdminController::class, 'dashboardData']);
@@ -182,7 +182,7 @@ $app->group('/api/admin/mobile', function ($group) {
     $group->get('/actions',      [MobileAdminController::class, 'actionsData']);
 })
 ->add(new IpRestrictionMiddleware())
-->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
 
 // ==========================================================================
 // Acceptance Module — Agent-facing (behind Auth + AttendanceGate)
@@ -258,7 +258,7 @@ $app->get('/', function ($request, $response) {
     $isMobile = preg_match('/Mobile|Android|iPhone|iPad|iPod/i', $userAgent);
     $role = $_SESSION['role'] ?? '';
     
-    if ($isMobile && in_array($role, [\App\Models\User::ROLE_ADMIN, \App\Models\User::ROLE_MANAGER])) {
+    if ($isMobile && $role === \App\Models\User::ROLE_ADMIN) {
         return $response->withHeader('Location', '/admin/mobile')->withStatus(302);
     }
     

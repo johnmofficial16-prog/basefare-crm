@@ -41,15 +41,22 @@ class TransactionController
             'date_to'        => $params['date_to'] ?? '',
         ];
 
-        $isElevated   = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
+        $isAdmin      = ($userRole === User::ROLE_ADMIN);
+        $isManager    = ($userRole === User::ROLE_MANAGER);
         $isSupervisor = ($userRole === User::ROLE_SUPERVISOR);
         $isCsa        = ($userRole === User::ROLE_CSA);
 
         $agentIds = null;
         $agentFilter = null;
 
-        if ($isElevated || $isCsa) {
+        if ($isAdmin || $isCsa) {
             // unrestricted
+        } elseif ($isManager) {
+            // Manager sees only their team's transactions
+            $teamIds  = $this->getManagerTeamIds((int)$userId);
+            if (empty($filters['search'])) {
+                $agentIds = $teamIds;
+            }
         } elseif ($isSupervisor) {
             $actor = \App\Models\User::find($userId);
             $teamIds = $actor ? $actor->getTeamAgentIds() : [];
@@ -217,7 +224,14 @@ class TransactionController
             return $response->withHeader('Location', '/transactions')->withStatus(302);
         }
 
-        if (!$isAdmin && $userRole !== User::ROLE_CSA && $txn->agent_id !== $userId) {
+        // Manager: only allow access to own team's transactions
+        if ($userRole === User::ROLE_MANAGER) {
+            $teamIds = $this->getManagerTeamIds((int)$userId);
+            if (!in_array($txn->agent_id, $teamIds)) {
+                $_SESSION['flash_error'] = 'Access denied.';
+                return $response->withHeader('Location', '/transactions')->withStatus(302);
+            }
+        } elseif (!$isAdmin && $userRole !== User::ROLE_CSA && $txn->agent_id !== $userId) {
             $_SESSION['flash_error'] = 'Access denied.';
             return $response->withHeader('Location', '/transactions')->withStatus(302);
         }
@@ -240,6 +254,7 @@ class TransactionController
     public function viewProof(Request $request, Response $response, array $args): Response
     {
         $id       = (int)$args['id'];
+        $userId   = $_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
         $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
 
@@ -252,6 +267,15 @@ class TransactionController
         if (!$txn || empty($txn->proof_of_sale_path)) {
             $response->getBody()->write('Proof of sale document not found.');
             return $response->withStatus(404);
+        }
+
+        // Manager: only allow access to own team's transactions
+        if ($userRole === User::ROLE_MANAGER) {
+            $teamIds = $this->getManagerTeamIds((int)$userId);
+            if (!in_array($txn->agent_id, $teamIds)) {
+                $response->getBody()->write('Access denied.');
+                return $response->withStatus(403);
+            }
         }
 
         // Normalise — may be legacy string or JSON array
@@ -284,10 +308,11 @@ class TransactionController
     {
         $id       = (int)$args['id'];
         $userRole = $_SESSION['role'] ?? 'agent';
-        $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
+        $isAdmin  = ($userRole === User::ROLE_ADMIN);
 
-        if ($userRole === User::ROLE_CSA) {
-            $_SESSION['flash_error'] = 'Access denied. CSA cannot edit transactions.';
+        // Managers and CSA cannot edit transactions
+        if ($userRole === User::ROLE_MANAGER || $userRole === User::ROLE_CSA) {
+            $_SESSION['flash_error'] = 'Access denied.';
             return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
         }
 
@@ -321,9 +346,11 @@ class TransactionController
         $id   = (int)$args['id'];
         $body = $request->getParsedBody();
         $userRole = $_SESSION['role'] ?? 'agent';
+        $isAdmin  = ($userRole === User::ROLE_ADMIN);
 
-        if ($userRole === User::ROLE_CSA) {
-            $_SESSION['flash_error'] = 'Access denied. CSA cannot edit transactions.';
+        // Managers and CSA cannot edit transactions
+        if ($userRole === User::ROLE_MANAGER || $userRole === User::ROLE_CSA) {
+            $_SESSION['flash_error'] = 'Access denied.';
             return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
         }
 
@@ -331,9 +358,6 @@ class TransactionController
         $typeData   = !empty($body['type_specific_data_json'])
             ? json_decode($body['type_specific_data_json'], true)
             : null;
-
-        $userRole = $_SESSION['role'] ?? 'agent';
-        $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
 
         // Mandatory notes for audit on edit
         if (empty(trim($body['agent_notes'] ?? ''))) {
@@ -400,6 +424,20 @@ class TransactionController
             return $this->jsonResponse($response, ['error' => 'Admin access required.'], 403);
         }
 
+        // Manager: verify the card belongs to a transaction of their team
+        if ($userRole === User::ROLE_MANAGER) {
+            $card = \App\Models\PaymentCard::find($cardId);
+            if ($card) {
+                $txn = Transaction::find($card->transaction_id);
+                if ($txn) {
+                    $teamIds = $this->getManagerTeamIds((int)$adminId);
+                    if (!in_array($txn->agent_id, $teamIds)) {
+                        return $this->jsonResponse($response, ['error' => 'Access denied.'], 403);
+                    }
+                }
+            }
+        }
+
         try {
             $cardData = $this->service->revealCard($cardId, $adminId, $password);
             $payload  = ['success' => true, 'data' => $cardData];
@@ -446,7 +484,13 @@ class TransactionController
         $userId    = (int)$_SESSION['user_id'];
         $userRole  = $_SESSION['role'] ?? 'agent';
 
-        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])) {
+        // Managers are read-only — no approval
+        if ($userRole === User::ROLE_MANAGER) {
+            $_SESSION['flash_error'] = 'Managers cannot approve transactions.';
+            return $response->withHeader('Location', '/transactions')->withStatus(302);
+        }
+
+        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_SUPERVISOR])) {
             $_SESSION['flash_error'] = 'You do not have permission to approve transactions.';
             return $response->withHeader('Location', '/transactions')->withStatus(302);
         }
@@ -472,8 +516,8 @@ class TransactionController
         $userId   = (int)$_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
 
-        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
-            $_SESSION['flash_error'] = 'Only managers and admins can void transactions.';
+        if (!in_array($userRole, [User::ROLE_ADMIN])) {
+            $_SESSION['flash_error'] = 'Only admins can void transactions.';
             return $response->withHeader('Location', '/transactions')->withStatus(302);
         }
 
@@ -500,7 +544,8 @@ class TransactionController
         $userId   = (int)$_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
 
-        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        // Managers are read-only — dispute management is admin-only
+        if ($userRole !== User::ROLE_ADMIN) {
             return $this->jsonResponse($response, ['error' => 'Admin access required.'], 403);
         }
 
@@ -554,7 +599,8 @@ class TransactionController
         $userId   = (int)$_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
 
-        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        // Managers are read-only — gateway management is admin-only
+        if ($userRole !== User::ROLE_ADMIN) {
             return $this->jsonResponse($response, ['error' => 'Admin access required.'], 403);
         }
 
@@ -606,9 +652,15 @@ class TransactionController
     {
         $userId   = $_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
-        $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
+        $isAdmin  = ($userRole === User::ROLE_ADMIN);
 
-        $options = $this->service->getAutofillOptions($isAdmin ? null : $userId);
+        if ($userRole === User::ROLE_MANAGER) {
+            // Manager sees only their team agents in autofill
+            $teamIds = $this->getManagerTeamIds((int)$userId);
+            $options = $this->service->getAutofillOptions(null, $teamIds);
+        } else {
+            $options = $this->service->getAutofillOptions($isAdmin ? null : $userId);
+        }
 
         return $this->jsonResponse($response, ['success' => true, 'options' => $options]);
     }
@@ -660,6 +712,7 @@ class TransactionController
 
     public function exportCsv(Request $request, Response $response): Response
     {
+        $userId   = (int)$_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
         if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
             $response->getBody()->write('Access denied.');
@@ -677,8 +730,13 @@ class TransactionController
             'date_to'        => $params['date_to'] ?? '',
         ];
 
-        // All records matching filters, no pagination cap
-        $all   = $this->service->list(1, 99999, $filters, null, null);
+        // Manager: scope export to their team only
+        $agentIds = null;
+        if ($userRole === User::ROLE_MANAGER) {
+            $agentIds = $this->getManagerTeamIds($userId);
+        }
+
+        $all   = $this->service->list(1, 99999, $filters, null, $agentIds);
         $items = $all['items'];
 
         $headers = [
@@ -736,6 +794,18 @@ class TransactionController
             ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
             ->withHeader('Cache-Control', 'no-cache, no-store')
             ->withHeader('Pragma', 'no-cache');
+    }
+
+    /**
+     * Returns the IDs of agents directly reporting to the given manager.
+     * Returns [-1] if the manager has no assigned agents.
+     */
+    private function getManagerTeamIds(int $managerId): array
+    {
+        $manager = \App\Models\User::find($managerId);
+        if (!$manager) return [-1];
+        $ids = $manager->getTeamAgentIds();
+        return empty($ids) ? [-1] : $ids;
     }
 
     // =========================================================================

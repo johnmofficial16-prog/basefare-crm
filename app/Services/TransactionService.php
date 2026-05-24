@@ -509,10 +509,11 @@ class TransactionService
      * Get list of approved acceptance requests for autofill dropdown.
      * Returns recent first, limited set of fields.
      *
-     * @param  int|null $agentId  Restrict to agent's acceptances
+     * @param  int|null   $agentId   Restrict to a single agent's acceptances
+     * @param  array|null $agentIds  Restrict to a set of agent IDs (team scope)
      * @return array
      */
-    public function getAutofillOptions(?int $agentId = null): array
+    public function getAutofillOptions(?int $agentId = null, ?array $agentIds = null): array
     {
         $query = AcceptanceRequest::where('status', 'APPROVED')
             ->doesntHave('transaction')
@@ -521,6 +522,8 @@ class TransactionService
 
         if ($agentId) {
             $query->where('agent_id', $agentId);
+        } elseif ($agentIds !== null) {
+            $query->whereIn('agent_id', $agentIds);
         }
 
         return $query->get(['id', 'customer_name', 'pnr', 'type', 'total_amount', 'approved_at'])

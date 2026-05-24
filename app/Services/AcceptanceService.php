@@ -512,6 +512,11 @@ class AcceptanceService
             $query->forAgent($agentId);
         }
 
+        // Team restriction (manager sees only their direct-report agents)
+        if (!empty($filters['only_agent_ids']) && is_array($filters['only_agent_ids'])) {
+            $query->whereIn('agent_id', $filters['only_agent_ids']);
+        }
+
         // Filters
         if (!empty($filters['status'])) {
             $query->where('status', $filters['status']);

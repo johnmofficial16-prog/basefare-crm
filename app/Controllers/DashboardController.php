@@ -29,8 +29,8 @@ class DashboardController
         $userId = $_SESSION['user_id'];
         $role   = $_SESSION['role'] ?? 'agent';
 
-        // Auto-redirect mobile admins/managers to the mobile panel
-        if (in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        // Auto-redirect mobile admins to the mobile panel
+        if ($role === User::ROLE_ADMIN) {
             $userAgent = $request->getHeaderLine('User-Agent');
             if (preg_match('/Mobile|Android|iPhone|iPad|iPod/i', $userAgent)) {
                 return $response->withHeader('Location', '/admin/mobile')->withStatus(302);
@@ -79,16 +79,16 @@ class DashboardController
 
         // ── Attendance board counts (admin / manager / supervisor) ────────────
         $adminCounts = null;
-        if (in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if ($role === User::ROLE_ADMIN) {
             $bd = $this->attendanceService->getLiveBoardData();
             $adminCounts = [
                 'in' => count($bd['in']), 'on_break' => count($bd['on_break']),
                 'completed' => count($bd['completed']), 'absent' => count($bd['absent']),
                 'pending' => count($bd['pending_override']),
             ];
-        } elseif ($role === User::ROLE_SUPERVISOR) {
-            $sup     = User::find($userId);
-            $teamIds = $sup ? $sup->getTeamAgentIds() : [];
+        } elseif (in_array($role, [User::ROLE_MANAGER, User::ROLE_SUPERVISOR])) {
+            $actor   = User::find($userId);
+            $teamIds = $actor ? $actor->getTeamAgentIds() : [];
             if (!empty($teamIds)) {
                 $bd = $this->attendanceService->getLiveBoardData($teamIds);
                 $adminCounts = [
@@ -107,10 +107,10 @@ class DashboardController
         $monthLabel = $monthStart->format('M j') . ' – ' . $monthEnd->format('M j, Y');
 
         // =====================================================================
-        // ADMIN / MANAGER — full business dashboard
+        // ADMIN — full company business dashboard
         // =====================================================================
         $dashboardData = null;
-        if (in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if ($role === User::ROLE_ADMIN) {
 
             // Acceptance KPIs
             $pendingAcc    = AcceptanceRequest::where('status', AcceptanceRequest::STATUS_PENDING)
@@ -222,6 +222,73 @@ class DashboardController
                 'pending_txn_list'    => $pendingTxnList,
                 'month_label'         => $monthLabel,
             ];
+        }
+
+        // =====================================================================
+        // MANAGER — team-scoped dashboard (mirrors supervisor)
+        // =====================================================================
+        $managerData = null;
+        if ($role === User::ROLE_MANAGER) {
+            $mgr     = User::find($userId);
+            $teamIds = $mgr ? $mgr->getTeamAgentIds() : [];
+
+            if (!empty($teamIds)) {
+                // Team acceptance KPIs
+                $teamPendingAcc   = AcceptanceRequest::where('status', AcceptanceRequest::STATUS_PENDING)
+                                        ->where('is_preauth', false)
+                                        ->whereIn('agent_id', $teamIds)->count();
+                $teamTodayNewAcc  = AcceptanceRequest::whereBetween('created_at', [$todayStart, $todayEnd])
+                                        ->whereIn('agent_id', $teamIds)->count();
+
+                // Team transaction KPIs — today
+                $teamTodayBase      = fn() => Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
+                                         ->where('status', '!=', Transaction::STATUS_VOIDED)
+                                         ->whereIn('agent_id', $teamIds);
+                $teamTodayCount     = $teamTodayBase()->count();
+                $teamTodayRevenue   = (float) $teamTodayBase()->sum('total_amount');
+                $teamPendingReview  = Transaction::where('status', Transaction::STATUS_PENDING)
+                                         ->whereIn('agent_id', $teamIds)->count();
+
+                // Pending transactions
+                $pendingApprovals = Transaction::where('status', Transaction::STATUS_PENDING)
+                    ->whereIn('agent_id', $teamIds)->with('agent:id,name')->latest()->limit(8)
+                    ->get(['id','agent_id','customer_name','type','total_amount','currency','created_at']);
+
+                // Agent statuses
+                $teamMembers = User::whereIn('id', $teamIds)
+                    ->where('status', User::STATUS_ACTIVE)->get(['id','name']);
+
+                $agentStatuses = [];
+                foreach ($teamMembers as $member) {
+                    $sess = \App\Models\AttendanceSession::forUser($member->id)->forDate(date('Y-m-d'))
+                        ->latest('id')->first();
+                    $agentStatuses[] = [
+                        'id'       => $member->id,
+                        'name'     => $member->name,
+                        'status'   => $sess?->status ?? 'absent',
+                        'late_min' => $sess?->late_minutes ?? 0,
+                        'state'    => $this->attendanceService->getCurrentState($member->id)['state'] ?? 'not_clocked_in',
+                    ];
+                }
+
+                // Recent team activity
+                $teamRecentTxns = Transaction::whereIn('agent_id', $teamIds)
+                    ->with('agent:id,name')->latest()->limit(8)
+                    ->get(['id','agent_id','customer_name','type','total_amount','currency','status','created_at']);
+
+                $managerData = [
+                    'team_ids'           => $teamIds,
+                    'team_pending_acc'   => $teamPendingAcc,
+                    'team_today_new_acc' => $teamTodayNewAcc,
+                    'team_today_count'   => $teamTodayCount,
+                    'team_today_rev'     => $teamTodayRevenue,
+                    'team_pending_rev'   => $teamPendingReview,
+                    'pending_approvals'  => $pendingApprovals,
+                    'agent_statuses'     => $agentStatuses,
+                    'team_recent_txns'   => $teamRecentTxns,
+                    'month_label'        => $monthLabel,
+                ];
+            }
         }
 
         // =====================================================================

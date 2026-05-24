@@ -40,9 +40,26 @@ class ShiftController
         $weekDates = $this->getWeekDates($weekStart);
         $templates = ShiftTemplate::orderBy('name')->get();
 
-        // Supervisors only see their own team; managers/admins see everyone
-        $supervisorId = ($actorRole === User::ROLE_SUPERVISOR) ? $actorId : null;
-        $agents       = $this->shiftService->getActiveAgents($supervisorId);
+        // Supervisors only see their own team; managers see only their own team; admins see everyone
+        if ($actorRole === User::ROLE_SUPERVISOR) {
+            $supervisorId = $actorId;
+        } elseif ($actorRole === User::ROLE_MANAGER) {
+            $supervisorId = null; // getActiveAgents with managerId handled below
+        } else {
+            $supervisorId = null;
+        }
+
+        // For managers, scope to their direct reports
+        if ($actorRole === User::ROLE_MANAGER) {
+            $manager = \App\Models\User::find($actorId);
+            $teamIds = $manager ? $manager->getTeamAgentIds() : [];
+            $agents  = \App\Models\User::whereIn('id', count($teamIds) ? $teamIds : [-1])
+                ->where('status', \App\Models\User::STATUS_ACTIVE)
+                ->orderBy('name')
+                ->get();
+        } else {
+            $agents = $this->shiftService->getActiveAgents($supervisorId);
+        }
         $grid         = $this->shiftService->getWeekSchedule($weekStart);
 
         // Pending approvals badge for managers/admins
