@@ -99,11 +99,7 @@ tailwind.config = {
 </head>
 <body style="background:#f4f6fb;font-family:Inter,sans-serif;min-height:100vh;">
 
-<?php if ($isAdmin): ?>
-<?php $activePage = 'transactions'; require __DIR__ . '/../partials/admin_sidebar.php'; ?>
-<?php else: ?>
-<?php $activePage = 'transactions'; require __DIR__ . '/../partials/agent_sidebar.php'; ?>
-<?php endif; ?>
+<?php $activePage = 'transactions'; require __DIR__ . '/../layout/sidebar.php'; ?>
 
 <main class="ml-60" style="padding: 24px 32px 80px; max-width: 1100px;">
 

@@ -63,7 +63,7 @@ tailwind.config = {
 <body class="bg-background font-body text-on-surface antialiased overflow-x-hidden">
 
 <!-- Shared Admin Sidebar -->
-<?php $activePage = 'shifts'; require __DIR__ . '/../partials/admin_sidebar.php'; ?>
+<?php $activePage = 'shifts'; require __DIR__ . '/../layout/sidebar.php'; ?>
 
 <!-- Main Content -->
 <main class="ml-60 pt-8 pb-20 px-10 min-h-screen bg-surface">

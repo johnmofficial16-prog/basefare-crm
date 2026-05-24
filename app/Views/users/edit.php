@@ -46,7 +46,7 @@ tailwind.config = {
 </head>
 <body class="bg-[#f8f9fa] font-sans text-slate-900 antialiased min-h-screen">
 
-<?php $activePage = 'users'; require __DIR__ . '/../partials/admin_sidebar.php'; ?>
+<?php $activePage = 'users'; require __DIR__ . '/../layout/sidebar.php'; ?>
 
 <main class="ml-60 pt-6 pb-20 px-8">
 

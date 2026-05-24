@@ -9,8 +9,12 @@
  */
 $activePage = $activePage ?? 'acceptance';
 $_sidebarRole = $_SESSION['role'] ?? 'agent';
-if (in_array($_sidebarRole, ['admin', 'manager', 'supervisor'])) {
+if ($_sidebarRole === 'admin') {
     require __DIR__ . '/../partials/admin_sidebar.php';
+} elseif ($_sidebarRole === 'manager') {
+    require __DIR__ . '/../partials/manager_sidebar.php';
+} elseif ($_sidebarRole === 'supervisor') {
+    require __DIR__ . '/../partials/supervisor_sidebar.php';
 } else {
     require __DIR__ . '/../partials/agent_sidebar.php';
 }

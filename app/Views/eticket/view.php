@@ -49,11 +49,7 @@ tailwind.config = {
 </head>
 <body class="bg-slate-50 font-sans min-h-screen">
 
-<?php if ($isAdmin): ?>
-<?php require __DIR__ . '/../partials/admin_sidebar.php'; ?>
-<?php else: ?>
-<?php require __DIR__ . '/../partials/agent_sidebar.php'; ?>
-<?php endif; ?>
+<?php require __DIR__ . '/../layout/sidebar.php'; ?>
 
 <main class="ml-60 pt-6 pb-20 px-8">
 

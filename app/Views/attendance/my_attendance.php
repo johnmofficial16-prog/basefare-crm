@@ -55,11 +55,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 <?php $role = $_SESSION['role'] ?? 'agent'; ?>
 <body class="bg-background font-body text-on-surface antialiased min-h-screen">
 
-<?php if (in_array($role, ['admin', 'manager'])): ?>
-  <?php $activePage = 'attendance'; require __DIR__ . '/../partials/admin_sidebar.php'; ?>
-<?php else: ?>
-  <?php $activePage = 'attendance'; require __DIR__ . '/../partials/agent_sidebar.php'; ?>
-<?php endif; ?>
+<?php $activePage = 'attendance'; require __DIR__ . '/../layout/sidebar.php'; ?>
 
 <main class="ml-60 pt-8 pb-20 px-8 max-w-6xl">
 

@@ -16,7 +16,7 @@ $navItems = [
     ['href' => '/shifts/week',              'icon' => 'calendar_month', 'label' => 'Shift Schedule', 'key' => 'shifts'],
     ['href' => '/acceptance',              'icon' => 'verified',       'label' => 'Acceptance',     'key' => 'acceptance'],
     ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',   'key' => 'transactions'],
-    ['href' => '/etickets',                 'icon' => 'confirmation_number', 'label' => 'E-Tickets', 'key' => 'eticket'],
+    ['href' => '/etickets',                 'icon' => 'airplane_ticket', 'label' => 'E-Tickets', 'key' => 'etickets'],
     ['href' => '/users',                    'icon' => 'manage_accounts', 'label' => 'My Team',       'key' => 'users'],
 ];
 ?>

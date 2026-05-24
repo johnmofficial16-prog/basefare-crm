@@ -80,11 +80,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','Manr
 </head>
 <body class="bg-[#f8f9fa] font-sans text-slate-900 antialiased min-h-screen">
 
-<?php if ($isAdmin): ?>
-<?php require __DIR__ . '/../partials/admin_sidebar.php'; ?>
-<?php else: ?>
-<?php $activePage = 'transactions'; require __DIR__ . '/../partials/agent_sidebar.php'; ?>
-<?php endif; ?>
+<?php $activePage = 'transactions'; require __DIR__ . '/../layout/sidebar.php'; ?>
 
 <main class="ml-60 pt-6 pb-20 px-8">
 

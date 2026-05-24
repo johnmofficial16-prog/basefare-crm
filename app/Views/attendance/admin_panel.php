@@ -40,7 +40,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
 <!-- Top Nav -->
 <!-- G5: Shared Admin Sidebar -->
-<?php $activePage = 'attendance'; require __DIR__ . '/../partials/admin_sidebar.php'; ?>
+<?php $activePage = 'attendance'; require __DIR__ . '/../layout/sidebar.php'; ?>
 
 <!-- Main Content -->
 <main class="ml-60 pt-8 pb-20 px-10 min-h-screen">

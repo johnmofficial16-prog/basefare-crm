@@ -25,7 +25,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 <body class="bg-background font-body text-on-surface antialiased min-h-screen">
 
 <!-- G5: Shared Admin Sidebar -->
-<?php $activePage = 'history'; require __DIR__ . '/../partials/admin_sidebar.php'; ?>
+<?php $activePage = 'history'; require __DIR__ . '/../layout/sidebar.php'; ?>
 
 <main class="ml-60 pt-8 pb-20 px-10">
 

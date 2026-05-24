@@ -52,7 +52,7 @@ tailwind.config = {
 </head>
 <body class="bg-slate-50 font-sans">
 
-<?php $activePage = 'error_console'; require __DIR__ . '/../partials/admin_sidebar.php'; ?>
+<?php $activePage = 'error_console'; require __DIR__ . '/../layout/sidebar.php'; ?>
 
 <div class="ml-60 min-h-screen">
   <div class="max-w-7xl mx-auto px-8 py-8 space-y-6">

@@ -46,7 +46,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 </head>
 <body class="bg-background font-body text-on-surface antialiased min-h-screen">
 
-<?php $activePage='monthly'; require __DIR__.'/../partials/admin_sidebar.php'; ?>
+<?php $activePage='monthly'; require __DIR__.'/../layout/sidebar.php'; ?>
 
 <main class="ml-60 pt-8 pb-20 px-10">
 

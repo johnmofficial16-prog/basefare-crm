@@ -73,15 +73,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 <body class="bg-[#f8f9fa] font-body text-[#191c1d] antialiased min-h-screen">
 
 <?php $activePage = 'dashboard'; ?>
-<?php if ($isAdmin): ?>
-  <?php require __DIR__ . '/partials/admin_sidebar.php'; ?>
-<?php elseif ($isManager): ?>
-  <?php require __DIR__ . '/partials/manager_sidebar.php'; ?>
-<?php elseif ($isSupervisor): ?>
-  <?php require __DIR__ . '/partials/supervisor_sidebar.php'; ?>
-<?php else: ?>
-  <?php require __DIR__ . '/partials/agent_sidebar.php'; ?>
-<?php endif; ?>
+<?php require __DIR__ . '/layout/sidebar.php'; ?>
 
 <main class="ml-60 pt-8 pb-20 px-10">
 
