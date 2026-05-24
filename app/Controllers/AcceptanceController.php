@@ -805,4 +805,16 @@ class AcceptanceController
             ->withHeader('Cache-Control', 'no-cache, no-store')
             ->withHeader('Pragma', 'no-cache');
     }
+
+    // =========================================================================
+    // PRIVATE HELPER — Manager team IDs
+    // =========================================================================
+
+    private function getManagerTeamIds(int $managerId): array
+    {
+        $manager = \App\Models\User::find($managerId);
+        if (!$manager) return [-1];
+        $ids = $manager->getTeamAgentIds();
+        return empty($ids) ? [-1] : $ids;
+    }
 }
