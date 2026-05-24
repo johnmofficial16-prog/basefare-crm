@@ -90,8 +90,11 @@ $AIRLINES_R = [
 
 $canApprove = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])
               && $txn->status === Transaction::STATUS_PENDING;
-$canVoid    = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])
+$canVoid    = ($userRole === User::ROLE_ADMIN)
               && !$txn->isVoided();
+$canEdit    = $txn->isEditable($userRole === User::ROLE_ADMIN)
+              && $userRole !== User::ROLE_MANAGER
+              && $userRole !== User::ROLE_CSA;
 $isAdminOnly = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
 
 // Dispute & gateway display data
@@ -148,7 +151,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         <span class="material-symbols-outlined text-sm">block</span> Void
       </button>
       <?php endif; ?>
-      <?php if ($txn->isEditable($isAdmin)): ?>
+      <?php if ($canEdit): ?>
       <a href="/transactions/<?= $txn->id ?>/edit" class="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold text-primary border border-primary rounded-lg hover:bg-primary/5 transition-colors">
         <span class="material-symbols-outlined text-sm">edit</span> Edit
       </a>
@@ -614,7 +617,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               <span class="font-mono text-sm text-slate-600"><?= $txn->currency ?> <?= number_format($txn->cost_amount, 2) ?></span>
               <?php else: ?>
               <span class="text-xs text-slate-400 italic">Not set
-                <?php if ($txn->isEditable($isAdmin)): ?>
+                <?php if ($canEdit): ?>
                 <a href="/transactions/<?= $txn->id ?>/edit" class="text-blue-500 not-italic hover:underline">(edit)</a>
                 <?php endif; ?>
               </span>
