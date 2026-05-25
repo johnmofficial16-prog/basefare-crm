@@ -268,7 +268,7 @@ function addPax(data = {}) {
         <div>
           <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Seat</label>
           <input class="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-2 focus:ring-primary/40 font-mono"
-                 name="seat[]" type="text" value="${escHtml(seat)}" placeholder="12A">
+                 name="seat[]" type="text" value="${escHtml(seat)}" placeholder="12A or 12A/23B multi-leg" maxlength="30">
         </div>
       </div>`;
     document.getElementById('pax-rows').appendChild(row);

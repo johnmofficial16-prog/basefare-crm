@@ -172,8 +172,7 @@
                 </select>
               </div>
               <div>
-                <label class="field-label">Seat Number(s)</label>
-                <input type="text" name="seat_number" id="field_seat_number" placeholder="e.g. 14A, 14B" class="field-input">
+                <input type="text" name="seat_number" id="field_seat_number" placeholder="e.g. 14A, 14B or 12A/23B/14C for multi-leg" maxlength="100" class="field-input">
               </div>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
