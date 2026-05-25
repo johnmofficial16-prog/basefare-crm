@@ -1731,9 +1731,9 @@ const paxManager = {
         </div>
         <div class="flex items-center gap-2 pl-1">
           <span class="material-symbols-outlined text-indigo-400 text-sm flex-none">airline_seat_recline_normal</span>
-          <input type="text" value="${_esc(p.seat||'')}" placeholder="Seat e.g. 12A (optional)"
-            maxlength="10"
-            class="w-48 border border-indigo-200 rounded-lg px-2 py-1 text-xs font-mono font-bold uppercase bg-white text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          <input type="text" value="${_esc(p.seat||'')}" placeholder="e.g. 12A or 12A/23B/14C for multi-leg"
+            maxlength="30"
+            class="w-64 border border-indigo-200 rounded-lg px-2 py-1 text-xs font-mono font-bold uppercase bg-white text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-400"
             oninput="paxManager._updatePassenger(${i},'seat',this.value.toUpperCase())">
           <span class="text-[10px] text-slate-400">Seat number for this passenger</span>
         </div>
@@ -1792,8 +1792,8 @@ const seatPurchaseMgr = {
         </span>
         <input type="text"
           class="sp-seat-input flex-1 border border-indigo-200 rounded-lg px-3 py-2 text-sm font-mono font-bold text-indigo-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 uppercase"
-          placeholder="e.g. 12A"
-          maxlength="10"
+          placeholder="e.g. 12A or 12A/23B for multi-leg"
+          maxlength="30"
           data-passenger="${_esc(p.name.trim())}"
           oninput="this.value = this.value.toUpperCase()"
           value="${_esc(existing[p.name.trim()] || '')}">
