@@ -716,7 +716,7 @@ class TransactionController
     {
         $userId   = (int)$_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
-        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if ($userRole !== User::ROLE_ADMIN) {
             $response->getBody()->write('Access denied.');
             return $response->withStatus(403);
         }

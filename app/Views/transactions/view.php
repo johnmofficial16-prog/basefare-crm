@@ -88,14 +88,14 @@ $AIRLINES_R = [
   'TP'=>'TAP Air Portugal','SV'=>'Saudia','MS'=>'EgyptAir','ET'=>'Ethiopian Airlines','AT'=>'Royal Air Maroc',
 ];
 
-$canApprove = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])
+$canApprove = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_SUPERVISOR])
               && $txn->status === Transaction::STATUS_PENDING;
 $canVoid    = ($userRole === User::ROLE_ADMIN)
               && !$txn->isVoided();
 $canEdit    = $txn->isEditable($userRole === User::ROLE_ADMIN)
               && $userRole !== User::ROLE_MANAGER
               && $userRole !== User::ROLE_CSA;
-$isAdminOnly = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER]);
+$isAdminOnly = ($userRole === User::ROLE_ADMIN);
 
 // Dispute & gateway display data
 [$disputeLabel, $disputeClass] = $txn->disputeBadge();

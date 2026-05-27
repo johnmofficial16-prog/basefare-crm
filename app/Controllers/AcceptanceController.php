@@ -56,6 +56,7 @@ class AcceptanceController
         } elseif ($userRole === User::ROLE_MANAGER) {
             // Managers see only their team's records
             $teamIds = $this->getManagerTeamIds((int)$userId);
+            $teamIds = array_unique(array_merge($teamIds, [(int)$userId]));
             $agentFilter = null;
             $filters['only_agent_ids'] = $teamIds;
         } else {
@@ -735,7 +736,7 @@ class AcceptanceController
     {
         $userId   = (int)$_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
-        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if ($userRole !== User::ROLE_ADMIN) {
             $response->getBody()->write('Access denied.');
             return $response->withStatus(403);
         }

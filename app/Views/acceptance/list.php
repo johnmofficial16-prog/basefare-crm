@@ -110,7 +110,7 @@ tailwind.config = {
           Export CSV
         </a>
         <?php endif; ?>
-        <?php if (!$isManager): ?>
+        <?php if ($userRole !== 'csa'): ?>
         <a href="/acceptance/create?mode=preauth"
            class="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-colors shadow-sm"
            title="Quick Pre-Authorization — no fare breakdown, just total amount">
@@ -332,14 +332,14 @@ tailwind.config = {
                   </a>
                   <?php endif; ?>
 
-                  <?php if (in_array($row->email_status, ['PENDING', 'FAILED']) && $row->status === 'PENDING' && !$isManager): ?>
+                  <?php if (in_array($row->email_status, ['PENDING', 'FAILED']) && $row->status === 'PENDING' && $userRole !== 'csa'): ?>
                   <button onclick="resendAcceptance(<?= $row->id ?>)"
                           class="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors">
                     <span class="material-symbols-outlined text-sm">send</span> Resend
                   </button>
                   <?php endif; ?>
 
-                  <?php if (!empty($row->is_preauth) && $row->status === 'APPROVED' && !$isManager): ?>
+                  <?php if (!empty($row->is_preauth) && $row->status === 'APPROVED' && $userRole !== 'csa'): ?>
                   <a href="/acceptance/create?from_preauth=<?= $row->id ?>"
                      class="inline-flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold py-1.5 px-2.5 rounded-lg text-xs transition-colors"
                      title="Create Full Acceptance from this pre-auth">

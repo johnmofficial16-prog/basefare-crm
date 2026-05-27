@@ -76,7 +76,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         <span class="material-symbols-outlined text-base">download</span> Export CSV
       </a>
       <?php endif; ?>
-      <?php if (!$isManager): ?>
+      <?php if ($userRole !== 'csa'): ?>
       <a href="/transactions/create"
         class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary-container shadow-lg shadow-primary/20 transition-all text-sm">
         <span class="material-symbols-outlined text-base">add_card</span> Record Transaction
@@ -197,7 +197,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             // Split: disputed (active) records float to top for agents/supervisors
             $disputed = $items->filter(fn($t) => $t->hasDispute());
             $normal   = $items->reject(fn($t)  => $t->hasDispute());
-            $renderRows = function($list, $isAdmin, $isSearchingAll, $disputed_highlight) use ($txn) {
+            $renderRows = function($list, $isAdmin, $isManager, $isSearchingAll, $disputed_highlight) {
               foreach ($list as $t):
                 [$statusLabel, $statusClass] = $t->statusBadge();
                 $rowClass = $disputed_highlight && $t->hasDispute()
@@ -259,13 +259,13 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               <span class="material-symbols-outlined text-sm">warning</span> Action Required — Active Disputes
             </p>
           </td></tr>
-          <?php $renderRows($disputed, $isAdmin, $isSearchingAll, true); ?>
+          <?php $renderRows($disputed, $isAdmin, $isManager, $isSearchingAll, true); ?>
           <tr><td colspan="<?= $isAdmin ? 10 : 9 ?>" class="px-4 pt-1 pb-2">
             <hr class="border-slate-200">
           </td></tr>
           <?php endif; ?>
-          <?php $renderRows($normal, $isAdmin, $isSearchingAll, $isAdmin); ?>
-          <?php $renderRows($disputed, $isAdmin, $isSearchingAll, true); // admins see disputed inline ?>
+          <?php $renderRows($normal, $isAdmin, $isManager, $isSearchingAll, $isAdmin); ?>
+          <?php $renderRows($disputed, $isAdmin, $isManager, $isSearchingAll, true); // admins see disputed inline ?>
           <?php endif; ?>
         </tbody>
       </table>
