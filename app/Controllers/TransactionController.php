@@ -52,8 +52,10 @@ class TransactionController
         if ($isAdmin || $isCsa) {
             // unrestricted
         } elseif ($isManager) {
-            // Manager sees only their team's transactions
+            // Manager sees their own transactions plus their team's
             $teamIds  = $this->getManagerTeamIds((int)$userId);
+            // Include the manager's own records
+            $teamIds  = array_unique(array_merge($teamIds, [(int)$userId]));
             if (empty($filters['search'])) {
                 $agentIds = $teamIds;
             }
@@ -224,10 +226,10 @@ class TransactionController
             return $response->withHeader('Location', '/transactions')->withStatus(302);
         }
 
-        // Manager: only allow access to own team's transactions
+        // Manager: only allow access to own team's transactions (including ones they created themselves)
         if ($userRole === User::ROLE_MANAGER) {
             $teamIds = $this->getManagerTeamIds((int)$userId);
-            if (!in_array($txn->agent_id, $teamIds)) {
+            if (!in_array($txn->agent_id, $teamIds) && $txn->agent_id !== (int)$userId) {
                 $_SESSION['flash_error'] = 'Access denied.';
                 return $response->withHeader('Location', '/transactions')->withStatus(302);
             }
@@ -269,10 +271,10 @@ class TransactionController
             return $response->withStatus(404);
         }
 
-        // Manager: only allow access to own team's transactions
+        // Manager: only allow access to own team's transactions (including ones they created themselves)
         if ($userRole === User::ROLE_MANAGER) {
             $teamIds = $this->getManagerTeamIds((int)$userId);
-            if (!in_array($txn->agent_id, $teamIds)) {
+            if (!in_array($txn->agent_id, $teamIds) && $txn->agent_id !== (int)$userId) {
                 $response->getBody()->write('Access denied.');
                 return $response->withStatus(403);
             }
@@ -424,14 +426,14 @@ class TransactionController
             return $this->jsonResponse($response, ['error' => 'Admin access required.'], 403);
         }
 
-        // Manager: verify the card belongs to a transaction of their team
+        // Manager: verify the card belongs to a transaction of their team (or their own)
         if ($userRole === User::ROLE_MANAGER) {
             $card = \App\Models\PaymentCard::find($cardId);
             if ($card) {
                 $txn = Transaction::find($card->transaction_id);
                 if ($txn) {
                     $teamIds = $this->getManagerTeamIds((int)$adminId);
-                    if (!in_array($txn->agent_id, $teamIds)) {
+                    if (!in_array($txn->agent_id, $teamIds) && $txn->agent_id !== (int)$adminId) {
                         return $this->jsonResponse($response, ['error' => 'Access denied.'], 403);
                     }
                 }
@@ -730,10 +732,11 @@ class TransactionController
             'date_to'        => $params['date_to'] ?? '',
         ];
 
-        // Manager: scope export to their team only
+        // Manager: scope export to their team + own records
         $agentIds = null;
         if ($userRole === User::ROLE_MANAGER) {
-            $agentIds = $this->getManagerTeamIds($userId);
+            $teamIds  = $this->getManagerTeamIds($userId);
+            $agentIds = array_unique(array_merge($teamIds, [(int)$userId]));
         }
 
         $all   = $this->service->list(1, 99999, $filters, null, $agentIds);

@@ -218,7 +218,7 @@ tailwind.config = {
               <th class="px-5 py-3">#ID</th>
               <th class="px-5 py-3">Date</th>
               <th class="px-5 py-3">Customer</th>
-              <th class="px-5 py-3">PNR</th>
+              <th class="px-5 py-3 max-w-[140px]">PNR</th>
               <th class="px-5 py-3">Type</th>
               <th class="px-5 py-3">Amount</th>
               <th class="px-5 py-3">Status</th>
@@ -267,8 +267,8 @@ tailwind.config = {
                 <div class="font-semibold text-slate-900"><?= htmlspecialchars($row->customer_name) ?></div>
                 <div class="text-[11px] text-slate-400 mt-0.5"><?= htmlspecialchars($row->customer_email) ?></div>
               </td>
-              <td class="px-5 py-3.5">
-                <span class="font-mono font-bold text-primary-600 tracking-widest text-sm">
+              <td class="px-5 py-3.5 max-w-[140px]">
+                <span class="font-mono font-bold text-primary-600 tracking-widest text-sm block truncate" title="<?= htmlspecialchars($row->pnr) ?>">
                   <?= htmlspecialchars($row->pnr) ?>
                 </span>
               </td>

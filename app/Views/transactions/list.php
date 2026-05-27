@@ -173,7 +173,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">ID</th>
             <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Type</th>
             <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Customer</th>
-            <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">PNR</th>
+            <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider max-w-[140px]">PNR</th>
             <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Amount</th>
             <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">MCO</th>
             <th class="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Card</th>
@@ -222,7 +222,9 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               <div class="text-[10px] text-slate-400 font-mono"><?= htmlspecialchars($t->customer_phone) ?></div>
               <?php endif; ?>
             </td>
-            <td class="px-4 py-3 font-mono text-xs font-bold tracking-wider"><?= htmlspecialchars($t->pnr) ?></td>
+            <td class="px-4 py-3 max-w-[140px]">
+              <span class="font-mono text-xs font-bold tracking-wider block truncate" title="<?= htmlspecialchars($t->pnr) ?>"><?= htmlspecialchars($t->pnr) ?></span>
+            </td>
             <td class="px-4 py-3 font-mono text-xs font-bold"><?= $t->currency ?> <?= number_format($t->total_amount, 2) ?></td>
             <td class="px-4 py-3 font-mono text-xs font-bold <?= $t->profit_mco >= 0 ? 'text-emerald-600' : 'text-red-600' ?>">
               <?= $t->profit_mco >= 0 ? '+' : '' ?><?= number_format($t->profit_mco, 2) ?>

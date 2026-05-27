@@ -71,8 +71,8 @@ class ETicketController
         $userId  = (int)($_SESSION['user_id'] ?? 0);
         $isAdmin = ($role === User::ROLE_ADMIN);
 
-        // Managers and CSA cannot create e-tickets
-        if ($role === User::ROLE_CSA || $role === User::ROLE_MANAGER) {
+        // CSA cannot create e-tickets
+        if ($role === User::ROLE_CSA) {
             $_SESSION['flash_error'] = 'Access denied.';
             return $response->withHeader('Location', '/etickets')->withStatus(302);
         }
@@ -98,7 +98,7 @@ class ETicketController
         $role    = $_SESSION['role'] ?? 'agent';
         $body    = $request->getParsedBody() ?? [];
 
-        if ($role === User::ROLE_CSA || $role === User::ROLE_MANAGER) {
+        if ($role === User::ROLE_CSA) {
             return $response->withHeader('Location', '/etickets?error=' . urlencode('Access denied.'))->withStatus(302);
         }
 
@@ -193,10 +193,10 @@ class ETicketController
 
         $eticket = ETicket::with(['agent', 'transaction'])->findOrFail((int)$args['id']);
 
-        // Manager: only allow access to own team's e-tickets
+        // Manager: only allow access to own team's e-tickets (including ones they created themselves)
         if ($role === User::ROLE_MANAGER) {
             $teamIds = $this->getManagerTeamIds($userId);
-            if (!in_array($eticket->agent_id, $teamIds)) {
+            if (!in_array($eticket->agent_id, $teamIds) && $eticket->agent_id !== $userId) {
                 $_SESSION['flash_error'] = 'Access denied.';
                 return $response->withHeader('Location', '/etickets')->withStatus(302);
             }
@@ -225,8 +225,8 @@ class ETicketController
         $body    = $request->getParsedBody() ?? [];
         $role    = $_SESSION['role'] ?? 'agent';
 
-        // Managers and CSA cannot send e-ticket emails
-        if ($role === User::ROLE_CSA || $role === User::ROLE_MANAGER) {
+        // CSA cannot send e-ticket emails
+        if ($role === User::ROLE_CSA) {
             return $response->withHeader('Location', '/etickets/' . $eticket->id . '?send_error=1')->withStatus(302);
         }
 

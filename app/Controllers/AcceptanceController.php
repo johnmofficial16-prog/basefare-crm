@@ -259,10 +259,10 @@ class AcceptanceController
             return $response->withHeader('Location', '/acceptance')->withStatus(302);
         }
 
-        // Manager: only allow access to own team's records
+        // Manager: only allow access to own team's records (including records they created themselves)
         if ($userRole === User::ROLE_MANAGER) {
             $teamIds = $this->getManagerTeamIds((int)$userId);
-            if (!in_array($acceptance->agent_id, $teamIds)) {
+            if (!in_array($acceptance->agent_id, $teamIds) && $acceptance->agent_id !== (int)$userId) {
                 $_SESSION['flash_error'] = 'Access denied.';
                 return $response->withHeader('Location', '/acceptance')->withStatus(302);
             }
@@ -413,10 +413,10 @@ class AcceptanceController
             return $response->withStatus(404);
         }
 
-        // Manager: only allow access to own team's records
+        // Manager: only allow access to own team's records (including records they created themselves)
         if ($userRole === User::ROLE_MANAGER) {
             $teamIds = $this->getManagerTeamIds((int)$userId);
-            if (!in_array($acceptance->agent_id, $teamIds)) {
+            if (!in_array($acceptance->agent_id, $teamIds) && $acceptance->agent_id !== (int)$userId) {
                 $response->getBody()->write('<p style="padding:2rem;font-family:sans-serif;">Access denied.</p>');
                 return $response->withStatus(403);
             }
@@ -443,7 +443,7 @@ class AcceptanceController
         $acceptance = AcceptanceRequest::find($id);
         $userRole = $_SESSION['role'] ?? 'agent';
 
-        if ($userRole === User::ROLE_CSA || $userRole === User::ROLE_MANAGER) {
+        if ($userRole === User::ROLE_CSA) {
             return $this->jsonResponse($response, ['success' => false, 'error' => 'Access denied.'], 403);
         }
 
@@ -488,7 +488,7 @@ class AcceptanceController
         $acceptance = AcceptanceRequest::find($id);
         $userRole   = $_SESSION['role'] ?? 'agent';
 
-        if ($userRole === User::ROLE_CSA || $userRole === User::ROLE_MANAGER) {
+        if ($userRole === User::ROLE_CSA) {
             return $this->jsonResponse($response, ['success' => false, 'error' => 'Access denied.'], 403);
         }
 
@@ -660,10 +660,10 @@ class AcceptanceController
             return $response->withStatus(404);
         }
 
-        // Manager: only allow access to own team's records
+        // Manager: only allow access to own team's records (including records they created themselves)
         if ($userRole === User::ROLE_MANAGER) {
             $teamIds = $this->getManagerTeamIds((int)$userId);
-            if (!in_array($acceptance->agent_id, $teamIds)) {
+            if (!in_array($acceptance->agent_id, $teamIds) && $acceptance->agent_id !== (int)$userId) {
                 $response->getBody()->write('Access denied.');
                 return $response->withStatus(403);
             }
