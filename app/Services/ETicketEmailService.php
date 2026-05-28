@@ -295,12 +295,36 @@ HTML;
         return '✈ ELECTRONIC TICKET';
     }
 
+    /**
+     * Resolve the raw transaction type string (e.g. 'cancel_refund').
+     */
+    private function resolveTransactionType(ETicket $eticket): string
+    {
+        $txn = $eticket->relationLoaded('transaction')
+            ? $eticket->transaction
+            : $eticket->transaction()->first();
+        return $txn->type ?? '';
+    }
+
+    /**
+     * Returns true when this e-ticket belongs to a cancellation transaction.
+     */
+    private function isCancellationType(ETicket $eticket): bool
+    {
+        return in_array($this->resolveTransactionType($eticket), ['cancel_refund', 'cancel_credit'], true);
+    }
+
     // =========================================================================
     // PLAIN TEXT
     // =========================================================================
 
     public function buildPlainText(ETicket $eticket, string $link): string
     {
+        // Route cancellation types to their own plain-text template
+        if ($this->isCancellationType($eticket)) {
+            return $this->buildCancellationPlainText($eticket);
+        }
+
         $paxList = implode(', ', array_map(fn($p) => $p['pax_name'] ?? '', $eticket->ticket_data ?? []));
         $ackUrl  = $eticket->acknowledgeUrl();
         $body  = "Dear {$eticket->customer_name},\n\n";
@@ -328,6 +352,11 @@ HTML;
 
     public function buildHtmlEmail(ETicket $eticket, string $link): string
     {
+        // Route cancellation types to their own dedicated email template
+        if ($this->isCancellationType($eticket)) {
+            return $this->buildCancellationHtmlEmail($eticket);
+        }
+
         $name     = htmlspecialchars($eticket->customer_name);
         $pnr      = htmlspecialchars($eticket->pnr);
         $airline  = htmlspecialchars($eticket->airline ?? '');
@@ -707,6 +736,309 @@ HTML;
 </body>
 </html>
 HTML;
+    }
+
+    // =========================================================================
+    // CANCELLATION EMAIL — TO CUSTOMER (cancel_refund / cancel_credit)
+    // =========================================================================
+
+    /**
+     * Build the HTML cancellation confirmation email sent to the customer.
+     *
+     * Shows refund amount + method + timeline (cancel_refund)
+     * or credit amount + expiry + instructions (cancel_credit).
+     * Does NOT include flight itinerary or acknowledgment button.
+     */
+    private function buildCancellationHtmlEmail(ETicket $eticket): string
+    {
+        $txnType   = $this->resolveTransactionType($eticket);
+        $isRefund  = ($txnType === 'cancel_refund');
+        $typeLabel = $this->resolveTypeLabel($eticket);
+        $typeBadge = $this->resolveTypeBadge($eticket);
+
+        $name     = htmlspecialchars($eticket->customer_name);
+        $pnr      = htmlspecialchars($eticket->pnr);
+        $airline  = htmlspecialchars($eticket->airline ?? '');
+        $orderId  = htmlspecialchars($eticket->order_id ?? '');
+        $currency = htmlspecialchars($eticket->currency);
+        $etId     = 'ET-' . str_pad($eticket->id, 6, '0', STR_PAD_LEFT);
+        $mailSubject = rawurlencode('Re: ' . $this->buildSubject($eticket));
+        $mailtoHref  = "mailto:reservation@base-fare.com?subject={$mailSubject}";
+
+        // Passenger rows
+        $paxRows = '';
+        foreach ($eticket->ticketDataWithAutoNumbers() as $i => $p) {
+            $paxName  = htmlspecialchars($p['pax_name']      ?? '');
+            $ticketNo = htmlspecialchars($p['ticket_number'] ?? '—');
+            $type     = ucfirst(htmlspecialchars($p['pax_type'] ?? 'adult'));
+            $bg = $i % 2 === 0 ? '#ffffff' : '#fef2f2';
+            $paxRows .= "<tr style='background:{$bg};'>
+              <td style='padding:10px 14px;font-size:13px;font-weight:600;color:#1e293b;border-bottom:1px solid #f1f5f9;'>{$paxName}<br><span style='font-size:10px;color:#94a3b8;font-weight:400;'>{$type}</span></td>
+              <td style='padding:10px 14px;font-size:12px;font-family:monospace;color:#7c3aed;font-weight:700;border-bottom:1px solid #f1f5f9;'>{$ticketNo}</td>
+            </tr>";
+        }
+
+        // Extra data — refund or credit fields populated from the acceptance form
+        $extra = $eticket->extra_data ?? [];
+
+        // ── REFUND section (cancel_refund) ────────────────────────────────────
+        $refundSection = '';
+        if ($isRefund) {
+            $refundAmt      = isset($extra['refund_amount']) && $extra['refund_amount'] > 0
+                ? $currency . ' ' . number_format((float)$extra['refund_amount'], 2)
+                : '—';
+            $refundMethod   = htmlspecialchars($extra['refund_method']   ?? '');
+            $refundTimeline = htmlspecialchars($extra['refund_timeline']  ?? '');
+            $cancFee        = isset($extra['cancellation_fee']) && $extra['cancellation_fee'] > 0
+                ? $currency . ' ' . number_format((float)$extra['cancellation_fee'], 2)
+                : '';
+
+            $methodRow   = $refundMethod   ? "<tr><td style='padding:8px 0;color:#94a3b8;'>Refund Method</td><td style='padding:8px 0;font-weight:600;color:#1e293b;'>{$refundMethod}</td></tr>" : '';
+            $timelineRow = $refundTimeline ? "<tr><td style='padding:8px 0;color:#94a3b8;'>Estimated Timeline</td><td style='padding:8px 0;font-weight:700;color:#b91c1c;'>{$refundTimeline}</td></tr>" : '';
+            $feeRow      = $cancFee        ? "<tr><td style='padding:8px 0;color:#94a3b8;'>Cancellation Fee</td><td style='padding:8px 0;font-weight:600;color:#b91c1c;font-family:monospace;'>{$cancFee}</td></tr>" : '';
+
+            $refundSection = "
+      <div style='margin:0 0 24px;background:#fef2f2;border:2px solid #fecaca;border-radius:10px;padding:20px 22px;'>
+        <div style='font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#b91c1c;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid #fecaca;'>&#128176; Refund Details</div>
+        <table style='width:100%;border-collapse:collapse;font-size:13px;'>
+          <tr>
+            <td style='padding:8px 0;color:#94a3b8;width:160px;'>Refund Amount</td>
+            <td style='padding:8px 0;font-size:18px;font-weight:900;font-family:monospace;color:#15803d;'>{$refundAmt}</td>
+          </tr>
+          {$feeRow}
+          {$methodRow}
+          {$timelineRow}
+        </table>
+        <div style='margin-top:14px;background:#fff;border:1px solid #fecaca;border-radius:7px;padding:12px 14px;font-size:12px;color:#7f1d1d;line-height:1.7;'>
+          &#9432;&nbsp; Your refund will be processed as indicated above. If you have not received your refund within the stated timeline, please contact us immediately.
+        </div>
+      </div>";
+        }
+
+        // ── CREDIT section (cancel_credit) ────────────────────────────────────
+        $creditSection = '';
+        if (!$isRefund) {
+            $creditAmt    = isset($extra['credit_amount']) && $extra['credit_amount'] > 0
+                ? $currency . ' ' . number_format((float)$extra['credit_amount'], 2)
+                : '—';
+            $creditValid  = htmlspecialchars($extra['credit_valid_until'] ?? ($extra['cc_credit_valid'] ?? ''));
+            $creditInstr  = htmlspecialchars($extra['credit_instructions'] ?? ($extra['cc_credit_instructions'] ?? ''));
+
+            $validRow = $creditValid ? "<tr><td style='padding:8px 0;color:#94a3b8;'>Valid Until</td><td style='padding:8px 0;font-weight:700;color:#6d28d9;'>{$creditValid}</td></tr>" : '';
+            $instrBox = $creditInstr
+                ? "<div style='margin-top:14px;'><div style='font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7c3aed;margin-bottom:6px;'>Credit Instructions</div><div style='background:#fff;border:1px solid #ddd6fe;border-radius:7px;padding:12px 14px;font-size:12px;color:#4c1d95;line-height:1.7;'>{$creditInstr}</div></div>"
+                : '';
+
+            $creditSection = "
+      <div style='margin:0 0 24px;background:#f5f3ff;border:2px solid #ddd6fe;border-radius:10px;padding:20px 22px;'>
+        <div style='font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#6d28d9;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid #ddd6fe;'>&#9733; Future Travel Credit</div>
+        <table style='width:100%;border-collapse:collapse;font-size:13px;'>
+          <tr>
+            <td style='padding:8px 0;color:#94a3b8;width:160px;'>Credit Value</td>
+            <td style='padding:8px 0;font-size:18px;font-weight:900;font-family:monospace;color:#6d28d9;'>{$creditAmt}</td>
+          </tr>
+          {$validRow}
+        </table>
+        {$instrBox}
+        <div style='margin-top:14px;background:#fff;border:1px solid #ddd6fe;border-radius:7px;padding:12px 14px;font-size:12px;color:#4c1d95;line-height:1.7;'>
+          &#9432;&nbsp; Your travel credit has been issued. Please contact us when you are ready to re-book and quote your PNR above.
+        </div>
+      </div>";
+        }
+
+        // Resolve header airline branding (reuse logic from main template)
+        $iataFullNames = [
+            'AC'=>'Air Canada','WS'=>'WestJet','AA'=>'American Airlines','DL'=>'Delta Air Lines',
+            'UA'=>'United Airlines','WN'=>'Southwest Airlines','B6'=>'JetBlue Airways','AS'=>'Alaska Airlines',
+            'BA'=>'British Airways','LH'=>'Lufthansa','AF'=>'Air France','KL'=>'KLM',
+            'LX'=>'Swiss International','OS'=>'Austrian Airlines','TK'=>'Turkish Airlines',
+            'EK'=>'Emirates','QR'=>'Qatar Airways','EY'=>'Etihad Airways',
+            'SQ'=>'Singapore Airlines','CX'=>'Cathay Pacific','JL'=>'Japan Airlines',
+            'NH'=>'All Nippon Airways','KE'=>'Korean Air','TG'=>'Thai Airways',
+            '6E'=>'IndiGo','SG'=>'SpiceJet','AI'=>'Air India','UK'=>'Vistara',
+            'QF'=>'Qantas Airways','NZ'=>'Air New Zealand','ET'=>'Ethiopian Airlines',
+        ];
+        $airlineUpper = strtoupper(trim($eticket->airline ?? ''));
+        $headerIataCode = preg_match('/^[A-Z0-9]{2,3}$/', $airlineUpper) ? $airlineUpper : null;
+        $headerAirlineName = htmlspecialchars(
+            ($headerIataCode && isset($iataFullNames[$headerIataCode]))
+                ? $iataFullNames[$headerIataCode]
+                : ($eticket->airline ?? '')
+        );
+        $logoCell = $headerIataCode
+            ? "<td style='padding:0 8px 0 0;vertical-align:middle;'><img src='https://www.gstatic.com/flights/airline_logos/70px/{$headerIataCode}.png' alt='{$headerAirlineName}' width='40' height='40' style='display:block;border-radius:6px;background:#fff;padding:2px;'></td>"
+            : '';
+        $headerAirlineHtml = $headerAirlineName ? "<div style='margin-top:14px;text-align:center;'>"
+            . "<table cellpadding='0' cellspacing='0' border='0' style='display:inline-table;margin:0 auto;'><tr>"
+            . $logoCell
+            . "<td style='vertical-align:middle;'><span style='color:rgba(255,255,255,0.95);font-size:16px;font-weight:700;letter-spacing:0.5px;'>{$headerAirlineName}</span></td>"
+            . "</tr></table></div>" : '';
+
+        $orderLine = $orderId ? "<div style='font-size:11px;color:#94a3b8;margin-top:4px;'>Conf: {$orderId}</div>" : '';
+
+        // Header gradient: red for cancellation
+        $headerGradient = $isRefund
+            ? 'linear-gradient(135deg,#7f1d1d 0%,#b91c1c 100%)'
+            : 'linear-gradient(135deg,#2e1065 0%,#6d28d9 100%)';
+
+        // Status banner
+        $bannerBg     = $isRefund ? '#fef2f2' : '#f5f3ff';
+        $bannerBorder = $isRefund ? '#fecaca' : '#ddd6fe';
+        $bannerText   = $isRefund ? '#7f1d1d' : '#4c1d95';
+        $bannerSub    = $isRefund ? '#b91c1c' : '#6d28d9';
+
+        return <<<HTML
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{$typeLabel} &mdash; PNR: {$pnr}</title></head>
+<body style="font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;margin:0;padding:20px;color:#333;">
+  <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.08);">
+
+    <!-- Header -->
+    <div style="background:{$headerGradient};padding:28px 30px;text-align:center;">
+      {$headerAirlineHtml}
+      <div style="margin-top:14px;border-top:1px solid rgba(255,255,255,.2);padding-top:12px;">
+        <span style="color:#fff;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">{$typeBadge}</span>
+      </div>
+    </div>
+
+    <!-- Status Banner -->
+    <div style="background:{$bannerBg};border-bottom:2px solid {$bannerBorder};padding:12px 30px;">
+      <div style="font-size:13px;font-weight:800;color:{$bannerText};">&#10005; {$typeLabel} &mdash; {$etId}</div>
+      <div style="font-size:11px;color:{$bannerSub};margin-top:1px;">Your cancellation has been processed. Please review the details below.</div>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:28px 30px;">
+      <p style="color:#1e293b;font-size:15px;margin:0 0 20px;">Dear <strong>{$name}</strong>,</p>
+      <p style="color:#555;font-size:13px;line-height:1.7;margin:0 0 24px;">
+        Your booking has been cancelled. Below you will find full details of your {$typeLabel}.
+        Please retain this email for your records.
+      </p>
+
+      <!-- PNR Card -->
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin:0 0 24px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="padding-right:20px;white-space:nowrap;border-right:1px solid #e2e8f0;">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:4px;">Booking Ref (PNR)</div>
+              <div style="font-size:26px;font-weight:800;font-family:monospace;color:#0f1e3c;letter-spacing:3px;">{$pnr}</div>
+            </td>
+            <td style="padding-left:20px;">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:4px;">Airline</div>
+              <div style="font-size:14px;font-weight:700;color:#1e293b;">{$airline}</div>
+              {$orderLine}
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Passengers -->
+      <div style="margin:0 0 24px;">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">&#127903; Cancelled Passengers</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:#fef2f2;">
+            <th style="padding:8px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">Passenger</th>
+            <th style="padding:8px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;">Ticket #</th>
+          </tr></thead>
+          <tbody>{$paxRows}</tbody>
+        </table>
+      </div>
+
+      <!-- Refund or Credit block -->
+      {$refundSection}
+      {$creditSection}
+
+    </div>
+
+    <!-- Footer CTA -->
+    <div style="background:linear-gradient(135deg,#0f1e3c,#1a3a6b);padding:28px 30px;text-align:center;">
+      <div style="color:#c9a84c;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">Questions about your cancellation?</div>
+      <div style="color:rgba(255,255,255,0.85);font-size:13px;line-height:1.8;margin-bottom:20px;">
+        If you have any questions or concerns about your refund or credit,<br>please contact us and quote your PNR: <strong style="color:#fff;">{$pnr}</strong>
+      </div>
+      <a href="{$mailtoHref}"
+         style="display:inline-block;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;text-decoration:none;padding:11px 32px;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:0.3px;">
+        &#9993;&nbsp; Contact Us
+      </a>
+      <div style="margin-top:16px;color:rgba(255,255,255,0.9);font-size:14px;font-weight:700;letter-spacing:0.5px;">
+        &#9742;&nbsp; Toll-Free: <a href="tel:+18886084011" style="color:#fff;text-decoration:none;">888 608 4011</a>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#f8fafc;padding:18px 30px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
+      <strong style="color:#0f1e3c;">Reservation Desk</strong> &nbsp;&middot;&nbsp; reservation@base-fare.com<br>
+      <span style="font-size:10px;">This is an official cancellation confirmation. Please retain this email for your records.</span>
+    </div>
+
+  </div>
+</body>
+</html>
+HTML;
+    }
+
+    /**
+     * Plain-text fallback for the cancellation email.
+     */
+    private function buildCancellationPlainText(ETicket $eticket): string
+    {
+        $txnType  = $this->resolveTransactionType($eticket);
+        $isRefund = ($txnType === 'cancel_refund');
+        $extra    = $eticket->extra_data ?? [];
+        $currency = $eticket->currency;
+        $paxList  = implode(', ', array_map(fn($p) => $p['pax_name'] ?? '', $eticket->ticket_data ?? []));
+
+        $label = $isRefund ? 'CANCELLATION & REFUND NOTICE' : 'CANCELLATION & FUTURE CREDIT NOTICE';
+
+        $body  = "Dear {$eticket->customer_name},\n\n";
+        $body .= "Your booking cancellation has been processed.\n\n";
+        $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+        $body .= "{$label}\n";
+        $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+        $body .= "PNR:          {$eticket->pnr}\n";
+        if ($eticket->airline)  $body .= "Airline:      {$eticket->airline}\n";
+        if ($eticket->order_id) $body .= "Confirmation: {$eticket->order_id}\n";
+        if ($paxList)           $body .= "Passenger(s): {$paxList}\n";
+        $body .= "\n";
+
+        if ($isRefund) {
+            $refundAmt      = isset($extra['refund_amount']) && $extra['refund_amount'] > 0
+                ? $currency . ' ' . number_format((float)$extra['refund_amount'], 2) : 'N/A';
+            $refundMethod   = $extra['refund_method']   ?? 'N/A';
+            $refundTimeline = $extra['refund_timeline']  ?? 'N/A';
+            $cancFee        = isset($extra['cancellation_fee']) && $extra['cancellation_fee'] > 0
+                ? $currency . ' ' . number_format((float)$extra['cancellation_fee'], 2) : '';
+
+            $body .= "REFUND DETAILS\n";
+            $body .= "--------------\n";
+            $body .= "Refund Amount:    {$refundAmt}\n";
+            if ($cancFee) $body .= "Cancellation Fee: {$cancFee}\n";
+            $body .= "Refund Method:    {$refundMethod}\n";
+            $body .= "Est. Timeline:    {$refundTimeline}\n\n";
+            $body .= "Your refund will be processed as stated above. If you have not received\n";
+            $body .= "your refund within the stated timeline, please contact us immediately.\n\n";
+        } else {
+            $creditAmt   = isset($extra['credit_amount']) && $extra['credit_amount'] > 0
+                ? $currency . ' ' . number_format((float)$extra['credit_amount'], 2) : 'N/A';
+            $creditValid = $extra['credit_valid_until'] ?? ($extra['cc_credit_valid'] ?? 'N/A');
+            $creditInstr = $extra['credit_instructions'] ?? ($extra['cc_credit_instructions'] ?? '');
+
+            $body .= "FUTURE TRAVEL CREDIT\n";
+            $body .= "--------------------\n";
+            $body .= "Credit Value: {$creditAmt}\n";
+            $body .= "Valid Until:  {$creditValid}\n";
+            if ($creditInstr) $body .= "Instructions: {$creditInstr}\n";
+            $body .= "\n";
+            $body .= "Please contact us when you are ready to re-book and quote your PNR.\n\n";
+        }
+
+        $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+        $body .= self::SUPPORT_NAME . "\n";
+        $body .= "Email: " . self::SUPPORT_EMAIL . "\n";
+        $body .= "Phone: 888 608 4011\n";
+        $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+        return $body;
     }
 
     // =========================================================================
