@@ -51,3 +51,18 @@ test_autofill.php
 add_updated_at.php
 update_acceptances.php
 update_mco_col.php
+test_cancellation_emails.php
+
+# Scratch / dev scripts (one-off tools, never deploy)
+scratch/
+
+# AI tool config
+.claude/
+
+# Word / Office documents
+*.docx
+*.xlsx
+*.pptx
+
+# Generated email previews (runtime, not source)
+storage/email_previews/

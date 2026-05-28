@@ -317,15 +317,18 @@ class ETicketService
         string  $subject,
         string  $body,
         string  $senderEmail,
-        ?string $rawHeaders = null
+        ?string $rawHeaders = null,
+        ?string $messageId  = null
     ): bool {
         // Store the reply regardless of current status
+        // messageId is stored for future deduplication — cron checks this before reprocessing
         ETicketReply::createEmailReply(
             eticketId:   $eticket->id,
             body:        $body,
             senderEmail: $senderEmail,
             subject:     $subject,
-            rawHeaders:  $rawHeaders
+            rawHeaders:  $rawHeaders,
+            messageId:   $messageId
         );
 
         // Only update status + ack_type on the first acknowledgment

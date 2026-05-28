@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $sender_ip      Client IP (web_contact only)
  * @property string|null $sender_ua      User agent (web_contact only)
  * @property string|null $raw_headers    Raw email headers (email_reply only)
+ * @property string|null $message_id     RFC 2822 Message-ID for IMAP deduplication
  * @property string      $created_at
  *
  * @property-read ETicket $eticket
@@ -51,6 +52,7 @@ class ETicketReply extends Model
         'sender_ip',
         'sender_ua',
         'raw_headers',
+        'message_id',
         'created_at',
     ];
 
@@ -142,7 +144,8 @@ class ETicketReply extends Model
         string  $body,
         string  $senderEmail,
         ?string $subject    = null,
-        ?string $rawHeaders = null
+        ?string $rawHeaders = null,
+        ?string $messageId  = null
     ): self {
         return self::create([
             'eticket_id'   => $eticketId,
@@ -151,7 +154,19 @@ class ETicketReply extends Model
             'body'         => $body,
             'sender_email' => $senderEmail,
             'raw_headers'  => $rawHeaders,
+            'message_id'   => $messageId,
             'created_at'   => date('Y-m-d H:i:s'),
         ]);
+    }
+
+    /**
+     * Check if an email reply with this RFC 2822 Message-ID already exists.
+     * Used by the IMAP cron to deduplicate without relying on SEEN/UNSEEN status.
+     */
+    public static function messageIdExists(string $messageId): bool
+    {
+        return self::where('message_id', $messageId)
+            ->where('source', self::SOURCE_EMAIL_REPLY)
+            ->exists();
     }
 }

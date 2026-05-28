@@ -8,12 +8,15 @@
  * Logic:
  *   1. Check IMAP_ENABLED in .env — if false, exit immediately (feature is off by default).
  *   2. Connect to the IMAP mailbox.
- *   3. Search for UNSEEN emails.
+ *   3. Search for ALL emails received in the last 12 hours (NOT just UNSEEN).
+ *      - Using 12 hours instead of UNSEEN means we never miss a reply because
+ *        someone read it in Gmail before the cron ran.
  *   4. For each email:
- *      a. Parse the subject for a PNR (6-char alphanumeric).
- *      b. Match the sender email to etickets.customer_email + etickets.pnr.
- *      c. If matched: call ETicketService::processEmailReplyAcknowledgment().
- *      d. Mark the email as Seen (avoid reprocessing).
+ *      a. Extract the RFC 2822 Message-ID from headers.
+ *      b. Skip immediately if Message-ID already exists in eticket_replies — no reprocessing.
+ *      c. Parse the subject for a PNR (6-char alphanumeric).
+ *      d. Match the sender email to etickets.customer_email + etickets.pnr.
+ *      e. If matched: call ETicketService::processEmailReplyAcknowledgment().
  *   5. Log a summary to storage/logs/eticket_imap.log.
  *
  * This script is fully isolated — failure has zero impact on the web application.
@@ -32,6 +35,7 @@ use Dotenv\Dotenv;
 use App\Models\ETicket;
 use App\Services\ETicketService;
 use App\Services\ETicketEmailService;
+use App\Models\ETicketReply;
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 
@@ -102,17 +106,20 @@ if (!$inbox) {
 
 imapLog('Connected successfully.');
 
-// ── Search for unseen messages ─────────────────────────────────────────────────
+// ── Search for messages from the last 12 hours (ALL, not just UNSEEN) ─────────
+// We search ALL recent emails and deduplicate using the stored Message-ID.
+// This prevents missing replies that were read in Gmail before the cron ran.
 
-$emails = imap_search($inbox, 'UNSEEN');
+$since   = date('d-M-Y', strtotime('-12 hours'));
+$emails  = imap_search($inbox, 'SINCE "' . $since . '"');
 
 if (!$emails || empty($emails)) {
-    imapLog('No unseen messages found.');
+    imapLog('No messages found in the last 12 hours.');
     imap_close($inbox);
     exit(0);
 }
 
-imapLog('Found ' . count($emails) . ' unseen message(s). Processing...');
+imapLog('Found ' . count($emails) . ' message(s) in last 12 hours. Checking for new replies...');
 
 // ── Services ───────────────────────────────────────────────────────────────────
 
@@ -146,7 +153,22 @@ foreach ($emails as $emailId) {
         $subjectRaw = $header->subject ?? '';
         $subject    = trim(imap_utf8($subjectRaw));
 
+        // Extract RFC 2822 Message-ID for deduplication
+        $rawHeaderStr = imap_fetchheader($inbox, $emailId);
+        $messageId    = null;
+        if (preg_match('/^Message-ID:\s*(.+)$/im', $rawHeaderStr, $midMatch)) {
+            $messageId = trim($midMatch[1]);
+        }
+
         imapLog("  [#{$emailId}] From: {$fromAddress} | Subject: {$subject}");
+
+        // ── Deduplication check — skip if already stored ───────────────────────
+        if ($messageId && ETicketReply::messageIdExists($messageId)) {
+            imapLog("  [#{$emailId}] Already processed (Message-ID match). Skipping.");
+            $skipped++;
+            $processed++;
+            continue;
+        }
 
         // Extract PNR from subject (6-char alphanumeric, may appear as: PNR: ABC123 or PNR: ABC123)
         $pnr = null;
@@ -199,27 +221,24 @@ foreach ($emails as $emailId) {
         }
 
         // Fetch raw headers for audit trail (limited to 8KB)
-        $rawHeaders = substr(imap_fetchheader($inbox, $emailId), 0, 8192);
+        // Re-use the already-fetched rawHeaderStr from dedup check above
+        $rawHeaders = substr($rawHeaderStr, 0, 8192);
 
-        // Process the reply
+        // Process the reply — passes messageId so it gets stored for future dedup
         $eticketService->processEmailReplyAcknowledgment(
             eticket:     $eticket,
             subject:     $subject,
             body:        $body,
             senderEmail: $fromAddress,
-            rawHeaders:  $rawHeaders
+            rawHeaders:  $rawHeaders,
+            messageId:   $messageId
         );
-
-        // Mark as seen so we don't process it again
-        imap_setflag_full($inbox, (string) $emailId, '\\Seen');
 
         imapLog("  [#{$emailId}] ✓ Processed successfully.");
         $matched++;
 
     } catch (\Throwable $e) {
         imapLog("  [#{$emailId}] ERROR: " . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
-        // Still mark as seen to avoid infinite error loops
-        try { imap_setflag_full($inbox, (string) $emailId, '\\Seen'); } catch (\Throwable $e2) {}
         $errors++;
     }
 
