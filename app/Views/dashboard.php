@@ -31,7 +31,8 @@ function dbTypeLabel(string $t): string {
         'new_booking'     => 'New Booking',    'exchange'       => 'Exchange',
         'cancel_refund'   => 'Cancellation',   'cancel_credit'  => 'Cancel Credit',
         'seat_purchase'   => 'Seat Purchase',  'cabin_upgrade'  => 'Cabin Upgrade',
-        'name_correction' => 'Name Correction','other'          => 'Other',
+        'name_correction' => 'Name Correction','award_booking'  => 'Award Booking',
+        'other'           => 'Other',
         default           => ucfirst(str_replace('_', ' ', $t)),
     };
 }

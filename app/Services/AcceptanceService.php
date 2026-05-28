@@ -124,6 +124,9 @@ class AcceptanceService
             'email_attempts'      => 0,
             'is_preauth'          => (bool)($data['is_preauth'] ?? false),
             'preauth_id'          => !empty($data['preauth_id']) ? (int)$data['preauth_id'] : null,
+            'is_miles_booking'    => (bool)($data['is_miles_booking'] ?? false),
+            'miles_used'          => !empty($data['miles_used']) ? (int)$data['miles_used'] : null,
+            'miles_program'       => !empty($data['miles_program']) ? trim($data['miles_program']) : null,
         ]);
 
         // Log creation note to record_notes timeline

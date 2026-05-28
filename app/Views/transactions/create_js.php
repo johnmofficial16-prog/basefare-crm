@@ -16,12 +16,12 @@ const TYPE_LABELS = {
   new_booking:'New Booking', exchange:'Exchange / Date Change',
   cancel_refund:'Cancellation & Refund', cancel_credit:'Cancellation & Credit',
   seat_purchase:'Seat Purchase', cabin_upgrade:'Cabin Upgrade',
-  name_correction:'Name Correction', other:'Other'
+  name_correction:'Name Correction', award_booking:'Award / Miles Booking', other:'Other'
 };
 
 const COLOR_MAP = {
   new_booking:'blue', exchange:'violet', cancel_refund:'rose', cancel_credit:'orange',
-  seat_purchase:'cyan', cabin_upgrade:'emerald', name_correction:'amber', other:'gray'
+  seat_purchase:'cyan', cabin_upgrade:'emerald', name_correction:'amber', award_booking:'indigo', other:'gray'
 };
 
 const AIRLINES = {
@@ -211,7 +211,7 @@ function selectType(type) {
     var c = card.dataset.color;
     var ringCls = 'ring-'+c+'-500';
     var bgCls = 'bg-'+c+'-50';
-    card.classList.remove('selected','border-transparent','ring-blue-500','ring-violet-500','ring-rose-500','ring-orange-500','ring-cyan-500','ring-emerald-500','ring-amber-500','ring-gray-400','bg-blue-50','bg-violet-50','bg-rose-50','bg-orange-50','bg-cyan-50','bg-emerald-50','bg-amber-50','bg-gray-50');
+    card.classList.remove('selected','border-transparent','ring-blue-500','ring-violet-500','ring-rose-500','ring-orange-500','ring-cyan-500','ring-emerald-500','ring-amber-500','ring-indigo-500','ring-gray-400','bg-blue-50','bg-violet-50','bg-rose-50','bg-orange-50','bg-cyan-50','bg-emerald-50','bg-amber-50','bg-indigo-50','bg-gray-50');
     if (t === type) {
       card.classList.add('selected', 'border-transparent', ringCls, bgCls);
       card.classList.remove('border-slate-200','bg-white');
@@ -224,12 +224,20 @@ function selectType(type) {
   document.getElementById('sum-type').textContent = TYPE_LABELS[type] || type;
 
   // Show/hide type-specific sections
-  const itin = ['new_booking','seat_purchase','cabin_upgrade','name_correction'];
+  const itin = ['new_booking','award_booking','seat_purchase','cabin_upgrade','name_correction'];
   const oldF = ['exchange','cancel_refund','cancel_credit'];
   const newF = ['exchange'];
   const nc   = ['name_correction'];
   const cu   = ['cabin_upgrade'];
   const oth  = ['other'];
+
+  _toggle('sec-miles-booking', type === 'award_booking');
+  if (type === 'award_booking') {
+    document.getElementById('field_miles_used').required = true;
+  } else {
+    document.getElementById('field_miles_used').required = false;
+  }
+
   _toggle('sec-itinerary', itin.includes(type));
   _toggle('sec-old-flights', oldF.includes(type));
   _toggle('sec-new-flights', newF.includes(type));
@@ -619,6 +627,11 @@ function importAcceptance(id) {
       // Payment extras
       if (d.statement_descriptor) { var sd = document.getElementById('field_statement_descriptor'); if(sd) sd.value = d.statement_descriptor; }
       if (d.split_charge_note) { var scn = document.getElementById('field_split_charge_note'); if(scn) scn.value = d.split_charge_note; }
+      
+      // Miles / Award Booking
+      if (d.miles_used) { var mu = document.getElementById('field_miles_used'); if(mu) mu.value = d.miles_used; }
+      if (d.miles_program) { var mp = document.getElementById('field_miles_program'); if(mp) mp.value = d.miles_program; }
+
       // Ticket conditions
       if (d.endorsements) { var ef = document.getElementById('field_endorsements'); if(ef) ef.value = d.endorsements; }
       if (d.baggage_info) { var bf = document.getElementById('field_baggage_info'); if(bf) bf.value = d.baggage_info; }
@@ -837,7 +850,7 @@ const formAssembly = {
       });
     };
 
-    if (['new_booking','seat_purchase','cabin_upgrade','name_correction'].includes(t)) {
+    if (['new_booking','award_booking','seat_purchase','cabin_upgrade','name_correction'].includes(t)) {
       flightData = { flights: filterSegs(state.segments.main) };
     } else if (t === 'exchange') {
       flightData = { old_flights: filterSegs(state.segments.old), new_flights: filterSegs(state.segments.new) };

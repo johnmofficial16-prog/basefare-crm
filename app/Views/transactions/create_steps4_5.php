@@ -4,6 +4,53 @@
     <div class="step-panel" id="step-4">
       <div class="space-y-4">
 
+        <!-- ── Miles / Award Booking Fields ────────────────────────────────── -->
+        <div id="sec-miles-booking" class="hidden bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="px-6 py-4 flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/50">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-2xl" style="color:#7c3aed;">stars</span>
+              <div>
+                <p class="font-bold text-slate-900 text-sm">Award / Miles Booking Details</p>
+                <p class="text-xs text-slate-500 mt-0.5">Please provide the miles redeemed and the frequent flyer program.</p>
+              </div>
+            </div>
+          </div>
+          <div id="miles-fields" class="px-6 pb-5 pt-4 space-y-4" style="background:linear-gradient(135deg,#faf5ff 0%,#f5f3ff 100%);">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style="background:#7c3aed;color:#fff;">
+                <span class="material-symbols-outlined text-sm">stars</span>
+                Award Ticket – Miles Redemption
+              </span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:#6d28d9;">
+                  Miles Redeemed <span class="text-rose-500">*</span>
+                </label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-base" style="color:#7c3aed;">stars</span>
+                  <input type="number" name="miles_used" id="field_miles_used" min="0" step="1"
+                    placeholder="e.g. 25000"
+                    oninput="syncSummary()"
+                    class="w-full rounded-lg px-3 py-2 text-sm font-bold pl-9 focus:outline-none focus:ring-2"
+                    style="border:1px solid #c4b5fd;background:#ede9fe;color:#4c1d95;focus-ring-color:#7c3aed;">
+                </div>
+                <p class="text-[10px] mt-1" style="color:#7c3aed;">Number of miles/points being redeemed for this ticket.</p>
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:#6d28d9;">
+                  Loyalty Program <span class="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <input type="text" name="miles_program" id="field_miles_program"
+                  maxlength="100" placeholder="e.g. United MileagePlus, Delta SkyMiles"
+                  class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2"
+                  style="border:1px solid #c4b5fd;background:#ede9fe;color:#4c1d95;">
+                <p class="text-[10px] mt-1" style="color:#7c3aed;">Airline loyalty program name (shown on e-ticket and auth page).</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Fare Breakdown -->
         <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">

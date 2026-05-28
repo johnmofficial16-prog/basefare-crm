@@ -194,6 +194,9 @@ class TransactionController
         $data = array_merge($body, [
             'passengers'         => $passengers,
             'type_specific_data' => $typeData,
+            'is_miles_booking'   => ($body['type'] ?? '') === 'award_booking',
+            'miles_used'         => !empty($body['miles_used']) ? (int)$body['miles_used'] : null,
+            'miles_program'      => !empty($body['miles_program']) ? trim($body['miles_program']) : null,
         ]);
 
         try {

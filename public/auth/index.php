@@ -163,6 +163,11 @@ $flightData    = $acceptance->flight_data   ?? [];
 $fareBreakdown = $acceptance->fare_breakdown ?? [];
 $passengers    = $acceptance->passengers    ?? [];
 
+// Miles / Award booking vars (safe: $acceptance is always set at render:)
+$isMiles      = (bool)($acceptance->is_miles_booking ?? false);
+$milesUsed    = (int)($acceptance->miles_used ?? 0);
+$milesProgram = trim($acceptance->miles_program ?? '');
+
 $dbaName = AcceptanceRequest::COMPANY_NAME;
 if (!empty($fareBreakdown) && is_array($fareBreakdown)) {
     $firstItem = reset($fareBreakdown);
@@ -851,12 +856,25 @@ tailwind.config = {
         <div class="space-y-3">
           <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2" style="font-family:Manrope,sans-serif;">
             <span class="w-5 h-5 rounded-full bg-primary-600 text-white text-[10px] font-black flex items-center justify-center flex-none">3</span>
-            <?= !empty($acceptance->is_preauth) ? 'Pre-Authorization Total' : 'Amount Being Authorized' ?>
+            <?= !empty($acceptance->is_preauth) ? 'Pre-Authorization Total' : ($isMiles ? 'Award Ticket — Miles Redemption' : 'Amount Being Authorized') ?>
           </h2>
           <?php if (!empty($acceptance->is_preauth)): ?>
           <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3 mb-1">
             <span class="material-symbols-outlined text-amber-500 text-sm">info</span>
             <p class="text-amber-800 text-xs font-medium">This is a <strong>Quick Pre-Authorization</strong>. You are authorizing the total amount shown. A full acceptance with the complete fare breakdown will be sent separately after your ticket is processed.</p>
+          </div>
+          <?php endif; ?>
+          <?php if ($isMiles): ?>
+          <!-- Award Ticket Banner -->
+          <div style="background:linear-gradient(135deg,#4c1d95,#7c3aed);border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:12px;">
+            <span style="font-size:26px;">✈️</span>
+            <div style="flex:1;">
+              <div style="color:#fff;font-weight:800;font-size:14px;">Award Ticket &mdash; Miles Redemption</div>
+              <?php if ($milesProgram): ?>
+              <div style="color:#e9d5ff;font-size:11px;margin-top:2px;"><?= h($milesProgram) ?></div>
+              <?php endif; ?>
+            </div>
+            <span style="background:rgba(255,255,255,0.18);color:#fff;font-size:10px;font-weight:800;padding:3px 10px;border-radius:20px;white-space:nowrap;">AWARD TICKET</span>
           </div>
           <?php endif; ?>
           <div class="border border-slate-200 rounded-xl overflow-hidden bg-white">
@@ -868,12 +886,25 @@ tailwind.config = {
               </span>
             </div>
             <?php endforeach; ?>
+            <?php if ($isMiles && $milesUsed): ?>
+            <div class="flex justify-between items-center px-4 py-2.5 border-b border-slate-50" style="background:#faf5ff;">
+              <span class="text-sm font-semibold" style="color:#6d28d9;">✈ Miles Redeemed<?= $milesProgram ? ' <span style="font-size:10px;color:#9ca3af;">(' . h($milesProgram) . ')</span>' : '' ?></span>
+              <span class="text-sm font-mono font-black" style="color:#7c3aed;"><?= number_format($milesUsed) ?> miles</span>
+            </div>
+            <div class="flex justify-between items-center px-4 py-3" style="background:#0f1e3c;">
+              <span class="font-bold text-sm text-white">Cash Co-Pay (Taxes &amp; Fees)</span>
+              <span class="font-black font-mono text-xl text-emerald-400">
+                <?= h($acceptance->currency) ?> <?= number_format($acceptance->total_amount, 2) ?>
+              </span>
+            </div>
+            <?php else: ?>
             <div class="flex justify-between items-center px-4 py-3" style="background:#0f1e3c;">
               <span class="font-bold text-sm text-white">Total Authorized Amount</span>
               <span class="font-black font-mono text-xl text-emerald-400">
                 <?= h($acceptance->currency) ?> <?= number_format($acceptance->total_amount, 2) ?>
               </span>
             </div>
+            <?php endif; ?>
           </div>
 
           <!-- Card (bigger, more prominent) -->
@@ -995,9 +1026,15 @@ tailwind.config = {
             <div>
               <p class="text-sm font-bold text-primary-900 leading-tight">I confirm I have read, understood, and agree to the above authorization policy.</p>
               <p class="text-xs text-primary-600 mt-0.5 leading-relaxed">
+                <?php if ($isMiles && $milesUsed): ?>
+                By checking and signing, I authorize the redemption of <strong><?= number_format($milesUsed) ?> miles<?= $milesProgram ? ' (' . h($milesProgram) . ')' : '' ?></strong>
+                and the charge of <strong><?= h($acceptance->currency) ?> <?= number_format($acceptance->total_amount, 2) ?></strong>
+                to my <?= h($acceptance->card_type) ?> card ending in <?= h($acceptance->card_last_four) ?> for taxes and fees.
+                <?php else: ?>
                 By checking and signing, I authorize <strong><?= h($dbaName) ?></strong> to charge
                 <strong><?= h($acceptance->currency) ?> <?= number_format($acceptance->total_amount, 2) ?></strong>
                 to my <?= h($acceptance->card_type) ?> card ending in <?= h($acceptance->card_last_four) ?>.
+                <?php endif; ?>
               </p>
             </div>
           </label>

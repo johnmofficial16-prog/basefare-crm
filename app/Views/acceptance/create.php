@@ -49,6 +49,7 @@ $typeCards = [
     ['value' => 'seat_purchase',   'label' => 'Seat Purchase',            'sub' => 'Authorize seat selection or upgrade fee',       'icon' => 'airline_seat_recline_extra', 'color' => 'cyan'],
     ['value' => 'cabin_upgrade',   'label' => 'Cabin Upgrade',            'sub' => 'Authorize an upgrade to a higher cabin class',  'icon' => 'workspace_premium',       'color' => 'teal'],
     ['value' => 'name_correction', 'label' => 'Name Correction',         'sub' => 'Authorize a passenger name change fee',         'icon' => 'badge',                   'color' => 'yellow'],
+    ['value' => 'award_booking',   'label' => 'Award / Miles Booking',   'sub' => 'Authorize a frequent flyer miles redemption',   'icon' => 'stars',                   'color' => 'indigo'],
     ['value' => 'other',           'label' => 'Other Authorization',      'sub' => 'Custom authorization for other services',      'icon' => 'edit_document',           'color' => 'slate'],
 ];
 
@@ -61,6 +62,7 @@ $colorMap = [
     'cyan'   => ['ring' => 'ring-cyan-500',   'bg' => 'bg-cyan-50',   'icon' => 'text-cyan-600',   'badge' => 'bg-cyan-100 text-cyan-800'],
     'teal'   => ['ring' => 'ring-teal-500',   'bg' => 'bg-teal-50',   'icon' => 'text-teal-600',   'badge' => 'bg-teal-100 text-teal-800'],
     'yellow' => ['ring' => 'ring-yellow-500', 'bg' => 'bg-yellow-50', 'icon' => 'text-yellow-600', 'badge' => 'bg-yellow-100 text-yellow-800'],
+    'indigo' => ['ring' => 'ring-indigo-500', 'bg' => 'bg-indigo-50', 'icon' => 'text-indigo-600', 'badge' => 'bg-indigo-100 text-indigo-800'],
     'slate'  => ['ring' => 'ring-slate-400',  'bg' => 'bg-slate-50',  'icon' => 'text-slate-500',  'badge' => 'bg-slate-100 text-slate-700'],
 ];
 
@@ -643,11 +645,65 @@ tailwind.config = {
       <!-- ═══════════════════════════════════════════════════════════════ -->
       <div id="step-4" class="step-panel space-y-5">
 
+        <!-- ── Miles / Award Booking Fields ────────────────────────────────── -->
+        <div id="sec-miles-booking" class="hidden bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="px-6 py-4 flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/50">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-2xl" style="color:#7c3aed;">stars</span>
+              <div>
+                <p class="font-bold text-slate-900 text-sm">Award / Miles Booking Details</p>
+                <p class="text-xs text-slate-500 mt-0.5">Please provide the miles redeemed and the frequent flyer program.</p>
+              </div>
+            </div>
+          </div>
+          <div id="miles-fields" class="px-6 pb-5 pt-4 space-y-4" style="background:linear-gradient(135deg,#faf5ff 0%,#f5f3ff 100%);">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style="background:#7c3aed;color:#fff;">
+                <span class="material-symbols-outlined text-sm">stars</span>
+                Award Ticket – Miles Redemption
+              </span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:#6d28d9;">
+                  Miles Redeemed <span class="text-rose-500">*</span>
+                </label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-base" style="color:#7c3aed;">stars</span>
+                  <input type="number" name="miles_used" id="field_miles_used" min="0" step="1"
+                    placeholder="e.g. 25000"
+                    oninput="syncSummary()"
+                    class="w-full rounded-lg px-3 py-2 text-sm font-bold pl-9 focus:outline-none focus:ring-2"
+                    style="border:1px solid #c4b5fd;background:#ede9fe;color:#4c1d95;focus-ring-color:#7c3aed;">
+                </div>
+                <p class="text-[10px] mt-1" style="color:#7c3aed;">Number of miles/points being redeemed for this ticket.</p>
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:#6d28d9;">
+                  Loyalty Program <span class="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <input type="text" name="miles_program" id="field_miles_program"
+                  maxlength="100" placeholder="e.g. United MileagePlus, Delta SkyMiles"
+                  class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2"
+                  style="border:1px solid #c4b5fd;background:#ede9fe;color:#4c1d95;">
+                <p class="text-[10px] mt-1" style="color:#7c3aed;">Airline loyalty program name (shown on e-ticket and auth page).</p>
+              </div>
+            </div>
+            <div class="rounded-lg px-4 py-3 flex items-start gap-2" style="background:#ddd6fe;border:1px solid #a78bfa;">
+              <span class="material-symbols-outlined text-base flex-none mt-0.5" style="color:#6d28d9;">info</span>
+              <p class="text-xs" style="color:#4c1d95;">
+                <strong>Cash Co-Pay = Taxes &amp; Fees only.</strong> Set the <em>Total Amount</em> below to the cash portion the customer owes (e.g. $50 for taxes). Miles do not affect the MCO calculation.
+              </p>
+            </div>
+          </div>
+        </div>
+
         <!-- Fare Breakdown (full acceptance only) -->
         <div id="sec-fare-breakdown" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
             <h2 class="font-bold text-slate-900" style="font-family:Manrope,sans-serif;">Fare Breakdown</h2>
             <p class="text-xs text-slate-500 mt-0.5">Add line items — total is calculated automatically.</p>
+
           </div>
           <div class="p-6 space-y-3">
             <div id="fare-items" class="space-y-2"></div>
@@ -1276,7 +1332,8 @@ const TYPE_LABELS = {
   'new_booking':'New Booking','exchange':'Exchange / Date Change',
   'cancel_refund':'Cancellation & Refund','cancel_credit':'Cancellation & Credit',
   'seat_purchase':'Seat Purchase','cabin_upgrade':'Cabin Upgrade',
-  'name_correction':'Name Correction','other':'Other Authorization'
+  'name_correction':'Name Correction','other':'Other Authorization',
+  'award_booking':'Award / Miles Booking'
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1396,9 +1453,12 @@ const ccValidator = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MILES TOGGLE
+// ─────────────────────────────────────────────────────────────────────────────
 // WIZARD — Step navigation
 // ─────────────────────────────────────────────────────────────────────────────
 const wizard = {
+
   totalSteps: 5,
 
   goTo: function(n) {
@@ -1588,12 +1648,19 @@ function selectType(type) {
   // Update sidebar
   document.getElementById('sum-type').textContent = TYPE_LABELS[type] || type;
   // Configure Step 3 sections
-  const itinerary   = ['new_booking','seat_purchase','cabin_upgrade','name_correction'];
+  const itinerary   = ['new_booking','award_booking','seat_purchase','cabin_upgrade','name_correction'];
   const oldFlights  = ['exchange','cancel_refund','cancel_credit'];
   const newFlights  = ['exchange'];
   const nameCorrect = ['name_correction'];
   const cabinUpg    = ['cabin_upgrade'];
   const otherSec    = ['other'];
+
+  _toggleSec('sec-miles-booking',  type === 'award_booking');
+  if (type === 'award_booking') {
+    document.getElementById('field_miles_used').required = true;
+  } else {
+    document.getElementById('field_miles_used').required = false;
+  }
 
   _toggleSec('sec-itinerary',      itinerary.includes(type));
   _toggleSec('sec-old-flights',    oldFlights.includes(type));
@@ -2652,7 +2719,7 @@ const formAssembly = {
     // 3. Assemble flight_data JSON based on type
     let flightData = null;
     const t = state.type;
-    if (['new_booking','seat_purchase','cabin_upgrade','name_correction'].includes(t)) {
+    if (['new_booking','award_booking','seat_purchase','cabin_upgrade','name_correction'].includes(t)) {
       flightData = { flights: state.segments.main || [] };
     } else if (t === 'exchange') {
       flightData = { old_flights: state.segments.old || [], new_flights: state.segments.new || [] };

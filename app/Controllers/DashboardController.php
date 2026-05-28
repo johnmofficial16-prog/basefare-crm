@@ -147,7 +147,9 @@ class DashboardController
             $todayBase        = fn() => Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
                                     ->where('status', '!=', Transaction::STATUS_VOIDED);
             $todayTxnCount    = $todayBase()->count();
+            $todayRevenue     = (float) $todayBase()->sum('total_amount');
             $todayProfit      = (float) $todayBase()->sum('profit_mco');
+            $todayCost        = $todayRevenue - $todayProfit;
             $todayGrossProfit = (float) $todayBase()->get()->sum($calcGross);
             $pendingTxnCount  = Transaction::where('status', Transaction::STATUS_PENDING)->count();
 
@@ -155,12 +157,15 @@ class DashboardController
             $monthBase      = fn() => Transaction::whereBetween('created_at', [$monthStart, $monthEnd])
                                   ->where('status', '!=', Transaction::STATUS_VOIDED);
             $monthTxnCount  = $monthBase()->count();
+            $monthRevenue   = (float) $monthBase()->sum('total_amount');
             $monthProfit    = (float) $monthBase()->sum('profit_mco');
+            $monthCost      = $monthRevenue - $monthProfit;
             $monthGrossProfit = (float) $monthBase()->get()->sum($calcGross);
 
             // All-time totals (non-voided)
             $allBase        = fn() => Transaction::where('status', '!=', Transaction::STATUS_VOIDED);
             $allTxnCount    = $allBase()->count();
+            $allRevenue     = (float) $allBase()->sum('total_amount');
             $allProfit      = (float) $allBase()->sum('profit_mco');
             $allGrossProfit = (float) $allBase()->get()->sum($calcGross);
 
@@ -353,7 +358,7 @@ class DashboardController
                     'pending_approvals'  => $pendingApprovals,
                     'agent_statuses'     => $agentStatuses,
                     'team_recent_txns'   => $teamRecentTxns,
-                    'week_label'         => $weekLabel,
+                    'month_label'        => $monthLabel,
                 ];
             }
         }

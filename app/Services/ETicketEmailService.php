@@ -258,6 +258,7 @@ HTML;
             'cancel_refund'    => 'Cancellation & Refund Notice',
             'cancel_credit'    => 'Cancellation & Credit Notice',
             'name_correction'  => 'Name Correction Confirmation',
+            'award_booking'    => 'Award Ticket Confirmation',
             'other'            => 'Service Confirmation',
         ];
         // Try the eager-loaded relationship first (avoids extra query if loaded)
@@ -284,6 +285,7 @@ HTML;
             'cancel_refund'    => '✕ CANCELLATION & REFUND',
             'cancel_credit'    => '✕ CANCELLATION & CREDIT',
             'name_correction'  => '✎ NAME CORRECTION',
+            'award_booking'    => '✈ AWARD TICKET',
             'other'            => '📋 SERVICE CONFIRMATION',
         ];
         $txn = $eticket->relationLoaded('transaction')
@@ -334,7 +336,13 @@ HTML;
         if ($paxList)           $body .= "Passenger(s): {$paxList}\n";
         if ($eticket->airline)  $body .= "Airline: {$eticket->airline}\n";
         if ($eticket->order_id) $body .= "Confirmation: {$eticket->order_id}\n";
-        $body .= "Total Charged: {$eticket->currency} " . number_format($eticket->total_amount, 2) . "\n";
+        if ($eticket->is_miles_booking && $eticket->miles_used) {
+            $mpLabel = $eticket->miles_program ? ' (' . $eticket->miles_program . ')' : '';
+            $body .= 'Miles Redeemed: ' . number_format((int)$eticket->miles_used) . ' miles' . $mpLabel . "\n";
+            $body .= 'Cash Co-Pay (Taxes & Fees): ' . $eticket->currency . ' ' . number_format($eticket->total_amount, 2) . "\n";
+        } else {
+            $body .= 'Total Charged: ' . $eticket->currency . ' ' . number_format($eticket->total_amount, 2) . "\n";
+        }
         $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
         $body .= "TO ACKNOWLEDGE RECEIPT — CLICK THIS LINK:\n{$ackUrl}\n\n";
         $body .= "Clicking the link above confirms you have received your e-ticket. This is legally binding.\n\n";
@@ -551,15 +559,43 @@ HTML;
         <table style='width:100%;border-collapse:collapse;'><tbody>{$flightRows}</tbody></table>
       </div>" : '';
 
-        $fareSection = $fareRows ? "
-      <div style='margin:0 0 24px;'>
-        <div style='font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;'>&#128176; Fare Summary</div>
-        <table style='width:100%;border-collapse:collapse;'><tbody>{$fareRows}</tbody></table>
-        <table style='width:100%;border-collapse:collapse;margin-top:8px;border-top:2px solid #e2e8f0;'><tr>
-          <td style='padding:10px 0 0;font-size:14px;font-weight:800;color:#065f46;'>Total Charged</td>
-          <td style='padding:10px 0 0;font-size:14px;font-weight:800;font-family:monospace;color:#065f46;text-align:right;'>{$total}</td>
-        </tr></table>
-      </div>" : "<div style='padding:0 0 24px;text-align:right;font-size:15px;font-weight:800;color:#065f46;'>Total: {$total}</div>";
+        $emailIsMiles   = (bool)($eticket->is_miles_booking ?? false);
+        $emailMilesUsed = $eticket->miles_used ?? null;
+        $emailMilesProg = htmlspecialchars($eticket->miles_program ?? '');
+
+        $fareSection = '';
+        if ($emailIsMiles) {
+            $awardBanner = "<div style='background:linear-gradient(135deg,#4c1d95,#7c3aed);border-radius:10px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;'>"
+                . "<span style='font-size:24px;'>&#9992;&#65039;</span>"
+                . "<div style='flex:1;'><div style='color:#fff;font-weight:800;font-size:14px;'>Award Ticket &mdash; Miles Redemption</div>"
+                . ($emailMilesProg ? "<div style='color:#e9d5ff;font-size:11px;margin-top:2px;'>" . $emailMilesProg . "</div>" : '')
+                . "</div><span style='background:rgba(255,255,255,0.18);color:#fff;font-size:10px;font-weight:800;padding:3px 10px;border-radius:20px;white-space:nowrap;'>AWARD TICKET</span></div>";
+
+            $fareSection = "\n      <div style='margin:0 0 24px;'>\n        {$awardBanner}";
+            if ($fareRows) {
+                $fareSection .= "        <table style='width:100%;border-collapse:collapse;'><tbody>{$fareRows}</tbody></table>";
+            }
+            if ($emailMilesUsed) {
+                $milesLabel = 'Miles Redeemed' . ($emailMilesProg ? ' <span style="font-size:10px;color:#9ca3af;">(' . $emailMilesProg . ')</span>' : '');
+                $fareSection .= "\n        <table style='width:100%;border-collapse:collapse;margin-top:6px;'><tr>"
+                    . "<td style='padding:6px 0;font-size:13px;color:#6d28d9;font-weight:600;'>{$milesLabel}</td>"
+                    . "<td style='padding:6px 0;font-size:13px;color:#7c3aed;font-weight:800;text-align:right;font-family:monospace;'>" . number_format((int)$emailMilesUsed) . " miles</td>"
+                    . "</tr></table>";
+            }
+            $fareSection .= "\n        <table style='width:100%;border-collapse:collapse;margin-top:8px;border-top:2px solid #e2e8f0;'><tr>"
+                . "<td style='padding:10px 0 0;font-size:14px;font-weight:800;color:#065f46;'>Cash Co-Pay (Taxes &amp; Fees)</td>"
+                . "<td style='padding:10px 0 0;font-size:14px;font-weight:800;font-family:monospace;color:#065f46;text-align:right;'>{$total}</td>"
+                . "</tr></table>\n      </div>";
+        } else {
+            $fareSection = $fareRows ? "\n      <div style='margin:0 0 24px;'>\n"
+                . "        <div style='font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;'>&#128176; Fare Summary</div>\n"
+                . "        <table style='width:100%;border-collapse:collapse;'><tbody>{$fareRows}</tbody></table>\n"
+                . "        <table style='width:100%;border-collapse:collapse;margin-top:8px;border-top:2px solid #e2e8f0;'><tr>\n"
+                . "          <td style='padding:10px 0 0;font-size:14px;font-weight:800;color:#065f46;'>Total Charged</td>\n"
+                . "          <td style='padding:10px 0 0;font-size:14px;font-weight:800;font-family:monospace;color:#065f46;text-align:right;'>{$total}</td>\n"
+                . "        </tr></table>\n      </div>"
+                : "<div style='padding:0 0 24px;text-align:right;font-size:15px;font-weight:800;color:#065f46;'>Total: {$total}</div>";
+        }
 
         // ── Ticket Conditions (endorsements, baggage, fare rules, policy) ───
         $condParts = [];

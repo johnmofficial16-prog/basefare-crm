@@ -113,6 +113,10 @@ class AcceptanceRequest extends Model
         'last_emailed_at',
         'is_preauth',
         'preauth_id',
+        // Miles / Award booking fields
+        'is_miles_booking',
+        'miles_used',
+        'miles_program',
     ];
 
     // =========================================================================
@@ -132,6 +136,8 @@ class AcceptanceRequest extends Model
         'approved_at'       => 'datetime',
         'last_emailed_at'   => 'datetime',
         'is_preauth'        => 'boolean',
+        'is_miles_booking'  => 'boolean',
+        'miles_used'        => 'integer',
     ];
 
     // =========================================================================
@@ -378,6 +384,14 @@ class AcceptanceRequest extends Model
             self::TYPE_CABIN_UPGRADE,
             self::TYPE_NAME_CORRECTION,
         ]);
+    }
+
+    /**
+     * Whether this is a miles/award redemption booking.
+     */
+    public function isMilesBooking(): bool
+    {
+        return (bool) $this->is_miles_booking;
     }
 
     // =========================================================================

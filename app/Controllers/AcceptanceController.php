@@ -207,11 +207,15 @@ class AcceptanceController
 
         // ── Build data array for service ──────────────────────────────────
         $data = array_merge($body, [
-            'passengers'      => $passengers,
-            'flight_data'     => $flightData,
-            'fare_breakdown'  => $fareBreakdown,
-            'extra_data'      => $extraData,
-            'additional_cards'=> $additionalCards,
+            'passengers'       => $passengers,
+            'flight_data'      => $flightData,
+            'fare_breakdown'   => $fareBreakdown,
+            'extra_data'       => $extraData,
+            'additional_cards' => $additionalCards,
+            // Miles / Award booking — infer from type
+            'is_miles_booking' => ($body['type'] ?? '') === 'award_booking',
+            'miles_used'       => !empty($body['miles_used']) ? (int)$body['miles_used'] : null,
+            'miles_program'    => trim($body['miles_program'] ?? ''),
         ]);
 
         // ── Create record ─────────────────────────────────────────────────

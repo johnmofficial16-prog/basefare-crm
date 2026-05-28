@@ -142,6 +142,10 @@ class Transaction extends Model
         'gateway_transaction_id',
         'gateway_actioned_at',
         'gateway_actioned_by',
+        // Miles / Award booking fields
+        'is_miles_booking',
+        'miles_used',
+        'miles_program',
     ];
 
     // =========================================================================
@@ -155,6 +159,8 @@ class Transaction extends Model
         'profit_mco'          => 'float',
         'acceptance_id'       => 'integer',
         'agent_id'            => 'integer',
+        'is_miles_booking'    => 'boolean',
+        'miles_used'          => 'integer',
     ];
 
     // =========================================================================
@@ -255,6 +261,14 @@ class Transaction extends Model
     public function hasDispute(): bool
     {
         return !empty($this->dispute_status) && $this->dispute_status !== self::DISPUTE_RESOLVED;
+    }
+
+    /**
+     * Whether this is a miles/award redemption booking.
+     */
+    public function isMilesBooking(): bool
+    {
+        return (bool) $this->is_miles_booking;
     }
 
     // =========================================================================

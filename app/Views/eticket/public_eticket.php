@@ -565,19 +565,52 @@ if (session_status() === PHP_SESSION_NONE) {
       </div>
 
       <!-- ── FARE SUMMARY ──────────────────────────────────── -->
-      <?php if (!empty($et->fare_breakdown)): ?>
+      <?php
+        $etIsMiles    = (bool)($et->is_miles_booking ?? false);
+        $etMilesUsed  = $et->miles_used ?? null;
+        $etMilesProgram = htmlspecialchars($et->miles_program ?? '');
+      ?>
+      <?php if (!empty($et->fare_breakdown) || $etIsMiles): ?>
       <div style="margin-bottom:28px;">
+        <?php if ($etIsMiles): ?>
+        <!-- Award Ticket Banner -->
+        <div style="background:linear-gradient(135deg,#4c1d95,#7c3aed);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+          <span style="font-size:28px;">✈️</span>
+          <div>
+            <div style="color:#fff;font-weight:800;font-size:15px;">Award Ticket — Miles Redemption</div>
+            <?php if ($etMilesProgram): ?>
+            <div style="color:#e9d5ff;font-size:12px;margin-top:2px;"><?= $etMilesProgram ?></div>
+            <?php endif; ?>
+          </div>
+          <span style="margin-left:auto;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;font-size:11px;font-weight:800;padding:4px 12px;border-radius:20px;white-space:nowrap;">AWARD TICKET</span>
+        </div>
+        <?php else: ?>
         <div class="section-title">💰 Fare Summary</div>
+        <?php endif; ?>
         <?php foreach ((array)$et->fare_breakdown as $item): ?>
         <div class="fare-row">
           <span><?= htmlspecialchars($item['label'] ?? $item['description'] ?? '') ?></span>
           <span><?= htmlspecialchars($et->currency) ?> <?= number_format((float)($item['amount'] ?? 0), 2) ?></span>
         </div>
         <?php endforeach; ?>
+        <?php if ($etIsMiles && $etMilesUsed): ?>
+        <div class="fare-row" style="color:#6d28d9;">
+          <span style="display:flex;align-items:center;gap:6px;">
+            <span>✈</span>
+            <span>Miles Redeemed<?= $etMilesProgram ? ' <span style="font-size:11px;color:#9ca3af;">(' . $etMilesProgram . ')</span>' : '' ?></span>
+          </span>
+          <span style="color:#7c3aed;font-weight:800;"><?= number_format((int)$etMilesUsed) ?> miles</span>
+        </div>
+        <div class="fare-row total">
+          <span>Cash Co-Pay (Taxes &amp; Fees)</span>
+          <span><?= htmlspecialchars($et->currency) ?> <?= number_format($et->total_amount, 2) ?></span>
+        </div>
+        <?php else: ?>
         <div class="fare-row total">
           <span>Total Charged</span>
           <span><?= htmlspecialchars($et->currency) ?> <?= number_format($et->total_amount, 2) ?></span>
         </div>
+        <?php endif; ?>
       </div>
       <?php else: ?>
       <div style="margin-bottom:28px;">
@@ -588,6 +621,7 @@ if (session_status() === PHP_SESSION_NONE) {
         </div>
       </div>
       <?php endif; ?>
+
 
       <!-- ── TICKET CONDITIONS ─────────────────────────────── -->
       <?php if ($et->endorsements || $et->baggage_info || $et->fare_rules): ?>

@@ -85,6 +85,7 @@ class InternalAlertService
             'exchange'        => 'Exchange / Date Change',
             'cancel_refund'   => 'Cancellation & Refund',
             'cancel_credit'   => 'Cancellation & Credit',
+            'award_booking'   => 'Award Booking',
             'seat_purchase'   => 'Seat Purchase',
             'cabin_upgrade'   => 'Cabin Upgrade',
             'name_correction' => 'Name Correction',

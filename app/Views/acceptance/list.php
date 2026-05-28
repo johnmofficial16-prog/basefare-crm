@@ -46,6 +46,7 @@ function acceptanceTypeBadge(string $type): string {
         'seat_purchase'   => ['label' => 'Seat Purchase',     'class' => 'bg-cyan-100 text-cyan-800'],
         'cabin_upgrade'   => ['label' => 'Cabin Upgrade',     'class' => 'bg-teal-100 text-teal-800'],
         'name_correction' => ['label' => 'Name Correction',   'class' => 'bg-yellow-100 text-yellow-800'],
+        'award_booking'   => ['label' => 'Award / Miles Booking', 'class' => 'bg-indigo-100 text-indigo-800'],
         'other'           => ['label' => 'Other',             'class' => 'bg-slate-100 text-slate-700'],
     ];
     $t = $labels[$type] ?? ['label' => ucfirst($type), 'class' => 'bg-slate-100 text-slate-700'];
@@ -168,6 +169,7 @@ tailwind.config = {
             <option value="seat_purchase"   <?= ($filters['type'] ?? '') === 'seat_purchase'   ? 'selected' : '' ?>>Seat Purchase</option>
             <option value="cabin_upgrade"   <?= ($filters['type'] ?? '') === 'cabin_upgrade'   ? 'selected' : '' ?>>Cabin Upgrade</option>
             <option value="name_correction" <?= ($filters['type'] ?? '') === 'name_correction' ? 'selected' : '' ?>>Name Correction</option>
+            <option value="award_booking"   <?= ($filters['type'] ?? '') === 'award_booking'   ? 'selected' : '' ?>>Award / Miles Booking</option>
             <option value="other"           <?= ($filters['type'] ?? '') === 'other'           ? 'selected' : '' ?>>Other</option>
           </select>
         </div>

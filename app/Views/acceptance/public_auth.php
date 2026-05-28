@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Public Customer Authorization Page
  * Token-based access — no CRM login required
@@ -30,6 +30,10 @@ $endorsements  = htmlspecialchars($acceptance->endorsements ?? '');
 $descriptor    = htmlspecialchars($acceptance->statement_descriptor ?? '');
 $passengers    = $acceptance->passengers ?? [];
 $flightData    = $acceptance->flight_data ?? [];
+
+$isMiles       = $acceptance->is_miles_booking ?? false;
+$milesUsed     = $acceptance->miles_used ?? null;
+$milesProgram  = htmlspecialchars($acceptance->miles_program ?? '');
 
 $dbaName = 'Lets Fly Travel LLC DBA Base Fare';
 if (!empty($fareBreakdown) && is_array($fareBreakdown)) {
@@ -118,6 +122,9 @@ if (!$seatNumber && empty($seatAssignments)) {
 
 $baggageInfo   = $acceptance->baggage_info     ?? '';
 $isPreauth     = (bool)($acceptance->is_preauth ?? false);
+$isMiles       = (bool)($acceptance->is_miles_booking ?? false);
+$milesUsed     = $acceptance->miles_used ?? null;
+$milesProgram  = htmlspecialchars($acceptance->miles_program ?? '');
 
 // Status checks
 $isActionable  = $acceptance->isActionable();
@@ -445,6 +452,39 @@ $error = $_GET['error'] ?? null;
         <!-- Fare Breakdown -->
         <div class="section">
           <div class="section-title">Fare Summary</div>
+          <?php if ($isMiles): ?>
+          <!-- Miles / Award Booking Banner -->
+          <div style="background:linear-gradient(135deg,#4c1d95,#7c3aed);border-radius:12px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;gap:12px;">
+            <span style="font-size:28px;">✈️</span>
+            <div>
+              <div style="color:#fff;font-weight:800;font-size:15px;letter-spacing:0.3px;">Award Ticket — Miles Redemption</div>
+              <?php if ($milesProgram): ?>
+              <div style="color:#e9d5ff;font-size:12px;margin-top:2px;"><?= $milesProgram ?></div>
+              <?php endif; ?>
+            </div>
+            <span style="margin-left:auto;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;font-size:11px;font-weight:800;padding:4px 12px;border-radius:20px;white-space:nowrap;">AWARD TICKET</span>
+          </div>
+          <!-- Miles + Cash breakdown -->
+          <table class="fare-table">
+            <?php foreach ($fareBreakdown as $item): ?>
+            <tr>
+              <td class="label"><?= htmlspecialchars($item['label'] ?? '') ?></td>
+              <td class="amt"><?= $currency ?> <?= number_format((float)($item['amount'] ?? 0), 2) ?></td>
+            </tr>
+            <?php endforeach; ?>
+            <?php if ($milesUsed): ?>
+            <tr>
+              <td class="label" style="color:#6d28d9;"><span style="display:inline-flex;align-items:center;gap:4px;">✈ Miles Redeemed</span><?= $milesProgram ? '<br><small style="color:#9ca3af;">'.$milesProgram.'</small>' : '' ?></td>
+              <td class="amt" style="color:#7c3aed;font-weight:800;"><?= number_format((int)$milesUsed) ?> miles</td>
+            </tr>
+            <?php endif; ?>
+            <tr class="total-row">
+              <td>Cash Co-Pay (Taxes &amp; Fees)</td>
+              <td class="amt"><?= $currency ?> <?= $total ?></td>
+            </tr>
+          </table>
+          <?php else: ?>
+          <!-- Standard fare display -->
           <table class="fare-table">
             <?php foreach ($fareBreakdown as $item): ?>
             <tr>
@@ -457,6 +497,7 @@ $error = $_GET['error'] ?? null;
               <td class="amt"><?= $currency ?> <?= $total ?></td>
             </tr>
           </table>
+          <?php endif; ?>
         </div>
 
         <!-- Card Info -->
@@ -678,7 +719,11 @@ $error = $_GET['error'] ?? null;
           </div>
           <div class="check-item">
             <input type="checkbox" name="confirm_charge" id="chk2" value="1" required>
+            <?php if ($isMiles && $milesUsed): ?>
+            <label for="chk2">I authorize the redemption of <strong><?= number_format((int)$milesUsed) ?> miles<?= $milesProgram ? ' (' . $milesProgram . ')' : '' ?></strong> and the charge of <strong><?= $currency ?> <?= $total ?></strong> to my credit card ending in <strong><?= htmlspecialchars($acceptance->card_last_four ?? '****') ?></strong> for taxes and fees.</label>
+            <?php else: ?>
             <label for="chk2">I authorize <?= htmlspecialchars($companyName) ?> to charge <strong><?= $currency ?> <?= $total ?></strong> to my credit card ending in <strong><?= htmlspecialchars($acceptance->card_last_four ?? '****') ?></strong>.</label>
+            <?php endif; ?>
           </div>
           <div class="check-item">
             <input type="checkbox" name="confirm_nonrefundable" id="chk3" value="1" required>

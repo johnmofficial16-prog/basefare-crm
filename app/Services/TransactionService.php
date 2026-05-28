@@ -69,6 +69,10 @@ class TransactionService
                 'status'          => Transaction::STATUS_PENDING,
                 'agent_notes'     => trim($data['agent_notes'] ?? ''),
                 'proof_of_sale_path' => $data['proof_of_sale_path'] ?? null,
+                // Miles / Award booking
+                'is_miles_booking' => (bool)($data['is_miles_booking'] ?? false),
+                'miles_used'       => !empty($data['miles_used']) ? (int)$data['miles_used'] : null,
+                'miles_program'    => !empty($data['miles_program']) ? trim($data['miles_program']) : null,
             ]);
 
             // ── Passengers ───────────────────────────────────────────────
@@ -494,6 +498,10 @@ class TransactionService
             // Payment extra fields
             'statement_descriptor' => $acc->statement_descriptor ?? '',
             'split_charge_note'    => $acc->split_charge_note ?? '',
+            // Miles / Award Booking fields
+            'is_miles_booking'     => $acc->is_miles_booking ?? false,
+            'miles_used'           => $acc->miles_used ?? null,
+            'miles_program'        => $acc->miles_program ?? '',
             // Ticket conditions
             'endorsements'         => $acc->endorsements ?? '',
             'baggage_info'         => $acc->baggage_info ?? '',
@@ -502,6 +510,11 @@ class TransactionService
             // Class of service & Seat Number
             'class_of_service'     => $firstFlight['cabin_class'] ?? '',
             'seat_number'          => $acc->extra_data['seat_number'] ?? '',
+            
+            // Miles / Award booking
+            'is_miles_booking'     => (bool)($acc->is_miles_booking ?? false),
+            'miles_used'           => $acc->miles_used ?? null,
+            'miles_program'        => $acc->miles_program ?? null,
         ];
     }
 

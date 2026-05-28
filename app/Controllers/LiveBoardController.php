@@ -193,6 +193,7 @@ class LiveBoardController
             'cabin_upgrade' => 'Cabin Upgrade',
             'cancel_refund' => 'Cancellation',
             'cancel_credit' => 'Credit Shell',
+            'award_booking' => 'Award Booking',
             'other'         => 'Other',
             default         => ucfirst(str_replace('_', ' ', $type)),
         };

@@ -108,6 +108,10 @@ class ETicket extends Model
         'acknowledged_ip',
         'acknowledged_ua',
         'ack_type',
+        // Miles / Award booking fields
+        'is_miles_booking',
+        'miles_used',
+        'miles_program',
     ];
 
     // =========================================================================
@@ -124,6 +128,8 @@ class ETicket extends Model
         'agent_id'       => 'integer',
         'acknowledged_at'=> 'datetime',
         'last_emailed_at'=> 'datetime',
+        'is_miles_booking' => 'boolean',
+        'miles_used'       => 'integer',
     ];
 
     // =========================================================================
