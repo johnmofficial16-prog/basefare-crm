@@ -23,6 +23,10 @@ $currency      = htmlspecialchars($acceptance->currency);
 $maskedCard    = htmlspecialchars($acceptance->maskedCard());
 $cardholderName = htmlspecialchars($acceptance->cardholder_name ?? '');
 $cardType      = htmlspecialchars($acceptance->card_type ?? '');
+
+// Determine the effective signer — for chargeback defense, the CCH (credit card holder) must sign
+$signerName = !empty($cardholderName) ? $cardholderName : $customerName;
+$cchDiffFromPax = !empty($cardholderName) && strtolower(trim($acceptance->cardholder_name ?? '')) !== strtolower(trim($acceptance->customer_name));
 $token         = htmlspecialchars($acceptance->token);
 $expiryLabel   = $acceptance->expiryLabel();
 $fareBreakdown = $acceptance->fare_breakdown ?? [];
@@ -369,8 +373,12 @@ $error = $_GET['error'] ?? null;
         <!-- Greeting -->
         <div class="section">
           <p style="font-size:14px; color:#334155; line-height:1.7;">
-            Hello <strong><?= $customerName ?></strong>,<br>
+            Hello <strong><?= $signerName ?></strong>,<br>
+            <?php if ($cchDiffFromPax): ?>
+            As the authorized cardholder, please <?= $typeAction ?> on behalf of passenger(s): <strong><?= $customerName ?></strong>. Review the details below, then sign to confirm.
+            <?php else: ?>
             Please <?= $typeAction ?>. Review the details below, then sign to confirm.
+            <?php endif; ?>
           </p>
         </div>
 
@@ -720,9 +728,9 @@ $error = $_GET['error'] ?? null;
           <div class="check-item">
             <input type="checkbox" name="confirm_charge" id="chk2" value="1" required>
             <?php if ($isMiles && $milesUsed): ?>
-            <label for="chk2">I authorize the redemption of <strong><?= number_format((int)$milesUsed) ?> miles<?= $milesProgram ? ' (' . $milesProgram . ')' : '' ?></strong> and the charge of <strong><?= $currency ?> <?= $total ?></strong> to my credit card ending in <strong><?= htmlspecialchars($acceptance->card_last_four ?? '****') ?></strong> for taxes and fees.</label>
+            <label for="chk2">I, <strong><?= $signerName ?></strong>, authorize the redemption of <strong><?= number_format((int)$milesUsed) ?> miles<?= $milesProgram ? ' (' . $milesProgram . ')' : '' ?></strong> and the charge of <strong><?= $currency ?> <?= $total ?></strong> to my credit card ending in <strong><?= htmlspecialchars($acceptance->card_last_four ?? '****') ?></strong> for taxes and fees<?= $cchDiffFromPax ? ' on behalf of passenger(s): <strong>' . $customerName . '</strong>' : '' ?>.</label>
             <?php else: ?>
-            <label for="chk2">I authorize <?= htmlspecialchars($companyName) ?> to charge <strong><?= $currency ?> <?= $total ?></strong> to my credit card ending in <strong><?= htmlspecialchars($acceptance->card_last_four ?? '****') ?></strong>.</label>
+            <label for="chk2">I, <strong><?= $signerName ?></strong>, authorize <?= htmlspecialchars($companyName) ?> to charge <strong><?= $currency ?> <?= $total ?></strong> to my credit card ending in <strong><?= htmlspecialchars($acceptance->card_last_four ?? '****') ?></strong><?= $cchDiffFromPax ? ' on behalf of passenger(s): <strong>' . $customerName . '</strong>' : '' ?>.</label>
             <?php endif; ?>
           </div>
           <div class="check-item">
@@ -731,7 +739,7 @@ $error = $_GET['error'] ?? null;
           </div>
           <div class="check-item">
             <input type="checkbox" name="confirm_chargeback" id="chk4" value="1" required>
-            <label for="chk4">I acknowledge that filing a credit card dispute after services are rendered constitutes Friendly Fraud, and this signed authorization will be submitted as evidence.</label>
+            <label for="chk4">I, <strong><?= $signerName ?></strong>, acknowledge that filing a credit card dispute after services are rendered constitutes Friendly Fraud, and this signed authorization will be submitted as evidence.</label>
           </div>
         </div>
 
@@ -843,7 +851,11 @@ $error = $_GET['error'] ?? null;
           <div class="esign-box" id="esignBox">
             <label>
               <input type="checkbox" id="esignConsent" name="esign_consent" value="1" onchange="toggleEsign()">
-              I, <strong><?= $customerName ?></strong>, digitally sign this authorization and confirm all the above details are accurate. I understand this electronic signature carries the same legal weight as a handwritten signature.
+              <?php if ($cchDiffFromPax): ?>
+              I, <strong><?= $signerName ?></strong>, the authorized holder of the credit card ending in <strong><?= htmlspecialchars($acceptance->card_last_four ?? '****') ?></strong>, digitally sign this authorization on behalf of passenger(s) <strong><?= $customerName ?></strong> and confirm all the above details are accurate. I understand this electronic signature carries the same legal weight as a handwritten signature.
+              <?php else: ?>
+              I, <strong><?= $signerName ?></strong>, digitally sign this authorization and confirm all the above details are accurate. I understand this electronic signature carries the same legal weight as a handwritten signature.
+              <?php endif; ?>
             </label>
             <div class="esign-meta" id="esignMeta" style="display:none;">
               <span class="material-symbols-outlined" style="font-size:14px; vertical-align:text-bottom; color:#16a34a;">verified</span>
@@ -999,7 +1011,10 @@ function prepareSubmit() {
   // Generate a consent-based signature data string (replaces canvas data URL)
   const sigPayload = JSON.stringify({
     type: 'digital_consent',
-    signer: '<?= addslashes($customerName) ?>',
+    signer: '<?= addslashes($signerName) ?>',
+    cardholder: '<?= addslashes($cardholderName) ?>',
+    customer: '<?= addslashes($customerName) ?>',
+    cch_is_pax: <?= $cchDiffFromPax ? 'false' : 'true' ?>,
     timestamp: new Date().toISOString(),
     fingerprint: document.getElementById('deviceFingerprint').value,
     user_agent: navigator.userAgent
