@@ -98,6 +98,16 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     <?php endif; ?>
   </div>
 
+  <!-- ── Live shift window banner (all roles) ─────────────────────────────── -->
+  <?php if (!empty($shiftLabel)): ?>
+  <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mb-6 px-4 py-2.5 bg-primary/5 border border-primary/15 rounded-xl text-sm">
+    <span class="material-symbols-outlined text-primary text-lg">nights_stay</span>
+    <span class="font-bold text-primary">Current shift</span>
+    <span class="text-slate-600"><?= htmlspecialchars($shiftLabel) ?></span>
+    <span class="ml-auto text-[11px] text-slate-400">&ldquo;Today&rdquo; figures track the live shift, not the calendar day</span>
+  </div>
+  <?php endif; ?>
+
   <!-- ── Attendance board bar (shown to admin/manager/supervisor who have team data) -->
   <?php if ($adminCounts): ?>
   <div class="grid grid-cols-5 gap-4 mb-8">

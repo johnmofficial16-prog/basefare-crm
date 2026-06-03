@@ -45,7 +45,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
   
   <!-- DASHBOARD TAB -->
   <section id="tab-dashboard" class="tab-content active space-y-4">
-    <h2 class="text-xl font-headline font-bold text-primary mb-2">Today's Overview</h2>
+    <h2 class="text-xl font-headline font-bold text-primary mb-1">Today's Overview</h2>
+    <p class="text-[11px] text-slate-400 mb-2">Current shift: <span id="dash-shift-label" class="font-semibold text-slate-500">…</span></p>
     <div class="grid grid-cols-2 gap-3">
       <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
         <p class="text-xs text-slate-500 font-bold uppercase mb-1">Profit (MCO)</p>
@@ -230,6 +231,7 @@ async function loadDashboard() {
     const r = await fetch('/api/admin/mobile/data');
     const d = await r.json();
     
+    if (d.shift_label) document.getElementById('dash-shift-label').textContent = d.shift_label;
     document.getElementById('dash-today-profit').textContent = '+' + d.today_profit.toFixed(2);
     document.getElementById('dash-today-txns').textContent = d.today_txns;
     document.getElementById('dash-pending-txns').textContent = d.pending_txns;

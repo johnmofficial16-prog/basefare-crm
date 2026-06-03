@@ -52,6 +52,7 @@ class AdminController
             'abuse.washroom_count_max'  => ['label' => 'Washroom count max',    'min' => 1,  'max' => 30],
             'abuse.washroom_total_max'  => ['label' => 'Total washroom max',    'min' => 5,  'max' => 300],
             'default_grace_period_mins' => ['label' => 'Default grace period',  'min' => 0,  'max' => 120],
+            'business_day_start_hour'   => ['label' => 'Shift day start hour',  'min' => 0,  'max' => 23],
         ];
 
         // ── String settings (currency) ───────────────────────────────────────

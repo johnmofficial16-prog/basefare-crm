@@ -164,6 +164,27 @@ tailwind.config = {
       </div>
     </div>
 
+    <!-- ── Business Day / Shift Rollover ─────────────────────────────────── -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+        <span class="material-symbols-outlined text-primary text-lg">nights_stay</span>
+        <h2 class="font-bold text-slate-900" style="font-family:Manrope">Business Day (Dashboard)</h2>
+      </div>
+      <div class="p-6">
+        <div class="max-w-xs">
+          <label class="field-label" for="business_day_start_hour">Shift Day Starts At</label>
+          <select class="field-input" id="business_day_start_hour" name="business_day_start_hour">
+            <?php for ($h = 0; $h < 24; $h++): ?>
+            <option value="<?= $h ?>" <?= (int) $cfg('business_day_start_hour', '18') === $h ? 'selected' : '' ?>>
+              <?= date('g:i A', mktime($h, 0, 0)) ?> (<?= sprintf('%02d:00', $h) ?>)
+            </option>
+            <?php endfor; ?>
+          </select>
+          <p class="text-[10px] text-slate-400 mt-1">Hour the dashboard&rsquo;s &ldquo;Today&rdquo; counters roll over. Set to your shift start (e.g. 6:00 PM) so overnight totals don&rsquo;t reset at midnight. Pick a time inside the daytime downtime.</p>
+        </div>
+      </div>
+    </div>
+
     <!-- ── System Info (read-only) ───────────────────────────────────────── -->
     <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
       <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">

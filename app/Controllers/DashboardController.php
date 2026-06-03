@@ -100,8 +100,13 @@ class DashboardController
         }
 
         // ── Date-range helpers ────────────────────────────────────────────────
-        $todayStart = Carbon::today()->startOfDay();
-        $todayEnd   = Carbon::today()->endOfDay();
+        // "Today" follows the operations shift day, not the calendar day, so the
+        // overnight shift's KPIs don't reset to zero at midnight. Rollover hour is
+        // configurable (default 18:00 = shift start) via system_config.
+        [$todayStart, $todayEnd] = ShiftService::businessDayBounds();
+        $shiftLabel = $todayStart->format('M j, g:i A') . ' → '
+                    . $todayStart->copy()->addDay()->format('M j, g:i A');
+
         $monthStart = Carbon::now()->startOfMonth()->startOfDay();
         $monthEnd   = Carbon::now()->endOfMonth()->endOfDay();
         $monthLabel = $monthStart->format('M j') . ' – ' . $monthEnd->format('M j, Y');

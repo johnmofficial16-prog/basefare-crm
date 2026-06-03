@@ -60,8 +60,9 @@ class MobileAdminController
             return $this->json($response, ['error' => 'Access denied.'], 403);
         }
 
-        $todayStart = Carbon::today()->startOfDay();
-        $todayEnd   = Carbon::today()->endOfDay();
+        // "Today" follows the operations shift day (default 18:00 rollover), not
+        // calendar midnight, so overnight totals don't reset at midnight.
+        [$todayStart, $todayEnd] = \App\Services\ShiftService::businessDayBounds();
         $monthStart = Carbon::now()->startOfMonth()->startOfDay();
         $monthEnd   = Carbon::now()->endOfMonth()->endOfDay();
 
@@ -118,6 +119,8 @@ class MobileAdminController
             'leaderboard'  => $leaderboard,
             'recent'       => $recent,
             'month_label'  => $monthStart->format('M j') . ' – ' . $monthEnd->format('M j, Y'),
+            'shift_label'  => $todayStart->format('M j, g:i A') . ' → '
+                              . $todayStart->copy()->addDay()->format('M j, g:i A'),
         ]);
     }
 

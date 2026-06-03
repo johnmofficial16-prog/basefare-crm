@@ -6,9 +6,55 @@ use App\Models\ShiftSchedule;
 use App\Models\ShiftTemplate;
 use App\Models\User;
 use Illuminate\Database\Capsule\Manager as Capsule;
+use Carbon\Carbon;
 
 class ShiftService
 {
+    /**
+     * Default hour (0-23) the operations "business day" rolls over.
+     * Overnight shift runs ~6pm → 9am, so the day flips at 18:00 (shift start),
+     * inside the daytime downtime, rather than at calendar midnight.
+     */
+    const DEFAULT_BUSINESS_DAY_START_HOUR = 18;
+
+    /**
+     * Configured business-day rollover hour, read from system_config
+     * (key `business_day_start_hour`). Falls back to the default and is
+     * always clamped to a valid 0-23 hour.
+     */
+    public static function businessDayStartHour(): int
+    {
+        $val = Capsule::table('system_config')
+            ->where('key', 'business_day_start_hour')->value('value');
+        $hour = $val === null ? self::DEFAULT_BUSINESS_DAY_START_HOUR : (int) $val;
+        return max(0, min(23, $hour));
+    }
+
+    /**
+     * Inclusive [start, end] bounds of the current operations "business day".
+     *
+     * Because the centre runs an overnight shift, "today" must not reset at
+     * midnight or the live KPIs zero out mid-shift. We roll over once at the
+     * configured hour (default 18:00), so a booking at 02:00 still counts toward
+     * the shift that began at 18:00 the previous evening, and last night's totals
+     * stay visible until the next shift starts. Mirrors the TV liveboard window.
+     *
+     * @param  int|null  $rolloverHour  Override hour (0-23); null reads config.
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    public static function businessDayBounds(?int $rolloverHour = null): array
+    {
+        $rolloverHour = $rolloverHour ?? self::businessDayStartHour();
+        $rolloverHour = max(0, min(23, $rolloverHour));
+        // Shift "now" back by the rollover hour so the calendar date lands on the
+        // date the current shift started, then rebuild the window from it.
+        $anchorDate = Carbon::now()->subHours($rolloverHour)->toDateString();
+        $start      = Carbon::parse($anchorDate)->addHours($rolloverHour);
+        // subSecond keeps the inclusive whereBetween semantics used by KPI queries.
+        $end        = $start->copy()->addDay()->subSecond();
+        return [$start, $end];
+    }
+
     /**
      * Validate a single schedule entry before any DB write.
      *
