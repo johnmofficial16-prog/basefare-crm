@@ -167,7 +167,7 @@ $app->group('/admin', function ($group) {
 ->add(new AuthMiddleware([User::ROLE_ADMIN]));
 
 // ==========================================================================
-// Mobile Admin Quick Panel (admin + manager, NO AttendanceGate — so admin
+// Mobile Admin Quick Panel (admin ONLY, NO AttendanceGate — so admin
 // can approve clock-ins without being clocked in themselves)
 // ==========================================================================
 $app->group('/admin/mobile', function ($group) {

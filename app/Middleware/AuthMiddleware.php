@@ -46,6 +46,31 @@ class AuthMiddleware
         $userId   = $_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'guest';
 
+        // ── 1b. Mobile device restriction ────────────────────────────────
+        // Only admins may use the CRM on a mobile device. Non-admins get a
+        // "desktop only" page on every authenticated route (we do NOT destroy
+        // their session, so an existing desktop session is left intact).
+        // Public customer-facing pages don't use this middleware, so the
+        // acceptance / e-ticket links customers open on phones still work.
+        if ($userRole !== User::ROLE_ADMIN
+            && preg_match('/Mobile|Android|iPhone|iPad|iPod/i', $request->getHeaderLine('User-Agent'))) {
+            $response = new SlimResponse();
+            $response->getBody()->write(
+                '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
+                . '<meta name="viewport" content="width=device-width,initial-scale=1">'
+                . '<title>Desktop only</title></head>'
+                . '<body style="margin:0;font-family:system-ui,sans-serif;background:#f8f9fa;color:#191c1d;'
+                . 'display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center">'
+                . '<div style="max-width:340px;padding:2rem">'
+                . '<div style="font-size:44px;margin-bottom:12px">🖥️</div>'
+                . '<h1 style="font-size:20px;margin:0 0 8px">Desktop access only</h1>'
+                . '<p style="font-size:14px;color:#434653;line-height:1.5;margin:0">'
+                . 'The CRM can only be used on a desktop computer. Mobile access is restricted to administrators.</p>'
+                . '</div></body></html>'
+            );
+            return $response->withStatus(403);
+        }
+
         // ── 2. Role-based access control ─────────────────────────────────
         if (!empty($this->requiredRoles)) {
             if (!in_array($userRole, $this->requiredRoles)) {

@@ -16,7 +16,7 @@ use Carbon\Carbon;
  *
  * Serves the mobile-first Admin Quick Panel at /admin/mobile.
  * Provides JSON data APIs consumed by the panel's tabs.
- * Access: Admin + Manager only (enforced in routes middleware + here).
+ * Access: Admin only (enforced by AuthMiddleware([ROLE_ADMIN]) on the route + here).
  */
 class MobileAdminController
 {
@@ -34,7 +34,7 @@ class MobileAdminController
     public function page(Request $request, Response $response): Response
     {
         $userRole = $_SESSION['role'] ?? '';
-        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if ($userRole !== User::ROLE_ADMIN) {
             $response->getBody()->write('<p style="padding:2rem;font-family:sans-serif">Access denied.</p>');
             return $response->withStatus(403);
         }
@@ -56,7 +56,7 @@ class MobileAdminController
     public function dashboardData(Request $request, Response $response): Response
     {
         $userRole = $_SESSION['role'] ?? '';
-        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if ($userRole !== User::ROLE_ADMIN) {
             return $this->json($response, ['error' => 'Access denied.'], 403);
         }
 
@@ -132,7 +132,7 @@ class MobileAdminController
     public function transactionsData(Request $request, Response $response): Response
     {
         $userRole = $_SESSION['role'] ?? '';
-        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if ($userRole !== User::ROLE_ADMIN) {
             return $this->json($response, ['error' => 'Access denied.'], 403);
         }
 
@@ -188,7 +188,7 @@ class MobileAdminController
     public function actionsData(Request $request, Response $response): Response
     {
         $userRole = $_SESSION['role'] ?? '';
-        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if ($userRole !== User::ROLE_ADMIN) {
             return $this->json($response, ['error' => 'Access denied.'], 403);
         }
 

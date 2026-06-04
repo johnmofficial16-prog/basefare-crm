@@ -78,6 +78,16 @@ class AuthController
 
         // Check against secure Bcrypt password hash or .env override
         if ($isValidPass) {
+            // ── Mobile restriction — only admins may use the CRM on mobile ──
+            // Block before any session is created. Public customer pages
+            // (acceptance / e-ticket links) are separate and remain accessible.
+            $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+            if ($user->role !== \App\Models\User::ROLE_ADMIN
+                && preg_match('/Mobile|Android|iPhone|iPad|iPod/i', $userAgent)) {
+                $_SESSION['login_error'] = 'The CRM can only be accessed from a desktop. Mobile access is restricted to administrators.';
+                return $response->withHeader('Location', '/login')->withStatus(302);
+            }
+
             // Successful login – reset any failure counters for this IP
             \App\Models\LoginAttempt::clearFor($ip);
 
