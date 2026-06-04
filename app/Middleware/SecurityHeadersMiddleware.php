@@ -31,13 +31,18 @@ class SecurityHeadersMiddleware
             ->withHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
             // Restrict browser features the CRM doesn't need
             ->withHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-            // Baseline CSP — allow CDN assets (Tailwind, Google Fonts, Material Symbols)
+            // Baseline CSP — allow the CDN assets the app actually uses:
+            //  • Tailwind Play CDN (cdn.tailwindcss.com)
+            //  • html2pdf  (cdnjs.cloudflare.com)            — PDF downloads (slips, vouchers)
+            //  • JsBarcode (cdn.jsdelivr.net)                — voucher barcodes
+            //  • Google Fonts / Material Symbols
+            //  • gstatic airline logos + Google avatar images
             ->withHeader('Content-Security-Policy',
                 "default-src 'self'; "
-                . "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; "
+                . "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
                 . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 . "font-src 'self' https://fonts.gstatic.com; "
-                . "img-src 'self' data: blob:; "
+                . "img-src 'self' data: blob: https://www.gstatic.com https://lh3.googleusercontent.com; "
                 . "connect-src 'self'; "
                 . "frame-ancestors 'none';"
             );
