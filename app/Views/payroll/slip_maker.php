@@ -41,6 +41,11 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 .slip-net{background:linear-gradient(135deg,#163274,#314a8d);color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
 .slip-footer{padding:10px 24px;display:flex;justify-content:space-between;border-top:1px solid #f1f5f9;font-size:9.5px;color:#94a3b8}
 .sig-line{width:90px;border-top:1.5px solid #cbd5e1;margin:0 auto 3px}
+/* Slip-type toggle */
+.slip-type-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 8px;border:1.5px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#64748b;font-size:12.5px;font-weight:700;cursor:pointer;transition:all .12s}
+.slip-type-btn:hover{border-color:#cbd5e1}
+.slip-type-btn.active{border-color:#163274;background:#163274;color:#fff;box-shadow:0 4px 12px -4px rgba(22,50,116,.4)}
+.slip-type-btn .material-symbols-outlined{font-size:18px}
 @media print{body *{visibility:hidden}#slip-inner,#slip-inner *{visibility:visible}#slip-inner{position:fixed;left:0;top:0;width:100%;box-shadow:none;border:none}}
 </style>
 </head>
@@ -77,6 +82,22 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
     <!-- ═══ EDITOR ═══ -->
     <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+
+      <!-- Slip Type -->
+      <div class="px-5 py-4 border-b border-slate-100 bg-slate-50/60">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-sm text-primary">description</span> Slip Type
+        </p>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" id="btn-type-salary" onclick="setSlipType('salary')" class="slip-type-btn active">
+            <span class="material-symbols-outlined">receipt_long</span> Salary Slip
+          </button>
+          <button type="button" id="btn-type-commission" onclick="setSlipType('commission')" class="slip-type-btn">
+            <span class="material-symbols-outlined">paid</span> Commission Slip
+          </button>
+        </div>
+        <p class="mt-2 text-[10px] text-slate-400" id="slip-type-hint">Standard salary slip with full earnings &amp; deductions.</p>
+      </div>
 
       <!-- Company -->
       <div class="px-5 py-4 border-b border-slate-100">
@@ -124,15 +145,15 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             </select></div>
           <div><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Year</label>
             <input id="p_year" type="number" value="<?= date('Y') ?>" min="2020" max="2099" oninput="render()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
-          <div><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Working Days</label>
+          <div id="fld_wdays"><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Working Days</label>
             <input id="p_wdays" type="number" value="26" min="1" max="31" oninput="render(); calcProRata();" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
-          <div><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Days Present</label>
+          <div id="fld_present"><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Days Present</label>
             <input id="p_present" type="number" value="26" min="0" max="31" oninput="render(); calcProRata();" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
         </div>
       </div>
 
       <!-- Pro-Rata Calculator -->
-      <div class="px-5 py-4 border-b border-slate-100 bg-blue-50/40">
+      <div id="proRataSection" class="px-5 py-4 border-b border-slate-100 bg-blue-50/40">
         <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
           <span class="material-symbols-outlined text-sm text-primary">calculate</span> Pro-Rata Calculator
           <span class="ml-auto text-[9px] font-normal text-primary bg-blue-100 px-1.5 py-0.5 rounded-full">Auto-fills earnings</span>
@@ -153,25 +174,44 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         </button>
       </div>
 
-      <!-- Earnings -->
+      <!-- Commission & TDS Helper (commission slip only) -->
+      <div id="commissionSection" class="px-5 py-4 border-b border-slate-100 bg-amber-50/40 hidden">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-sm text-amber-600">calculate</span> Commission &amp; TDS Helper
+          <span class="ml-auto text-[9px] font-normal text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">Auto-fills TDS</span>
+        </p>
+        <div class="grid grid-cols-2 gap-2.5 mb-2.5">
+          <div><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Total Commission (₹)</label>
+            <input id="tds_base" type="number" readonly class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-100 text-slate-600 cursor-not-allowed"/></div>
+          <div><label class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">TDS Rate (%)</label>
+            <input id="tds_pct" type="number" value="5" min="0" max="100" step="0.5" oninput="calcTDS()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-primary/30 focus:border-primary"/></div>
+        </div>
+        <div id="tds_result" class="hidden text-[11px] text-slate-600 bg-white border border-amber-100 rounded-lg p-2.5 mb-2 space-y-0.5"></div>
+        <button onclick="applyTDS()" class="w-full inline-flex items-center justify-center gap-1 py-2 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 transition-all">
+          <span class="material-symbols-outlined text-sm">auto_fix_high</span> Apply TDS Deduction
+        </button>
+        <p class="mt-2 text-[10px] text-slate-400">TDS computed on total commission. Common rate u/s 194H is 5% (adjust as per latest rules).</p>
+      </div>
+
+      <!-- Earnings / Commission -->
       <div class="px-5 py-4 border-b border-slate-100">
         <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-          <span class="material-symbols-outlined text-sm text-primary">payments</span> Earnings
+          <span class="material-symbols-outlined text-sm text-primary">payments</span> <span id="earningsTitle">Earnings</span>
         </p>
         <div id="earnings-list" class="flex flex-col gap-1.5"></div>
         <button onclick="addEarning()" class="mt-2 w-full inline-flex items-center justify-center gap-1 py-2 border border-dashed border-primary/40 text-primary text-xs font-bold rounded-lg hover:bg-primary/5 transition-all">
-          <span class="material-symbols-outlined text-sm">add</span> Add Earning
+          <span class="material-symbols-outlined text-sm">add</span> <span id="addEarningLabel">Add Earning</span>
         </button>
       </div>
 
-      <!-- Deductions -->
+      <!-- Deductions / TDS -->
       <div class="px-5 py-4 border-b border-slate-100">
         <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-          <span class="material-symbols-outlined text-sm text-red-500">remove_circle</span> Deductions
+          <span class="material-symbols-outlined text-sm text-red-500">remove_circle</span> <span id="deductionsTitle">Deductions</span>
         </p>
         <div id="deductions-list" class="flex flex-col gap-1.5"></div>
         <button onclick="addDeduction()" class="mt-2 w-full inline-flex items-center justify-center gap-1 py-2 border border-dashed border-red-300 text-red-500 text-xs font-bold rounded-lg hover:bg-red-50 transition-all">
-          <span class="material-symbols-outlined text-sm">add</span> Add Deduction
+          <span class="material-symbols-outlined text-sm">add</span> <span id="addDeductionLabel">Add Deduction</span>
         </button>
       </div>
 
@@ -222,8 +262,48 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 <script>
 const LOGO_B64 = <?= json_encode($logoB64) ?>;
 
-let earnings=[{label:'Basic Salary',amount:25000},{label:'House Rent Allowance (HRA)',amount:5000},{label:'Travel Allowance',amount:1600},{label:'Medical Allowance',amount:1250}];
-let deductions=[{label:'Provident Fund (PF)',amount:1800},{label:'Professional Tax',amount:200}];
+// Slip type: 'salary' (full earnings & deductions) or 'commission' (commission + TDS only)
+let slipType='salary';
+
+const SLIP_DEFAULTS={
+  salary:{
+    earnings:[{label:'Basic Salary',amount:25000},{label:'House Rent Allowance (HRA)',amount:5000},{label:'Travel Allowance',amount:1600},{label:'Medical Allowance',amount:1250}],
+    deductions:[{label:'Provident Fund (PF)',amount:1800},{label:'Professional Tax',amount:200}],
+  },
+  commission:{
+    earnings:[{label:'Commission',amount:0}],
+    deductions:[{label:'TDS (Tax Deducted at Source)',amount:0}],
+  },
+};
+
+const SLIP_LABELS={
+  salary:{title:'Salary Slip',earnings:'Earnings',deductions:'Deductions',gross:'Gross Earnings',totalDed:'Total Deductions',net:'Net Pay',addEarn:'Add Earning',addDed:'Add Deduction',hint:'Standard salary slip with full earnings &amp; deductions.'},
+  commission:{title:'Commission Slip',earnings:'Commission',deductions:'Tax Deducted (TDS)',gross:'Total Commission',totalDed:'Total TDS',net:'Net Commission',addEarn:'Add Commission Line',addDed:'Add TDS Line',hint:'Commission statement showing only commission earned &amp; TDS deducted — ideal for income / loan proof.'},
+};
+
+let earnings=JSON.parse(JSON.stringify(SLIP_DEFAULTS.salary.earnings));
+let deductions=JSON.parse(JSON.stringify(SLIP_DEFAULTS.salary.deductions));
+
+function setSlipType(t){
+  if((t!=='salary'&&t!=='commission')||t===slipType)return;
+  slipType=t;
+  earnings=JSON.parse(JSON.stringify(SLIP_DEFAULTS[t].earnings));
+  deductions=JSON.parse(JSON.stringify(SLIP_DEFAULTS[t].deductions));
+  const isComm=t==='commission', L=SLIP_LABELS[t];
+  document.getElementById('btn-type-salary').classList.toggle('active',!isComm);
+  document.getElementById('btn-type-commission').classList.toggle('active',isComm);
+  document.getElementById('proRataSection').classList.toggle('hidden',isComm);
+  document.getElementById('fld_wdays').classList.toggle('hidden',isComm);
+  document.getElementById('fld_present').classList.toggle('hidden',isComm);
+  document.getElementById('commissionSection').classList.toggle('hidden',!isComm);
+  document.getElementById('earningsTitle').textContent=L.earnings;
+  document.getElementById('deductionsTitle').textContent=L.deductions;
+  document.getElementById('addEarningLabel').textContent=L.addEarn;
+  document.getElementById('addDeductionLabel').textContent=L.addDed;
+  document.getElementById('slip-type-hint').innerHTML=L.hint;
+  renderAll();
+  if(isComm)calcTDS();
+}
 
 // Digital signature: Dancing Script cursive font — looks authentic for any name
 function buildSignatureSVG(name) {
@@ -261,9 +341,25 @@ function render(){
   const authTitle=v('auth_title')||'Authorized Signatory';
   const absent=Math.max(0,parseInt(pWdays||0)-parseInt(pPresent||0));
 
+  const L=SLIP_LABELS[slipType], isComm=slipType==='commission';
+
   const gross=earnings.reduce((s,r)=>s+(r.amount||0),0);
   const totalDed=deductions.reduce((s,r)=>s+(r.amount||0),0);
   const net=gross-totalDed;
+
+  // Meta row differs by slip type: salary shows attendance, commission shows period/bank.
+  const metaFour = isComm
+    ? `<div class="slip-meta-grid four">
+        <div><div class="meta-lbl">Statement Period</div><div class="meta-val">${esc(pMonth)} ${esc(pYear)}</div></div>
+        <div><div class="meta-lbl">Bank / Account</div><div class="meta-val">${esc(eBank)||'—'}${eAcc?' / '+esc(eAcc):''}</div></div>
+      </div>`
+    : `<div class="slip-meta-grid four">
+        <div><div class="meta-lbl">Working Days</div><div class="meta-val">${esc(pWdays)}</div></div>
+        <div><div class="meta-lbl">Days Present</div><div class="meta-val" style="color:#16a34a">${esc(pPresent)}</div></div>
+        <div><div class="meta-lbl">Days Absent</div><div class="meta-val" style="color:${absent>0?'#dc2626':'#94a3b8'}">${absent}</div></div>
+        <div><div class="meta-lbl">Bank / Account</div><div class="meta-val">${esc(eBank)||'—'}${eAcc?' / '+esc(eAcc):''}</div></div>
+      </div>`;
+  const netSub = isComm ? `${esc(pMonth)} ${esc(pYear)}` : `${esc(pMonth)} ${esc(pYear)} · ${esc(pPresent)}/${esc(pWdays)} days`;
 
   let eRows=earnings.filter(r=>r.label||r.amount).map(r=>`<tr><td>${esc(r.label)}</td><td>${fmt(r.amount)}</td></tr>`).join('');
   if(!eRows)eRows='<tr><td colspan="2" style="color:#94a3b8;font-style:italic;padding:6px">No earnings added</td></tr>';
@@ -282,7 +378,7 @@ function render(){
       ${cEmail?`<div style="font-size:10px;opacity:.7;margin-top:1px">${esc(cEmail)}</div>`:''}
     </div>
     <div style="text-align:right">
-      <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em">Salary Slip</div>
+      <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em">${L.title}</div>
       <div style="font-size:10px;opacity:.75;margin-top:2px">${esc(pMonth)} ${esc(pYear)}</div>
     </div>
   </div>
@@ -294,37 +390,32 @@ function render(){
     <div><div class="meta-lbl">Date of Joining</div><div class="meta-val">${esc(eDoj)||'—'}</div></div>
     <div><div class="meta-lbl">PAN</div><div class="meta-val">${esc(ePan)||'—'}</div></div>
   </div>
-  <div class="slip-meta-grid four">
-    <div><div class="meta-lbl">Working Days</div><div class="meta-val">${esc(pWdays)}</div></div>
-    <div><div class="meta-lbl">Days Present</div><div class="meta-val" style="color:#16a34a">${esc(pPresent)}</div></div>
-    <div><div class="meta-lbl">Days Absent</div><div class="meta-val" style="color:${absent>0?'#dc2626':'#94a3b8'}">${absent}</div></div>
-    <div><div class="meta-lbl">Bank / Account</div><div class="meta-val">${esc(eBank)||'—'}${eAcc?' / '+esc(eAcc):''}</div></div>
-  </div>
+  ${metaFour}
   <div class="slip-body">
     <div>
-      <div class="slip-tbl-title">Earnings</div>
+      <div class="slip-tbl-title">${L.earnings}</div>
       <table class="slip-tbl"><tbody>${eRows}</tbody>
-        <tfoot><tr><td style="color:#475569">Gross Earnings</td><td style="color:#163274">${fmt(gross)}</td></tr></tfoot>
+        <tfoot><tr><td style="color:#475569">${L.gross}</td><td style="color:#163274">${fmt(gross)}</td></tr></tfoot>
       </table>
     </div>
     <div>
-      <div class="slip-tbl-title" style="color:#dc2626;border-color:#fee2e2">Deductions</div>
+      <div class="slip-tbl-title" style="color:#dc2626;border-color:#fee2e2">${L.deductions}</div>
       <table class="slip-tbl"><tbody>${dRows}</tbody>
-        <tfoot><tr><td style="color:#475569">Total Deductions</td><td style="color:#dc2626">- ${fmt(totalDed)}</td></tr></tfoot>
+        <tfoot><tr><td style="color:#475569">${L.totalDed}</td><td style="color:#dc2626">- ${fmt(totalDed)}</td></tr></tfoot>
       </table>
     </div>
     ${notes?`<div style="font-size:10.5px;color:#64748b;background:#f8fafc;border-radius:6px;padding:10px 12px;border:1px solid #e2e8f0"><strong style="color:#475569">Note:</strong> ${esc(notes)}</div>`:''}
   </div>
   <div class="slip-net">
     <div>
-      <div style="font-size:10px;font-weight:700;opacity:.85;text-transform:uppercase;letter-spacing:.06em">Net Pay</div>
-      <div style="font-size:10px;opacity:.65;margin-top:1px">${esc(pMonth)} ${esc(pYear)} · ${esc(pPresent)}/${esc(pWdays)} days</div>
+      <div style="font-size:10px;font-weight:700;opacity:.85;text-transform:uppercase;letter-spacing:.06em">${L.net}</div>
+      <div style="font-size:10px;opacity:.65;margin-top:1px">${netSub}</div>
     </div>
     <div style="font-size:22px;font-weight:900;letter-spacing:-.03em">${fmt(net)}</div>
   </div>
   <div class="slip-footer">
     <div style="text-align:center"><div class="sig-line"></div>Employee Signature</div>
-    <div style="text-align:center;align-self:center;font-size:9px;color:#cbd5e1">This is a computer generated salary slip.</div>
+    <div style="text-align:center;align-self:center;font-size:9px;color:#cbd5e1">This is a computer generated ${L.title.toLowerCase()}.</div>
     <div style="text-align:center">
       ${buildSignatureSVG(authName)}
       <div style="width:110px;border-top:1.5px solid #cbd5e1;margin:4px auto 3px"></div>
@@ -333,20 +424,23 @@ function render(){
     </div>
   </div>
 </div>`;
+
+  if(slipType==='commission') calcTDS();
 }
 
 function downloadPDF(){
   const el=document.getElementById('slip-inner');
-  const name=(document.getElementById('e_name')?.value||'Salary').replace(/\s+/g,'_');
+  const name=(document.getElementById('e_name')?.value||'Slip').replace(/\s+/g,'_');
   const month=document.getElementById('p_month')?.value||'';
   const year=document.getElementById('p_year')?.value||'';
-  html2pdf().set({margin:0,filename:`SalarySlip_${name}_${month}_${year}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(el).save();
+  const prefix=slipType==='commission'?'CommissionSlip':'SalarySlip';
+  html2pdf().set({margin:0,filename:`${prefix}_${name}_${month}_${year}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(el).save();
 }
 
 function resetForm(){
   if(!confirm('Reset all fields to defaults?'))return;
-  earnings=[{label:'Basic Salary',amount:25000},{label:'House Rent Allowance (HRA)',amount:5000},{label:'Travel Allowance',amount:1600},{label:'Medical Allowance',amount:1250}];
-  deductions=[{label:'Provident Fund (PF)',amount:1800},{label:'Professional Tax',amount:200}];
+  earnings=JSON.parse(JSON.stringify(SLIP_DEFAULTS[slipType].earnings));
+  deductions=JSON.parse(JSON.stringify(SLIP_DEFAULTS[slipType].deductions));
   document.getElementById('c_name').value='Base Fare Travels Pvt. Ltd.';
   document.getElementById('c_addr').value='Mumbai, Maharashtra, India';
   ['c_cin','c_email','e_doj','e_pan','e_bank','e_acc','slip_notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';})
@@ -360,6 +454,7 @@ function resetForm(){
   document.getElementById('auth_name').value='Paramjeet Singh';
   document.getElementById('auth_title').value='Authorized Signatory';
   renderAll();
+  if(slipType==='commission') calcTDS();
 }
 
 function calcProRata(){
@@ -397,6 +492,34 @@ function applyProRata(){
   ];
   deductions=[{label:'Provident Fund (PF)',amount:d.pfFixed}];
   renderAll();
+}
+
+// ── Commission / TDS helper ────────────────────────────────────────────────
+function calcTDS(){
+  const base = earnings.reduce((s,r)=>s+(r.amount||0),0);
+  const pct  = parseFloat(document.getElementById('tds_pct')?.value)||0;
+  const baseEl=document.getElementById('tds_base');
+  if(baseEl) baseEl.value = base ? Math.round(base) : '';
+  const tds  = Math.round(base*pct/100);
+  const net  = base - tds;
+  const el=document.getElementById('tds_result');
+  if(!el) return;
+  if(!base){el.classList.add('hidden');return;}
+  el.classList.remove('hidden');
+  el.innerHTML=`<div class="flex justify-between"><span>Total Commission:</span><span class="font-bold">₹${base.toLocaleString('en-IN')}</span></div>
+<div class="flex justify-between"><span>TDS @ ${pct}%:</span><span class="font-bold text-red-600">- ₹${tds.toLocaleString('en-IN')}</span></div>
+<div class="flex justify-between border-t border-slate-100 pt-1 mt-1"><span>Net Commission Payable:</span><span class="font-bold text-primary">₹${net.toLocaleString('en-IN')}</span></div>`;
+  el._tds=tds;
+}
+
+function applyTDS(){
+  const base = earnings.reduce((s,r)=>s+(r.amount||0),0);
+  if(!base){alert('Add commission amount(s) first.');return;}
+  const pct  = parseFloat(document.getElementById('tds_pct')?.value)||0;
+  const tds  = Math.round(base*pct/100);
+  deductions=[{label:`TDS @ ${pct}% (Tax Deducted at Source)`,amount:tds}];
+  renderAll();
+  calcTDS();
 }
 
 renderAll();
