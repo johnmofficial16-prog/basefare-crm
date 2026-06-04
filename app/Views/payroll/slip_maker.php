@@ -46,7 +46,10 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 .slip-type-btn:hover{border-color:#cbd5e1}
 .slip-type-btn.active{border-color:#163274;background:#163274;color:#fff;box-shadow:0 4px 12px -4px rgba(22,50,116,.4)}
 .slip-type-btn .material-symbols-outlined{font-size:18px}
-@media print{body *{visibility:hidden}#slip-inner,#slip-inner *{visibility:visible}#slip-inner{position:fixed;left:0;top:0;width:100%;box-shadow:none;border:none}}
+/* Fallback for Ctrl+P on the main page. The Print button uses printSlip()
+   (isolated iframe) which is the reliable path. NOTE: not position:fixed —
+   fixed elements repeat on every printed page, which caused duplicate copies. */
+@media print{body *{visibility:hidden}#slip-inner,#slip-inner *{visibility:visible}#slip-inner{position:absolute;left:0;top:0;width:100%;box-shadow:none;border:none}}
 </style>
 </head>
 <body class="bg-background font-body text-on-surface antialiased min-h-screen">
@@ -68,7 +71,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <button onclick="resetForm()" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:border-primary hover:text-primary transition-all text-sm shadow-sm">
         <span class="material-symbols-outlined text-base">restart_alt</span> Reset
       </button>
-      <button onclick="window.print()" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:border-primary hover:text-primary transition-all text-sm shadow-sm">
+      <button onclick="printSlip()" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:border-primary hover:text-primary transition-all text-sm shadow-sm">
         <span class="material-symbols-outlined text-base">print</span> Print
       </button>
       <button onclick="downloadPDF()" class="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary-container shadow-lg shadow-primary/20 transition-all text-sm">
@@ -426,6 +429,36 @@ function render(){
 </div>`;
 
   if(slipType==='commission') calcTDS();
+}
+
+// Print ONLY the slip via an isolated off-screen iframe. This avoids the app
+// chrome (sidebar/editor) and the duplicate-copies bug that position:fixed in
+// an @media print rule caused (fixed elements repeat on every printed page).
+function printSlip(){
+  const slip=document.getElementById('slip-inner');
+  if(!slip){alert('Nothing to print yet.');return;}
+  const styles    = [...document.querySelectorAll('style')].map(s=>s.outerHTML).join('');
+  const fontLinks = [...document.querySelectorAll('link[rel="stylesheet"]')].map(l=>l.outerHTML).join('');
+  const old=document.getElementById('__printFrame'); if(old) old.remove();
+  const f=document.createElement('iframe');
+  f.id='__printFrame';
+  // Off-screen (not display:none) so fonts/layout still render before printing.
+  f.style.cssText='position:fixed;left:-9999px;top:0;width:210mm;height:297mm;border:0';
+  document.body.appendChild(f);
+  const doc=f.contentWindow.document;
+  doc.open();
+  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8">${fontLinks}${styles}`
+    + `<style>@page{size:A4;margin:0}html,body{margin:0;padding:0;background:#fff}`
+    + `#slip-inner{box-shadow:none;border:none;width:100%}</style></head>`
+    + `<body>${slip.outerHTML}</body></html>`);
+  doc.close();
+  const go=()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){ console.error(e); }
+    setTimeout(()=>f.remove(), 1000); };
+  // Wait for webfonts (signature/Noto) so they don't print as fallback glyphs.
+  let done=false; const fire=()=>{ if(done)return; done=true; go(); };
+  try{ doc.fonts && doc.fonts.ready ? doc.fonts.ready.then(()=>setTimeout(fire,150)) : setTimeout(fire,500); }
+  catch(e){ setTimeout(fire,500); }
+  setTimeout(fire, 1500); // hard fallback if fonts.ready never resolves
 }
 
 function downloadPDF(){
