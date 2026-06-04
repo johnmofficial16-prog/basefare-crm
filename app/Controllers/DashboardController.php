@@ -241,64 +241,66 @@ class DashboardController
         if ($role === User::ROLE_MANAGER) {
             $mgr     = User::find($userId);
             $teamIds = $mgr ? $mgr->getTeamAgentIds() : [];
+            // Booking/KPI scope = team + the manager's OWN records. A manager is not
+            // assigned under themselves, so without adding their own id their own
+            // bookings never appear on their dashboard (only their agents' do).
+            $scopeIds = array_values(array_unique(array_merge($teamIds, [(int)$userId])));
 
-            if (!empty($teamIds)) {
-                // Team acceptance KPIs
-                $teamPendingAcc   = AcceptanceRequest::where('status', AcceptanceRequest::STATUS_PENDING)
-                                        ->where('is_preauth', false)
-                                        ->whereIn('agent_id', $teamIds)->count();
-                $teamTodayNewAcc  = AcceptanceRequest::whereBetween('created_at', [$todayStart, $todayEnd])
-                                        ->whereIn('agent_id', $teamIds)->count();
+            // Acceptance KPIs (team + own)
+            $teamPendingAcc   = AcceptanceRequest::where('status', AcceptanceRequest::STATUS_PENDING)
+                                    ->where('is_preauth', false)
+                                    ->whereIn('agent_id', $scopeIds)->count();
+            $teamTodayNewAcc  = AcceptanceRequest::whereBetween('created_at', [$todayStart, $todayEnd])
+                                    ->whereIn('agent_id', $scopeIds)->count();
 
-                // Team transaction KPIs — today
-                $teamTodayBase      = fn() => Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
-                                         ->where('status', '!=', Transaction::STATUS_VOIDED)
-                                         ->whereIn('agent_id', $teamIds);
-                $teamTodayCount     = $teamTodayBase()->count();
-                $teamTodayRevenue   = (float) $teamTodayBase()->sum('total_amount');
-                $teamPendingReview  = Transaction::where('status', Transaction::STATUS_PENDING)
-                                         ->whereIn('agent_id', $teamIds)->count();
+            // Transaction KPIs — today (team + own)
+            $teamTodayBase      = fn() => Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
+                                     ->where('status', '!=', Transaction::STATUS_VOIDED)
+                                     ->whereIn('agent_id', $scopeIds);
+            $teamTodayCount     = $teamTodayBase()->count();
+            $teamTodayRevenue   = (float) $teamTodayBase()->sum('total_amount');
+            $teamPendingReview  = Transaction::where('status', Transaction::STATUS_PENDING)
+                                     ->whereIn('agent_id', $scopeIds)->count();
 
-                // Pending transactions
-                $pendingApprovals = Transaction::where('status', Transaction::STATUS_PENDING)
-                    ->whereIn('agent_id', $teamIds)->with('agent:id,name')->latest()->limit(8)
-                    ->get(['id','agent_id','customer_name','type','total_amount','currency','created_at']);
+            // Pending transactions (team + own)
+            $pendingApprovals = Transaction::where('status', Transaction::STATUS_PENDING)
+                ->whereIn('agent_id', $scopeIds)->with('agent:id,name')->latest()->limit(8)
+                ->get(['id','agent_id','customer_name','type','total_amount','currency','created_at']);
 
-                // Agent statuses
-                $teamMembers = User::whereIn('id', $teamIds)
-                    ->where('status', User::STATUS_ACTIVE)->get(['id','name']);
+            // Agent statuses — team roster only (manager is not their own report)
+            $teamMembers = User::whereIn('id', $teamIds)
+                ->where('status', User::STATUS_ACTIVE)->get(['id','name']);
 
-                $agentStatuses = [];
-                foreach ($teamMembers as $member) {
-                    $sess = \App\Models\AttendanceSession::forUser($member->id)->forDate(date('Y-m-d'))
-                        ->latest('id')->first();
-                    $agentStatuses[] = [
-                        'id'       => $member->id,
-                        'name'     => $member->name,
-                        'status'   => $sess?->status ?? 'absent',
-                        'late_min' => $sess?->late_minutes ?? 0,
-                        'state'    => $this->attendanceService->getCurrentState($member->id)['state'] ?? 'not_clocked_in',
-                    ];
-                }
-
-                // Recent team activity
-                $teamRecentTxns = Transaction::whereIn('agent_id', $teamIds)
-                    ->with('agent:id,name')->latest()->limit(8)
-                    ->get(['id','agent_id','customer_name','type','total_amount','currency','status','created_at']);
-
-                $managerData = [
-                    'team_ids'           => $teamIds,
-                    'team_pending_acc'   => $teamPendingAcc,
-                    'team_today_new_acc' => $teamTodayNewAcc,
-                    'team_today_count'   => $teamTodayCount,
-                    'team_today_rev'     => $teamTodayRevenue,
-                    'team_pending_rev'   => $teamPendingReview,
-                    'pending_approvals'  => $pendingApprovals,
-                    'agent_statuses'     => $agentStatuses,
-                    'team_recent_txns'   => $teamRecentTxns,
-                    'month_label'        => $monthLabel,
+            $agentStatuses = [];
+            foreach ($teamMembers as $member) {
+                $sess = \App\Models\AttendanceSession::forUser($member->id)->forDate(date('Y-m-d'))
+                    ->latest('id')->first();
+                $agentStatuses[] = [
+                    'id'       => $member->id,
+                    'name'     => $member->name,
+                    'status'   => $sess?->status ?? 'absent',
+                    'late_min' => $sess?->late_minutes ?? 0,
+                    'state'    => $this->attendanceService->getCurrentState($member->id)['state'] ?? 'not_clocked_in',
                 ];
             }
+
+            // Recent activity (team + own)
+            $teamRecentTxns = Transaction::whereIn('agent_id', $scopeIds)
+                ->with('agent:id,name')->latest()->limit(8)
+                ->get(['id','agent_id','customer_name','type','total_amount','currency','status','created_at']);
+
+            $managerData = [
+                'team_ids'           => $teamIds,
+                'team_pending_acc'   => $teamPendingAcc,
+                'team_today_new_acc' => $teamTodayNewAcc,
+                'team_today_count'   => $teamTodayCount,
+                'team_today_rev'     => $teamTodayRevenue,
+                'team_pending_rev'   => $teamPendingReview,
+                'pending_approvals'  => $pendingApprovals,
+                'agent_statuses'     => $agentStatuses,
+                'team_recent_txns'   => $teamRecentTxns,
+                'month_label'        => $monthLabel,
+            ];
         }
 
         // =====================================================================
@@ -308,64 +310,66 @@ class DashboardController
         if ($role === User::ROLE_SUPERVISOR) {
             $sup     = User::find($userId);
             $teamIds = $sup ? $sup->getTeamAgentIds() : [];
+            // Booking/KPI scope = team + the supervisor's OWN records (same reason as
+            // managers: a supervisor is not assigned under themselves).
+            $scopeIds = array_values(array_unique(array_merge($teamIds, [(int)$userId])));
 
-            if (!empty($teamIds)) {
-                // Team acceptance KPIs
-                $teamPendingAcc   = AcceptanceRequest::where('status', AcceptanceRequest::STATUS_PENDING)
-                                        ->where('is_preauth', false)
-                                        ->whereIn('agent_id', $teamIds)->count();
-                $teamTodayNewAcc  = AcceptanceRequest::whereBetween('created_at', [$todayStart, $todayEnd])
-                                        ->whereIn('agent_id', $teamIds)->count();
+            // Acceptance KPIs (team + own)
+            $teamPendingAcc   = AcceptanceRequest::where('status', AcceptanceRequest::STATUS_PENDING)
+                                    ->where('is_preauth', false)
+                                    ->whereIn('agent_id', $scopeIds)->count();
+            $teamTodayNewAcc  = AcceptanceRequest::whereBetween('created_at', [$todayStart, $todayEnd])
+                                    ->whereIn('agent_id', $scopeIds)->count();
 
-                // Team transaction KPIs — today
-                $teamTodayBase      = fn() => Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
-                                         ->where('status', '!=', Transaction::STATUS_VOIDED)
-                                         ->whereIn('agent_id', $teamIds);
-                $teamTodayCount     = $teamTodayBase()->count();
-                $teamTodayRevenue   = (float) $teamTodayBase()->sum('total_amount');
-                $teamPendingReview  = Transaction::where('status', Transaction::STATUS_PENDING)
-                                         ->whereIn('agent_id', $teamIds)->count();
+            // Transaction KPIs — today (team + own)
+            $teamTodayBase      = fn() => Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
+                                     ->where('status', '!=', Transaction::STATUS_VOIDED)
+                                     ->whereIn('agent_id', $scopeIds);
+            $teamTodayCount     = $teamTodayBase()->count();
+            $teamTodayRevenue   = (float) $teamTodayBase()->sum('total_amount');
+            $teamPendingReview  = Transaction::where('status', Transaction::STATUS_PENDING)
+                                     ->whereIn('agent_id', $scopeIds)->count();
 
-                // Pending review transactions (supervisor can approve these)
-                $pendingApprovals = Transaction::where('status', Transaction::STATUS_PENDING)
-                    ->whereIn('agent_id', $teamIds)->with('agent:id,name')->latest()->limit(8)
-                    ->get(['id','agent_id','customer_name','type','total_amount','currency','created_at']);
+            // Pending review queue — team only (a supervisor cannot approve their own;
+            // the approve action is gated to team members server-side).
+            $pendingApprovals = Transaction::where('status', Transaction::STATUS_PENDING)
+                ->whereIn('agent_id', $teamIds)->with('agent:id,name')->latest()->limit(8)
+                ->get(['id','agent_id','customer_name','type','total_amount','currency','created_at']);
 
-                // Agents needing attention (late or absent today)
-                $teamMembers = User::whereIn('id', $teamIds)
-                    ->where('status', User::STATUS_ACTIVE)->get(['id','name']);
+            // Agents needing attention — team roster only
+            $teamMembers = User::whereIn('id', $teamIds)
+                ->where('status', User::STATUS_ACTIVE)->get(['id','name']);
 
-                $agentStatuses = [];
-                foreach ($teamMembers as $member) {
-                    $sess = AttendanceSession::forUser($member->id)->forDate(date('Y-m-d'))
-                        ->latest('id')->first();
-                    $agentStatuses[] = [
-                        'id'       => $member->id,
-                        'name'     => $member->name,
-                        'status'   => $sess?->status ?? 'absent',
-                        'late_min' => $sess?->late_minutes ?? 0,
-                        'state'    => $this->attendanceService->getCurrentState($member->id)['state'] ?? 'not_clocked_in',
-                    ];
-                }
-
-                // Recent team activity
-                $teamRecentTxns = Transaction::whereIn('agent_id', $teamIds)
-                    ->with('agent:id,name')->latest()->limit(8)
-                    ->get(['id','agent_id','customer_name','type','total_amount','currency','status','created_at']);
-
-                $supervisorData = [
-                    'team_ids'           => $teamIds,
-                    'team_pending_acc'   => $teamPendingAcc,
-                    'team_today_new_acc' => $teamTodayNewAcc,
-                    'team_today_count'   => $teamTodayCount,
-                    'team_today_rev'     => $teamTodayRevenue,
-                    'team_pending_rev'   => $teamPendingReview,
-                    'pending_approvals'  => $pendingApprovals,
-                    'agent_statuses'     => $agentStatuses,
-                    'team_recent_txns'   => $teamRecentTxns,
-                    'month_label'        => $monthLabel,
+            $agentStatuses = [];
+            foreach ($teamMembers as $member) {
+                $sess = AttendanceSession::forUser($member->id)->forDate(date('Y-m-d'))
+                    ->latest('id')->first();
+                $agentStatuses[] = [
+                    'id'       => $member->id,
+                    'name'     => $member->name,
+                    'status'   => $sess?->status ?? 'absent',
+                    'late_min' => $sess?->late_minutes ?? 0,
+                    'state'    => $this->attendanceService->getCurrentState($member->id)['state'] ?? 'not_clocked_in',
                 ];
             }
+
+            // Recent activity (team + own)
+            $teamRecentTxns = Transaction::whereIn('agent_id', $scopeIds)
+                ->with('agent:id,name')->latest()->limit(8)
+                ->get(['id','agent_id','customer_name','type','total_amount','currency','status','created_at']);
+
+            $supervisorData = [
+                'team_ids'           => $teamIds,
+                'team_pending_acc'   => $teamPendingAcc,
+                'team_today_new_acc' => $teamTodayNewAcc,
+                'team_today_count'   => $teamTodayCount,
+                'team_today_rev'     => $teamTodayRevenue,
+                'team_pending_rev'   => $teamPendingReview,
+                'pending_approvals'  => $pendingApprovals,
+                'agent_statuses'     => $agentStatuses,
+                'team_recent_txns'   => $teamRecentTxns,
+                'month_label'        => $monthLabel,
+            ];
         }
 
         // =====================================================================
