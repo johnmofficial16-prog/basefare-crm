@@ -137,12 +137,17 @@ class PerformanceController
                 ->get(['id', 'name', 'role']);
         }
 
-        // manager / supervisor → direct reports only
+        // manager / supervisor → direct reports + themselves. A team lead's own
+        // bookings count everywhere else (transactions, dashboard KPIs), so their
+        // own row belongs on their performance board too.
         $actor = User::find($userId);
-        $ids   = $actor ? $actor->getTeamAgentIds() : [];
-        if (empty($ids)) {
+        if (!$actor) {
             return collect();
         }
+        $ids   = $actor->getTeamAgentIds();
+        $ids[] = (int)$userId;
+        $ids   = array_values(array_unique($ids));
+
         return User::whereIn('id', $ids)
             ->orderBy('name')
             ->get(['id', 'name', 'role']);
