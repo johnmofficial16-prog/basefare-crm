@@ -13,6 +13,7 @@ $navItems = [
     ['href' => '/dashboard',               'icon' => 'dashboard',      'label' => 'Dashboard',      'key' => 'dashboard'],
     ['href' => '/attendance/admin',         'icon' => 'groups',         'label' => 'Live Board',     'key' => 'attendance'],
     ['href' => '/attendance/admin/history', 'icon' => 'history',        'label' => 'History',        'key' => 'history'],
+    ['href' => '/performance',              'icon' => 'leaderboard',    'label' => 'Performance',    'key' => 'performance'],
     ['href' => '/shifts/week',              'icon' => 'calendar_month', 'label' => 'Shift Schedule', 'key' => 'shifts'],
     ['href' => '/acceptance',              'icon' => 'verified',       'label' => 'Acceptance',     'key' => 'acceptance'],
     ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',   'key' => 'transactions'],

@@ -13,6 +13,7 @@ use App\Controllers\AdminController;
 use App\Controllers\MobileAdminController;
 use App\Controllers\PayrollController;
 use App\Controllers\VoucherController;
+use App\Controllers\PerformanceController;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\IpRestrictionMiddleware;
 use App\Middleware\AttendanceGateMiddleware;
@@ -95,6 +96,16 @@ $app->group('', function ($group) {
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
+
+// Agent Performance / Scores (admin + manager + supervisor, behind AttendanceGate)
+// Team leads analyse agent-wise scores; export is PII-free (enforced in controller).
+$app->group('/performance', function ($group) {
+    $group->get('',        [PerformanceController::class, 'index']);
+    $group->get('/export', [PerformanceController::class, 'export']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR]));
 
 // Shift Scheduling Routes (admin + manager + supervisor, behind AttendanceGate)
 $app->group('/shifts', function ($group) {
