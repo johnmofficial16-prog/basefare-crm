@@ -87,7 +87,7 @@ class PerformanceController
         $headers = [
             'Rank', 'Agent', 'Role',
             'Bookings', 'Approved', 'Pending', 'Voided',
-            'Acceptances', 'Revenue', 'Profit (MCO)', 'Avg Profit / Booking',
+            'Acceptances', 'Revenue (Approved)', 'Profit MCO (Approved)', 'Avg Profit / Approved',
             'Currency',
         ];
 
@@ -230,8 +230,10 @@ class PerformanceController
                  SUM(status =  'approved')           AS approved,
                  SUM(status =  'pending_review')     AS pending,
                  SUM(status =  'voided')             AS voided,
-                 SUM(CASE WHEN status <> 'voided' THEN total_amount ELSE 0 END) AS revenue,
-                 SUM(CASE WHEN status <> 'voided' THEN profit_mco   ELSE 0 END) AS profit,
+                 -- Money is counted on APPROVED transactions only (realized), so
+                 -- pending bookings don't inflate an agent's revenue/profit score.
+                 SUM(CASE WHEN status = 'approved' THEN total_amount ELSE 0 END) AS revenue,
+                 SUM(CASE WHEN status = 'approved' THEN profit_mco   ELSE 0 END) AS profit,
                  MAX(currency)                       AS currency"
             )
             ->groupBy('agent_id')
@@ -252,19 +254,21 @@ class PerformanceController
         foreach ($agents as $a) {
             $t        = $txn->get($a->id);
             $bookings = (int)   ($t->bookings ?? 0);
+            $approved = (int)   ($t->approved ?? 0);
             $profit   = (float) ($t->profit   ?? 0);
             $rows[] = [
                 'id'          => $a->id,
                 'name'        => $a->name,
                 'role'        => $a->role,
                 'bookings'    => $bookings,
-                'approved'    => (int)   ($t->approved ?? 0),
+                'approved'    => $approved,
                 'pending'     => (int)   ($t->pending  ?? 0),
                 'voided'      => (int)   ($t->voided   ?? 0),
                 'acceptances' => (int)   ($acc->get($a->id)->acc_count ?? 0),
                 'revenue'     => (float) ($t->revenue ?? 0),
                 'profit'      => $profit,
-                'avg_profit'  => $bookings > 0 ? $profit / $bookings : 0.0,
+                // Average is profit per approved booking (same basis as profit).
+                'avg_profit'  => $approved > 0 ? $profit / $approved : 0.0,
                 'currency'    => $t->currency ?? null,
             ];
         }
@@ -279,6 +283,7 @@ class PerformanceController
         $agentCount  = count($rows);
         $activeCount = count(array_filter($rows, fn($r) => $r['bookings'] > 0));
         $bookings    = array_sum(array_column($rows, 'bookings'));
+        $approved    = array_sum(array_column($rows, 'approved'));
         $acceptances = array_sum(array_column($rows, 'acceptances'));
         $revenue     = array_sum(array_column($rows, 'revenue'));
         $profit      = array_sum(array_column($rows, 'profit'));
@@ -289,10 +294,12 @@ class PerformanceController
             'agent_count'  => $agentCount,
             'active_count' => $activeCount,
             'bookings'     => $bookings,
+            'approved'     => $approved,
             'acceptances'  => $acceptances,
             'revenue'      => $revenue,
             'profit'       => $profit,
-            'avg_profit'   => $bookings > 0 ? $profit / $bookings : 0.0,
+            // Profit is approved-only, so the per-booking average uses approved count.
+            'avg_profit'   => $approved > 0 ? $profit / $approved : 0.0,
             'avg_per_agent'=> $agentCount > 0 ? $profit / $agentCount : 0.0,
             'top_name'     => $top['name'] ?? null,
             'top_profit'   => $top['profit'] ?? 0.0,

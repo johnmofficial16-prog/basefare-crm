@@ -111,11 +111,12 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Revenue</p>
       <p class="text-2xl font-headline font-extrabold text-on-surface"><?= htmlspecialchars($currency) ?> <?= $money($totals['revenue']) ?></p>
+      <p class="text-[10px] text-slate-400 mt-1">approved bookings</p>
     </div>
     <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Profit (MCO)</p>
       <p class="text-2xl font-headline font-extrabold text-emerald-700"><?= htmlspecialchars($currency) ?> <?= $money($totals['profit']) ?></p>
-      <p class="text-[10px] text-slate-400 mt-1">avg <?= htmlspecialchars($currency) ?> <?= $money($totals['avg_per_agent']) ?>/agent</p>
+      <p class="text-[10px] text-slate-400 mt-1">approved · avg <?= htmlspecialchars($currency) ?> <?= $money($totals['avg_per_agent']) ?>/agent</p>
     </div>
     <div class="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 shadow-sm border border-amber-100">
       <p class="text-[10px] font-bold uppercase tracking-wider text-amber-700/70 mb-2">Top Performer</p>
@@ -129,7 +130,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/60 flex items-center gap-2">
       <span class="material-symbols-outlined text-primary text-xl">leaderboard</span>
       <h2 class="font-headline font-extrabold text-slate-900">Agent Scoreboard</h2>
-      <span class="text-xs text-slate-400 font-medium">ranked by profit</span>
+      <span class="text-xs text-slate-400 font-medium">ranked by approved profit · revenue &amp; profit count approved bookings only</span>
     </div>
 
     <?php if (empty($rows)): ?>
@@ -152,7 +153,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <th class="py-3 px-4 font-bold text-right">Acceptances</th>
             <th class="py-3 px-4 font-bold text-right">Revenue</th>
             <th class="py-3 px-4 font-bold text-right">Profit (MCO)</th>
-            <th class="py-3 px-4 font-bold text-right">Avg / Booking</th>
+            <th class="py-3 px-4 font-bold text-right">Avg / Approved</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
