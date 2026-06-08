@@ -7,6 +7,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\TransactionService;
+use App\Services\ShiftService;
 
 /**
  * TransactionController — Handles all transaction recorder HTTP endpoints.
@@ -70,6 +71,34 @@ class TransactionController
         }
 
         $data = $this->service->list($page, 25, $filters, $agentFilter, $agentIds);
+
+        // ── "Today" quick stats ──────────────────────────────────────────────
+        // Counted over the operations business day (6 PM → 6 PM by default), not
+        // the calendar day, so the overnight shift's totals don't reset at midnight.
+        // Computed server-side over the whole dataset (not just the visible page)
+        // and scoped to what this role is responsible for. Excludes voided records.
+        [$dayStart, $dayEnd] = ShiftService::businessDayBounds();
+
+        if ($isAdmin || $isCsa) {
+            $statScope = null;                                  // unrestricted
+        } elseif ($isManager) {
+            $statScope = array_unique(array_merge($this->getManagerTeamIds((int)$userId), [(int)$userId]));
+        } elseif ($isSupervisor) {
+            $supTeam   = (\App\Models\User::find($userId)?->getTeamAgentIds()) ?: [];
+            $statScope = count($supTeam) ? $supTeam : [-1];
+        } else {
+            $statScope = [(int)$userId];                        // agent: own only
+        }
+
+        $statBase = fn() => Transaction::whereBetween('created_at', [$dayStart, $dayEnd])
+            ->where('status', '!=', Transaction::STATUS_VOIDED)
+            ->when($statScope !== null, fn($q) => $q->whereIn('agent_id', $statScope));
+
+        $todayStats = [
+            'count'   => $statBase()->count(),
+            'revenue' => (float) $statBase()->sum('total_amount'),
+            'mco'     => (float) $statBase()->sum('profit_mco'),
+        ];
 
         ob_start();
         require __DIR__ . '/../Views/transactions/list.php';

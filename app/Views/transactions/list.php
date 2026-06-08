@@ -22,17 +22,12 @@ $isManager = ($userRole === 'manager');
 // Universal search: agents can search all records (read-only). Only used for display column logic.
 $isSearchingAll = !$isAdmin && !$isManager && !empty($filters['search']);
 
-// Quick stats
-$todayCount   = 0;
-$todayRevenue = 0;
-$todayMco     = 0;
-foreach ($items as $t) {
-    if (date('Y-m-d', strtotime($t->created_at)) === date('Y-m-d')) {
-        $todayCount++;
-        $todayRevenue += $t->total_amount;
-        $todayMco     += $t->profit_mco;
-    }
-}
+// Quick stats — computed in the controller over the full dataset using the
+// operations business day (6 PM → 6 PM), scoped to this role. Excludes voided.
+$todayStats   = $todayStats ?? ['count' => 0, 'revenue' => 0, 'mco' => 0];
+$todayCount   = $todayStats['count'];
+$todayRevenue = $todayStats['revenue'];
+$todayMco     = $todayStats['mco'];
 
 $flashSuccess = $_SESSION['flash_success'] ?? null;
 $flashError   = $_SESSION['flash_error'] ?? null;
