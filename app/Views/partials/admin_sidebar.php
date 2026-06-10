@@ -18,6 +18,7 @@ $navItems = [
     ['href' => '/acceptance',              'icon' => 'verified',       'label' => 'Acceptance',       'key' => 'acceptance',    'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',     'key' => 'transactions',  'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/etickets',                'icon' => 'airplane_ticket','label' => 'E-Tickets',        'key' => 'etickets',      'roles' => ['admin', 'manager', 'supervisor']],
+    ['href' => '/emails',                  'icon' => 'forward_to_inbox','label' => 'Customer Emails',  'key' => 'emails',        'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/payroll',                 'icon' => 'receipt_long',   'label' => 'Salary Slips',     'key' => 'payroll',       'roles' => ['admin', 'manager']],
     ['href' => '/vouchers',                'icon' => 'local_activity', 'label' => 'Vouchers',         'key' => 'vouchers',      'roles' => ['admin', 'manager']],
     ['href' => '/users',                   'icon' => 'manage_accounts','label' => 'Users',            'key' => 'users',         'roles' => ['admin', 'manager']],

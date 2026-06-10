@@ -18,6 +18,7 @@ $navItems = [
     ['href' => '/acceptance',              'icon' => 'verified',       'label' => 'Acceptance',     'key' => 'acceptance'],
     ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',   'key' => 'transactions'],
     ['href' => '/etickets',                 'icon' => 'airplane_ticket', 'label' => 'E-Tickets', 'key' => 'etickets'],
+    ['href' => '/emails',                   'icon' => 'forward_to_inbox','label' => 'Customer Emails','key' => 'emails'],
     ['href' => '/users',                    'icon' => 'manage_accounts', 'label' => 'My Team',       'key' => 'users'],
 ];
 ?>

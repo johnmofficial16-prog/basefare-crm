@@ -40,6 +40,7 @@ $files = [
     __DIR__ . '/database/migrations/record_notes.sql',
     __DIR__ . '/database/migrations/add_ip_location.sql',
     __DIR__ . '/database/migrations/2026_04_27_add_csa_role.sql',
+    __DIR__ . '/database/migrations/2026_06_10_customer_emails.sql',
 ];
 
 foreach ($files as $file) {

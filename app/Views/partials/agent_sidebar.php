@@ -13,6 +13,7 @@ $navItems = [
     ['href' => '/transactions',  'icon' => 'payments',       'label' => 'Transactions', 'key' => 'transactions'],
     ['href' => '/acceptance',    'icon' => 'verified',       'label' => 'Acceptance',   'key' => 'acceptance'],
     ['href' => '/etickets',      'icon' => 'airplane_ticket','label' => 'E-Tickets',    'key' => 'etickets'],
+    ['href' => '/emails',        'icon' => 'forward_to_inbox','label' => 'Customer Emails','key' => 'emails'],
     ['href' => '/attendance/my', 'icon' => 'calendar_month', 'label' => 'My Attendance','key' => 'attendance'],
 ];
 ?>

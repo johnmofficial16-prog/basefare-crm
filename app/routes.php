@@ -9,6 +9,7 @@ use App\Controllers\AcceptanceController;
 use App\Controllers\TransactionController;
 use App\Controllers\UserController;
 use App\Controllers\ETicketController;
+use App\Controllers\CustomerEmailController;
 use App\Controllers\AdminController;
 use App\Controllers\MobileAdminController;
 use App\Controllers\PayrollController;
@@ -248,6 +249,27 @@ $app->group('/transactions', function ($group) {
 
     // Add note — all authenticated users
     $group->post('/{id:[0-9]+}/note',    [TransactionController::class, 'addNote']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware());
+
+// ==========================================================================
+// Customer Emails — AI-drafted, two-way (behind Auth + AttendanceGate)
+// Agents draft (AI) → manager approves → SMTP send. Replies pulled via IMAP.
+// ==========================================================================
+$app->group('/emails', function ($group) {
+    $group->get('',                              [CustomerEmailController::class, 'index']);
+    $group->get('/compose',                      [CustomerEmailController::class, 'composeForm']);
+    $group->get('/booking-options',              [CustomerEmailController::class, 'bookingOptions']); // AJAX grounding picker
+    $group->post('/draft',                       [CustomerEmailController::class, 'draft']);          // AJAX → AI
+    $group->post('/compose',                     [CustomerEmailController::class, 'store']);
+    $group->get('/approvals',                    [CustomerEmailController::class, 'approvals']);      // manager/admin queue
+    $group->post('/message/{mid:[0-9]+}/approve',[CustomerEmailController::class, 'approve']);        // manager/admin only
+    $group->post('/message/{mid:[0-9]+}/reject', [CustomerEmailController::class, 'reject']);         // manager/admin only
+    $group->get('/{id:[0-9]+}',                  [CustomerEmailController::class, 'view']);
+    $group->post('/{id:[0-9]+}/reply',           [CustomerEmailController::class, 'reply']);
+    $group->post('/{id:[0-9]+}/close',           [CustomerEmailController::class, 'close']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
