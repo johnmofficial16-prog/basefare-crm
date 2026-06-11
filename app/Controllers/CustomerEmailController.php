@@ -439,7 +439,7 @@ class CustomerEmailController
     {
         $manager = User::find($managerId);
         if (!$manager) return [-1];
-        $ids = $manager->getTeamAgentIds();
+        $ids = $manager->getTeamAgentIds(true); // include suspended ex-reports for record access
         return empty($ids) ? [-1] : $ids;
     }
 

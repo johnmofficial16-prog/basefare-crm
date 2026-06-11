@@ -88,14 +88,22 @@ class User extends Model
      * Get all agent IDs that directly report to this user.
      * For supervisors: returns their team. For managers/admins: returns all direct reports.
      * Returns an array of user IDs.
+     *
+     * @param bool $includeInactive When true, suspended/inactive reports are
+     *        included (soft-deleted are always excluded). Operational surfaces
+     *        (live boards, scoreboards, scheduling) use the default (active
+     *        only); record-access paths pass true so a manager can still see a
+     *        suspended ex-agent's historical records.
      */
-    public function getTeamAgentIds(): array
+    public function getTeamAgentIds(bool $includeInactive = false): array
     {
-        return $this->directReports()
-            ->whereNull('deleted_at')
-            ->where('status', self::STATUS_ACTIVE)
-            ->pluck('id')
-            ->toArray();
+        $query = $this->directReports()->whereNull('deleted_at');
+
+        if (!$includeInactive) {
+            $query->where('status', self::STATUS_ACTIVE);
+        }
+
+        return $query->pluck('id')->toArray();
     }
 
     /**
