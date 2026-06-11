@@ -201,6 +201,7 @@ document.getElementById('genBtn').addEventListener('click', async function() {
         csrf_token: CSRF,
         intent,
         category: document.getElementById('f_category').value,
+        customer_name: document.getElementById('f_customer_name').value || '',
         transaction_id: document.getElementById('f_transaction_id').value || ''
       })
     });

@@ -149,6 +149,13 @@ class CustomerEmailController
             }
         }
 
+        // Use the customer name the agent already typed (if a booking didn't
+        // already supply one) so the AI greets them by name instead of emitting
+        // a [[PLACEHOLDER: Customer Name]].
+        if (empty($grounding['Customer name']) && !empty($body['customer_name'])) {
+            $grounding['Customer name'] = trim($body['customer_name']);
+        }
+
         $result = $this->ai->draftEmail($intent, $grounding, $category);
         if (!$result['success']) {
             return $this->json($response, ['success' => false, 'error' => $result['error']], 502);

@@ -206,6 +206,7 @@ if (rGen) {
       const res = await fetch('/emails/draft', {
         method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ csrf_token: CSRF, intent, category: document.getElementById('r_category').value,
+          customer_name: <?= json_encode($thread->customer_name ?? '') ?>,
           transaction_id: document.querySelector('#replyForm [name=transaction_id]').value || '' })
       });
       const d = await res.json();
