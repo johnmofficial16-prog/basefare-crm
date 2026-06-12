@@ -118,8 +118,14 @@ tailwind.config = { darkMode: "class", theme: { extend: {
 
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1">Body <span class="text-rose-500">*</span></label>
-          <textarea name="final_body" id="f_body" rows="14" required
+          <textarea name="final_body" id="f_body" rows="12" required
                     class="w-full rounded-lg border-slate-300 text-sm font-mono leading-relaxed focus:ring-primary focus:border-primary"></textarea>
+          <p class="text-[10px] text-slate-400 mt-1">Tip: <code>**bold**</code> · <code>- bullet</code> · <code>## heading</code> — formatting renders in the email.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">Formatted preview <span class="font-normal text-slate-400">(what the customer sees)</span></label>
+          <div id="bodyPreview" class="rounded-lg border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-700 leading-relaxed min-h-[72px]"><span class="text-slate-400">Your formatted email will appear here…</span></div>
         </div>
 
         <div id="placeholderWarn" class="hidden px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
@@ -181,7 +187,33 @@ function checkPlaceholders() {
     warn.classList.add('hidden');
   }
 }
-document.getElementById('f_body').addEventListener('input', checkPlaceholders);
+// ── Live formatted preview (mirrors the server-side Markdown renderer) ──────
+function mdToHtml(md){
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const inline = s => esc(s)
+    .replace(/\*\*([^*]+?)\*\*/g,'<strong style="color:#0f1e3c;">$1</strong>')
+    .replace(/\*([^*]+?)\*/g,'<em>$1</em>');
+  const lines = md.replace(/\r\n?/g,'\n').split('\n');
+  let out=[], para=[], list=null, items=[];
+  const fp=()=>{ if(para.length){ out.push('<p style="margin:0 0 10px;">'+para.join('<br>')+'</p>'); para=[]; } };
+  const fl=()=>{ if(list){ out.push('<'+list+' style="margin:0 0 10px;padding-left:20px;">'+items.map(i=>'<li style="margin:0 0 4px;">'+i+'</li>').join('')+'</'+list+'>'); list=null; items=[]; } };
+  for(const line of lines){
+    const t=line.trim(); let m;
+    if(t===''){ fp(); fl(); continue; }
+    if(m=t.match(/^(#{1,3})\s+(.*)$/)){ fp(); fl(); out.push('<div style="font-weight:800;color:#0f1e3c;margin:12px 0 6px;">'+inline(m[2])+'</div>'); continue; }
+    if(m=t.match(/^[-*]\s+(.*)$/)){ fp(); if(list!=='ul'){ fl(); list='ul'; } items.push(inline(m[1])); continue; }
+    if(m=t.match(/^\d+[.)]\s+(.*)$/)){ fp(); if(list!=='ol'){ fl(); list='ol'; } items.push(inline(m[1])); continue; }
+    fl(); para.push(inline(t));
+  }
+  fp(); fl();
+  return out.join('');
+}
+function renderPreview(){
+  const md = document.getElementById('f_body').value;
+  const box = document.getElementById('bodyPreview');
+  box.innerHTML = md.trim() ? mdToHtml(md) : '<span class="text-slate-400">Your formatted email will appear here…</span>';
+}
+document.getElementById('f_body').addEventListener('input', () => { checkPlaceholders(); renderPreview(); });
 
 // ── Generate draft (AJAX → AI) ─────────────────────────────────────────────
 document.getElementById('genBtn').addEventListener('click', async function() {
@@ -215,6 +247,7 @@ document.getElementById('genBtn').addEventListener('click', async function() {
     document.getElementById('f_ai_model').value   = d.ai_model || '';
     document.getElementById('f_intent_hidden').value = intent;
     checkPlaceholders();
+    renderPreview();
   } catch (e) {
     errEl.textContent = 'Network error reaching the AI. Please try again.'; errEl.classList.remove('hidden');
   } finally {

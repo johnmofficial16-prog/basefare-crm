@@ -221,7 +221,7 @@ class CustomerEmailService
             $mail->Subject = $message->final_subject ?: ('Message from ' . self::SUPPORT_NAME);
             $mail->isHTML(true);
             $mail->Body    = $this->buildHtml($thread, $message);
-            $mail->AltBody = $message->final_body;
+            $mail->AltBody = EmailMarkdown::toPlainText($message->final_body);
             $mail->MessageID = $messageId;
 
             // Threading: if this is a reply to a prior message, link it so the
@@ -398,7 +398,7 @@ class CustomerEmailService
      */
     private function buildHtml(CustomerEmailThread $thread, CustomerEmailMessage $message): string
     {
-        $bodyHtml = nl2br(htmlspecialchars($message->final_body, ENT_QUOTES, 'UTF-8'));
+        $bodyHtml = EmailMarkdown::toEmailHtml($message->final_body);
         $tollFree = self::TOLL_FREE;
         $support  = self::SUPPORT_EMAIL;
 

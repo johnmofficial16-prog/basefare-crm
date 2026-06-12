@@ -89,7 +89,11 @@ tailwind.config = { darkMode: "class", theme: { extend: {
         <?php if ($m->final_subject): ?>
           <div class="text-sm font-bold text-primary mb-1"><?= htmlspecialchars($m->final_subject) ?></div>
         <?php endif; ?>
-        <div class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed"><?= htmlspecialchars($m->final_body) ?></div>
+        <?php if ($inbound): /* customer text is untrusted — escape verbatim */ ?>
+          <div class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed"><?= htmlspecialchars($m->final_body) ?></div>
+        <?php else: /* our outbound — render the same safe Markdown the customer received */ ?>
+          <div class="text-sm text-slate-700 leading-relaxed"><?= \App\Services\EmailMarkdown::toEmailHtml($m->final_body) ?></div>
+        <?php endif; ?>
 
         <?php if ($m->status === 'rejected' && $m->rejected_reason): ?>
           <div class="mt-3 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
