@@ -262,6 +262,7 @@ $app->group('/emails', function ($group) {
     $group->get('',                              [CustomerEmailController::class, 'index']);
     $group->get('/compose',                      [CustomerEmailController::class, 'composeForm']);
     $group->get('/booking-options',              [CustomerEmailController::class, 'bookingOptions']); // AJAX grounding picker
+    $group->get('/itinerary/{id:[0-9]+}',        [CustomerEmailController::class, 'itinerary']);      // AJAX itinerary table from booking
     $group->post('/draft',                       [CustomerEmailController::class, 'draft']);          // AJAX → AI
     $group->post('/compose',                     [CustomerEmailController::class, 'store']);
     $group->get('/approvals',                    [CustomerEmailController::class, 'approvals']);      // manager/admin queue

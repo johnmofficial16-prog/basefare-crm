@@ -67,6 +67,85 @@ class CustomerEmailService
         ], fn($v) => trim((string) $v) !== '');
     }
 
+    /**
+     * Build a Markdown itinerary TABLE from a booking's stored flight data
+     * (the same source the e-ticket email uses — the linked acceptance, falling
+     * back to the transaction's own data). Returns null when the booking has no
+     * flight segments. The agent inserts this into the email body, reviews it,
+     * and it renders as a styled table via EmailMarkdown — real data, no AI.
+     */
+    public function buildItineraryMarkdown(Transaction $txn): ?string
+    {
+        $segments = $this->extractFlightSegments($this->resolveFlightData($txn));
+        if (!$segments) {
+            return null;
+        }
+
+        $cell = fn($v) => ($v = trim(str_replace('|', '/', (string) $v))) !== '' ? $v : '—';
+        $rows = [];
+        foreach ($segments as $s) {
+            $from = strtoupper(trim($s['from'] ?? $s['departure_airport'] ?? ''));
+            $to   = strtoupper(trim($s['to']   ?? $s['arrival_airport']   ?? ''));
+            if ($from === '' && $to === '') continue;
+
+            $iata   = strtoupper(trim($s['airline_iata'] ?? $s['airline'] ?? ''));
+            $flight = trim($iata . ' ' . trim($s['flight_no'] ?? $s['flight'] ?? ''));
+            $cabin  = trim($s['cabin_class'] ?? $s['class'] ?? '');
+            if ($cabin !== '') $flight = trim($flight . ($flight !== '' ? ' · ' : '') . $cabin);
+
+            $date = trim($s['date'] ?? $s['departure_date'] ?? '');
+            $dep  = trim($s['dep_time'] ?? $s['time'] ?? '');
+            $arr  = trim($s['arr_time'] ?? $s['arrival_time'] ?? '');
+            $nextDay = !empty($s['arr_next_day'])
+                || (!empty($s['arrival_date']) && $date !== '' && $s['arrival_date'] !== $date);
+            if ($nextDay && $arr !== '') $arr .= ' +1';
+
+            $rows[] = '| ' . $cell($from) . ' | ' . $cell($to) . ' | ' . $cell($flight)
+                    . ' | ' . $cell($date) . ' | ' . $cell($dep) . ' | ' . $cell($arr) . ' |';
+        }
+        if (!$rows) {
+            return null;
+        }
+
+        return "| From | To | Flight | Date | Departs | Arrives |\n"
+             . "| --- | --- | --- | --- | --- | --- |\n"
+             . implode("\n", $rows);
+    }
+
+    /** Resolve a booking's flight_data: linked acceptance first, then txn data. */
+    private function resolveFlightData(Transaction $txn): array
+    {
+        $acc = $txn->acceptance;
+        if ($acc) {
+            $fd = is_array($acc->flight_data) ? $acc->flight_data : (json_decode((string) $acc->flight_data, true) ?: []);
+            if ($fd) return $fd;
+        }
+        $data = is_array($txn->data) ? $txn->data : (json_decode((string) $txn->data, true) ?: []);
+        if (isset($data['flights']) || isset($data['old_flights']) || isset($data['new_flights'])) {
+            return [
+                'flights'     => $data['flights']     ?? [],
+                'old_flights' => $data['old_flights'] ?? [],
+                'new_flights' => $data['new_flights'] ?? [],
+            ];
+        }
+        return is_array($data['flight_data'] ?? null) ? $data['flight_data'] : [];
+    }
+
+    /** Pull the flight segment list out of a flight_data structure. */
+    private function extractFlightSegments(array $fd): array
+    {
+        $segs = [];
+        if (!empty($fd['flights']) && is_array($fd['flights']))          $segs = $fd['flights'];
+        elseif (!empty($fd['new_flights']) && is_array($fd['new_flights'])) $segs = $fd['new_flights'];
+        elseif (!empty($fd['old_flights']) && is_array($fd['old_flights'])) $segs = $fd['old_flights'];
+        elseif ($fd && is_array(reset($fd)))                              $segs = array_values($fd);
+
+        return array_values(array_filter($segs, fn($s) => is_array($s) && (
+            !empty($s['from']) || !empty($s['departure_airport']) ||
+            !empty($s['to'])   || !empty($s['arrival_airport'])
+        )));
+    }
+
     // =========================================================================
     // CREATE / REPLY
     // =========================================================================

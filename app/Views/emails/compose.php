@@ -65,6 +65,12 @@ tailwind.config = { darkMode: "class", theme: { extend: {
           </select>
           <input type="hidden" name="transaction_id" id="f_transaction_id"/>
           <p class="text-[11px] text-slate-400 mt-1">When linked, the AI may only use that booking's verified PNR, amounts, and dates.</p>
+          <div class="mt-2 flex items-center gap-2">
+            <button type="button" id="insertItinBtn" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/5 text-primary border border-primary/20 text-xs font-bold rounded-lg hover:bg-primary/10 disabled:opacity-50">
+              <span class="material-symbols-outlined text-sm" id="insertItinIcon">flight</span> Insert flight itinerary
+            </button>
+            <span id="insertItinMsg" class="hidden text-[11px] font-semibold"></span>
+          </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
@@ -173,6 +179,42 @@ document.getElementById('bookingPicker').addEventListener('change', function() {
     if (b.customer_name)  document.getElementById('f_customer_name').value  = b.customer_name;
     if (b.customer_email) document.getElementById('f_customer_email').value = b.customer_email;
   }
+  // Show the "Insert flight itinerary" button only when a booking is linked.
+  document.getElementById('insertItinBtn').classList.toggle('hidden', !id);
+  document.getElementById('insertItinMsg').classList.add('hidden');
+});
+
+// ── Insert the real flight itinerary (Markdown table) from the linked booking ─
+document.getElementById('insertItinBtn').addEventListener('click', async function() {
+  const id  = document.getElementById('f_transaction_id').value;
+  const msg = document.getElementById('insertItinMsg');
+  const icon = document.getElementById('insertItinIcon');
+  if (!id) return;
+  msg.classList.add('hidden');
+  this.disabled = true; icon.textContent = 'progress_activity'; icon.classList.add('animate-spin');
+  try {
+    const res = await fetch('/emails/itinerary/' + id);
+    const d = await res.json();
+    if (!d.success) {
+      msg.textContent = d.error || 'Could not load itinerary.';
+      msg.className = 'text-[11px] font-semibold text-rose-600';
+      msg.classList.remove('hidden');
+      return;
+    }
+    const body = document.getElementById('f_body');
+    const block = '## Flight Itinerary\n\n' + d.markdown + '\n';
+    body.value = body.value.trim() ? (body.value.replace(/\s+$/,'') + '\n\n' + block) : block;
+    checkPlaceholders(); renderPreview();
+    msg.textContent = 'Itinerary inserted — review it below.';
+    msg.className = 'text-[11px] font-semibold text-emerald-600';
+    msg.classList.remove('hidden');
+  } catch (e) {
+    msg.textContent = 'Network error loading itinerary.';
+    msg.className = 'text-[11px] font-semibold text-rose-600';
+    msg.classList.remove('hidden');
+  } finally {
+    this.disabled = false; icon.textContent = 'flight'; icon.classList.remove('animate-spin');
+  }
 });
 
 // ── Placeholder detector ───────────────────────────────────────────────────
@@ -193,13 +235,26 @@ function mdToHtml(md){
   const inline = s => esc(s)
     .replace(/\*\*([^*]+?)\*\*/g,'<strong style="color:#0f1e3c;">$1</strong>')
     .replace(/\*([^*]+?)\*/g,'<em>$1</em>');
+  const isRow = s => s.startsWith('|') && (s.match(/\|/g)||[]).length>=2;
+  const isSep = s => /^\|(\s*:?-+:?\s*\|)+\s*$/.test(s);
+  const cells = s => s.replace(/^\|/,'').replace(/\|$/,'').split('|').map(x=>x.trim());
   const lines = md.replace(/\r\n?/g,'\n').split('\n');
   let out=[], para=[], list=null, items=[];
   const fp=()=>{ if(para.length){ out.push('<p style="margin:0 0 10px;">'+para.join('<br>')+'</p>'); para=[]; } };
   const fl=()=>{ if(list){ out.push('<'+list+' style="margin:0 0 10px;padding-left:20px;">'+items.map(i=>'<li style="margin:0 0 4px;">'+i+'</li>').join('')+'</'+list+'>'); list=null; items=[]; } };
-  for(const line of lines){
-    const t=line.trim(); let m;
+  for(let i=0;i<lines.length;i++){
+    const t=lines[i].trim(); let m;
     if(t===''){ fp(); fl(); continue; }
+    if(isRow(t) && i+1<lines.length && isSep(lines[i+1].trim())){
+      fp(); fl();
+      const head=cells(t); i+=2; const rows=[];
+      while(i<lines.length && isRow(lines[i].trim())){ rows.push(cells(lines[i].trim())); i++; }
+      i--;
+      const th=head.map(h=>'<th style="text-align:left;padding:7px 9px;background:#0f1e3c;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.4px;">'+inline(h)+'</th>').join('');
+      const tb=rows.map((r,ri)=>'<tr style="background:'+(ri%2?'#f8fafc':'#fff')+';">'+head.map((_,ci)=>'<td style="padding:6px 9px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#1e293b;">'+inline(r[ci]||'')+'</td>').join('')+'</tr>').join('');
+      out.push('<table style="width:100%;border-collapse:collapse;margin:0 0 10px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;"><thead><tr>'+th+'</tr></thead><tbody>'+tb+'</tbody></table>');
+      continue;
+    }
     if(m=t.match(/^(#{1,3})\s+(.*)$/)){ fp(); fl(); out.push('<div style="font-weight:800;color:#0f1e3c;margin:12px 0 6px;">'+inline(m[2])+'</div>'); continue; }
     if(m=t.match(/^[-*]\s+(.*)$/)){ fp(); if(list!=='ul'){ fl(); list='ul'; } items.push(inline(m[1])); continue; }
     if(m=t.match(/^\d+[.)]\s+(.*)$/)){ fp(); if(list!=='ol'){ fl(); list='ol'; } items.push(inline(m[1])); continue; }

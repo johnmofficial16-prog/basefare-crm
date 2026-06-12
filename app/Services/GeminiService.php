@@ -247,6 +247,9 @@ STRICT RULES — follow exactly:
     * Separate ideas into short paragraphs (blank line between them).
     * Use **bold** to highlight key details (dates, amounts, references, actions).
     * Use "- " bullet lists or "1." numbered steps when listing items or steps.
+    * For genuinely tabular data (a multi-flight itinerary, a list of charges),
+      use a simple Markdown table: a header row, a "| --- | --- |" separator
+      row, then one row per item. Only use a table when given the actual values.
     * A short "## Heading" is fine before a distinct section, but don't overuse it.
   Keep the formatting clean and tasteful — not every line needs emphasis.
 - Use ONLY Markdown. Do NOT write raw HTML, and do NOT invent links or URLs.

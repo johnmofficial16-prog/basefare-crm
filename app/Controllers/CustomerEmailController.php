@@ -119,6 +119,31 @@ class CustomerEmailController
     }
 
     // =========================================================================
+    // AJAX — ITINERARY (Markdown table from the linked booking's flight data)
+    // =========================================================================
+
+    public function itinerary(Request $request, Response $response, array $args): Response
+    {
+        $role   = $_SESSION['role'] ?? 'agent';
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+        if ($role === User::ROLE_CSA) {
+            return $this->json($response, ['success' => false, 'error' => 'Access denied.'], 403);
+        }
+
+        $txn = $this->findAccessibleTransaction((int) $args['id'], $role, $userId);
+        if (!$txn) {
+            return $this->json($response, ['success' => false, 'error' => 'Booking not found or not accessible.'], 404);
+        }
+
+        $md = $this->service->buildItineraryMarkdown($txn);
+        if (!$md) {
+            return $this->json($response, ['success' => false, 'error' => 'No flight itinerary is stored on this booking.'], 422);
+        }
+
+        return $this->json($response, ['success' => true, 'markdown' => $md]);
+    }
+
+    // =========================================================================
     // AJAX — DRAFT (call the AI)
     // =========================================================================
 
