@@ -181,6 +181,14 @@ class CustomerEmailController
             $grounding['Customer name'] = trim($body['customer_name']);
         }
 
+        // If the agent attached the flight itinerary table, tell the AI so it
+        // refers to it rather than trying to list (or invent) the flights itself.
+        if (!empty($body['has_itinerary'])) {
+            $intent .= "\n\nNote: a flight itinerary table is shown below your message. "
+                     . "Refer to it naturally (e.g. \"please find your itinerary below\") and do NOT "
+                     . "list the individual flights, times, or flight numbers in your text.";
+        }
+
         $result = $this->ai->draftEmail($intent, $grounding, $category);
         if (!$result['success']) {
             return $this->json($response, ['success' => false, 'error' => $result['error']], 502);

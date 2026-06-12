@@ -182,9 +182,29 @@ document.getElementById('bookingPicker').addEventListener('change', function() {
   // Show the "Insert flight itinerary" button only when a booking is linked.
   document.getElementById('insertItinBtn').classList.toggle('hidden', !id);
   document.getElementById('insertItinMsg').classList.add('hidden');
+  window._itineraryMd = null; // a different booking — drop the previously inserted itinerary
 });
 
-// ── Insert the real flight itinerary (Markdown table) from the linked booking ─
+// ── Sticky flight itinerary ────────────────────────────────────────────────
+// The inserted itinerary is remembered so a later "Regenerate Draft" re-attaches
+// it instead of wiping it — order of insert vs. generate no longer matters.
+window._itineraryMd = null;
+const ITIN_MARK = '## Flight Itinerary';
+
+function bodyWithoutItinerary() {
+  const v = document.getElementById('f_body').value;
+  const i = v.indexOf(ITIN_MARK);
+  return (i >= 0 ? v.slice(0, i) : v).replace(/\s+$/, '');
+}
+function applyItinerary() {
+  const prose = bodyWithoutItinerary();
+  const f = document.getElementById('f_body');
+  f.value = window._itineraryMd
+    ? (prose ? prose + '\n\n' + window._itineraryMd : window._itineraryMd)
+    : prose;
+  checkPlaceholders(); renderPreview();
+}
+
 document.getElementById('insertItinBtn').addEventListener('click', async function() {
   const id  = document.getElementById('f_transaction_id').value;
   const msg = document.getElementById('insertItinMsg');
@@ -201,11 +221,9 @@ document.getElementById('insertItinBtn').addEventListener('click', async functio
       msg.classList.remove('hidden');
       return;
     }
-    const body = document.getElementById('f_body');
-    const block = '## Flight Itinerary\n\n' + d.markdown + '\n';
-    body.value = body.value.trim() ? (body.value.replace(/\s+$/,'') + '\n\n' + block) : block;
-    checkPlaceholders(); renderPreview();
-    msg.textContent = 'Itinerary inserted — review it below.';
+    window._itineraryMd = ITIN_MARK + '\n\n' + d.markdown + '\n';
+    applyItinerary();
+    msg.textContent = 'Itinerary added — it will stay attached even if you regenerate.';
     msg.className = 'text-[11px] font-semibold text-emerald-600';
     msg.classList.remove('hidden');
   } catch (e) {
@@ -289,7 +307,8 @@ document.getElementById('genBtn').addEventListener('click', async function() {
         intent,
         category: document.getElementById('f_category').value,
         customer_name: document.getElementById('f_customer_name').value || '',
-        transaction_id: document.getElementById('f_transaction_id').value || ''
+        transaction_id: document.getElementById('f_transaction_id').value || '',
+        has_itinerary: window._itineraryMd ? '1' : ''
       })
     });
     const d = await res.json();
@@ -301,8 +320,7 @@ document.getElementById('genBtn').addEventListener('click', async function() {
     document.getElementById('f_ai_body').value    = d.body;
     document.getElementById('f_ai_model').value   = d.ai_model || '';
     document.getElementById('f_intent_hidden').value = intent;
-    checkPlaceholders();
-    renderPreview();
+    applyItinerary(); // re-attach the itinerary table (if one was inserted) after the AI rewrite
   } catch (e) {
     errEl.textContent = 'Network error reaching the AI. Please try again.'; errEl.classList.remove('hidden');
   } finally {
