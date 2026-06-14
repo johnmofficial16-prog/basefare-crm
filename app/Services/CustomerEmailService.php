@@ -33,7 +33,7 @@ use PHPMailer\PHPMailer\Exception;
 class CustomerEmailService
 {
     const SUPPORT_EMAIL = 'reservation@base-fare.com';
-    const SUPPORT_NAME  = 'Base Fare Reservations';
+    const SUPPORT_NAME  = 'Reservation Desk';
     const TOLL_FREE     = '888 608 4011';
 
     /** Roles allowed to approve, and to send their own composition directly. */
@@ -462,7 +462,7 @@ class CustomerEmailService
         // Normal Gmail/Workspace sends complete in 1-3s; 30s is a generous ceiling.
         $mail->Timeout    = 30;
 
-        $fromName  = $_ENV['SMTP_FROM_NAME'] ?? self::SUPPORT_NAME;
+        $fromName  = self::SUPPORT_NAME; // always "Reservation Desk", matching the e-ticket sender
         $fromEmail = $_ENV['SMTP_FROM'] ?? $_ENV['SMTP_USER'] ?? '';
         if ($fromEmail) {
             $mail->setFrom($fromEmail, $fromName);
@@ -503,7 +503,7 @@ class CustomerEmailService
       </div>
     </div>
     <div style="background:#f8fafc;padding:16px 30px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
-      <strong style="color:#0f1e3c;">Base Fare Reservations</strong> &nbsp;&middot;&nbsp; {$support}
+      <strong style="color:#0f1e3c;">Reservation Desk</strong> &nbsp;&middot;&nbsp; {$support}
     </div>
   </div>
 </body>
