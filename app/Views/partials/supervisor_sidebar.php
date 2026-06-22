@@ -18,6 +18,7 @@ $navItems = [
     ['href' => '/acceptance',              'icon' => 'verified',       'label' => 'Acceptance',     'key' => 'acceptance'],
     ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',   'key' => 'transactions'],
     ['href' => '/emails',                   'icon' => 'forward_to_inbox','label' => 'Customer Emails','key' => 'emails'],
+    ['href' => '/invoices',                 'icon' => 'request_quote',  'label' => 'Invoices',      'key' => 'invoices'],
 ];
 ?>
 <aside class="fixed left-0 top-0 h-full w-60 bg-white border-r border-gray-100 flex flex-col z-30 shadow-sm">

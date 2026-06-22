@@ -10,6 +10,7 @@ use App\Controllers\TransactionController;
 use App\Controllers\UserController;
 use App\Controllers\ETicketController;
 use App\Controllers\CustomerEmailController;
+use App\Controllers\InvoiceController;
 use App\Controllers\AdminController;
 use App\Controllers\MobileAdminController;
 use App\Controllers\PayrollController;
@@ -271,6 +272,30 @@ $app->group('/emails', function ($group) {
     $group->get('/{id:[0-9]+}',                  [CustomerEmailController::class, 'view']);
     $group->post('/{id:[0-9]+}/reply',           [CustomerEmailController::class, 'reply']);
     $group->post('/{id:[0-9]+}/close',           [CustomerEmailController::class, 'close']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware());
+
+// ==========================================================================
+// Invoice Generator — Agent-facing (behind Auth + AttendanceGate)
+// Anyone (except CSA) drafts; agents/supervisors submit for approval, managers
+// /admins save & send. Delivery is a branded inline HTML email to the customer.
+// ==========================================================================
+$app->group('/invoices', function ($group) {
+    $group->get('',                              [InvoiceController::class, 'index']);
+    $group->get('/create',                       [InvoiceController::class, 'maker']);
+    $group->get('/booking-options',              [InvoiceController::class, 'bookingOptions']);     // AJAX picker
+    $group->get('/transaction-data/{id:[0-9]+}', [InvoiceController::class, 'transactionData']);    // AJAX prefill
+    $group->post('/create',                      [InvoiceController::class, 'store']);
+    $group->get('/approvals',                    [InvoiceController::class, 'approvals']);           // manager/admin only — enforced in controller
+    $group->get('/{id:[0-9]+}',                  [InvoiceController::class, 'view']);
+    $group->get('/{id:[0-9]+}/edit',             [InvoiceController::class, 'editForm']);
+    $group->post('/{id:[0-9]+}/edit',            [InvoiceController::class, 'update']);
+    $group->post('/{id:[0-9]+}/approve',         [InvoiceController::class, 'approve']);             // manager/admin only — enforced in controller
+    $group->post('/{id:[0-9]+}/reject',          [InvoiceController::class, 'reject']);             // manager/admin only — enforced in controller
+    $group->post('/{id:[0-9]+}/send',            [InvoiceController::class, 'send']);               // manager/admin only — enforced in controller
+    $group->post('/{id:[0-9]+}/note',            [InvoiceController::class, 'addNote']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
