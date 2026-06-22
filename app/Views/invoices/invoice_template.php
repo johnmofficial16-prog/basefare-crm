@@ -228,5 +228,47 @@
         const bill = document.getElementById('inv_billing');
         if (bill) bill.textContent = d.card_billing || '';
     };
+
+    /**
+     * Capture the full invoice document to an A4 PDF. Robust against the page
+     * being scrolled (the preview is sticky) and against the document being
+     * squeezed narrower than its natural width: we pin the element to 760px and
+     * scroll to top before handing a correctly-sized window to html2canvas, so
+     * no part of the document is clipped or rendered blank.
+     */
+    window.captureInvoicePdf = async function (filename) {
+        const el = document.getElementById('invoice-printable');
+        if (!el || typeof html2pdf === 'undefined') return;
+
+        const prevScroll = window.scrollY;
+        const prevWidth  = el.style.width;
+        const prevMax    = el.style.maxWidth;
+
+        el.style.width    = '760px';
+        el.style.maxWidth = 'none';
+        window.scrollTo(0, 0);
+        // Let layout settle (web fonts / reflow) before snapshotting.
+        await new Promise(r => setTimeout(r, 80));
+
+        try {
+            await html2pdf().set({
+                margin:   8,
+                filename: filename,
+                image:    { type: 'jpeg', quality: 0.98 },
+                html2canvas: {
+                    scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff',
+                    scrollX: 0, scrollY: 0,
+                    windowWidth: 820, width: 760,
+                    windowHeight: el.scrollHeight + 40
+                },
+                jsPDF:     { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+            }).from(el).save();
+        } finally {
+            el.style.width    = prevWidth;
+            el.style.maxWidth = prevMax;
+            window.scrollTo(0, prevScroll);
+        }
+    };
 })();
 </script>

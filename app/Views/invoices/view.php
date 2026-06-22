@@ -196,14 +196,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 const RDATA = <?= json_encode($rdata, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 document.addEventListener('DOMContentLoaded', () => window.renderInvoice(RDATA));
 async function downloadPdf() {
-    const el = document.getElementById('invoice-printable');
     const fname = 'Invoice_<?= $h($invoice->invoice_no) ?>_' + (<?= json_encode($invoice->customer_name, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?> || 'customer').replace(/\s+/g,'_') + '.pdf';
-    await html2pdf().set({
-        margin: 6, filename: fname,
-        image: { type: 'jpeg', quality: 1.0 },
-        html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 800 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    }).from(el).save();
+    await window.captureInvoicePdf(fname);
 }
 </script>
 </body>
