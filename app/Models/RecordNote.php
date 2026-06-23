@@ -93,6 +93,7 @@ class RecordNote extends Model
             'edited'   => ['label' => 'Edited',   'icon' => 'edit',          'color' => 'blue'],
             'approved' => ['label' => 'Approved', 'icon' => 'verified',      'color' => 'emerald'],
             'voided'   => ['label' => 'Voided',   'icon' => 'block',         'color' => 'rose'],
+            'refunded' => ['label' => 'Refunded', 'icon' => 'currency_exchange', 'color' => 'orange'],
             'emailed'  => ['label' => 'Emailed',  'icon' => 'mail',          'color' => 'violet'],
             'resent'   => ['label' => 'Resent',   'icon' => 'send',          'color' => 'amber'],
             'promoted' => ['label' => 'Promoted', 'icon' => 'upgrade',       'color' => 'indigo'],

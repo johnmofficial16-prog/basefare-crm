@@ -97,7 +97,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
   </form>
 
   <!-- Analysis cards -->
-  <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+  <div class="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
     <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Agents</p>
       <p class="text-3xl font-headline font-extrabold text-primary"><?= (int)$totals['active_count'] ?><span class="text-base text-slate-400 font-bold">/<?= (int)$totals['agent_count'] ?></span></p>
@@ -114,9 +114,14 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <p class="text-[10px] text-slate-400 mt-1">approved bookings</p>
     </div>
     <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
-      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Profit (MCO)</p>
+      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Gross MCO</p>
       <p class="text-2xl font-headline font-extrabold text-emerald-700"><?= htmlspecialchars($currency) ?> <?= $money($totals['profit']) ?></p>
       <p class="text-[10px] text-slate-400 mt-1">approved · avg <?= htmlspecialchars($currency) ?> <?= $money($totals['avg_per_agent']) ?>/agent</p>
+    </div>
+    <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
+      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Net MCO</p>
+      <p class="text-2xl font-headline font-extrabold text-primary"><?= htmlspecialchars($currency) ?> <?= $money($totals['net'] ?? $totals['profit']) ?></p>
+      <p class="text-[10px] text-slate-400 mt-1">after refunds</p>
     </div>
     <div class="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 shadow-sm border border-amber-100">
       <p class="text-[10px] font-bold uppercase tracking-wider text-amber-700/70 mb-2">Top Performer</p>
@@ -152,13 +157,16 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <th class="py-3 px-4 font-bold text-right">Voided</th>
             <th class="py-3 px-4 font-bold text-right">Acceptances</th>
             <th class="py-3 px-4 font-bold text-right">Revenue</th>
-            <th class="py-3 px-4 font-bold text-right">Profit (MCO)</th>
+            <th class="py-3 px-4 font-bold text-right">Gross MCO</th>
+            <th class="py-3 px-4 font-bold text-right">Net MCO</th>
             <th class="py-3 px-4 font-bold text-right">Avg / Approved</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
           <?php foreach ($rows as $i => $r): ?>
-          <tr class="<?= $i%2===0 ? 'bg-white' : 'bg-surface-container-low/40' ?> hover:bg-blue-50/30 transition-colors">
+          <tr onclick="location.href='/performance/agent/<?= $r['id'] ?><?= $exportQuery ? '?' . htmlspecialchars($exportQuery) : '' ?>'"
+              class="cursor-pointer <?= $i%2===0 ? 'bg-white' : 'bg-surface-container-low/40' ?> hover:bg-blue-50/30 transition-colors"
+              title="View this agent's bookings">
             <td class="py-3 px-4">
               <?php if ($i < 3 && $r['profit'] > 0): ?>
                 <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-extrabold <?= ['bg-amber-100 text-amber-700','bg-slate-200 text-slate-600','bg-orange-100 text-orange-700'][$i] ?>"><?= $i+1 ?></span>
@@ -183,7 +191,11 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <td class="py-3 px-4 text-right <?= $r['voided']>0 ? 'text-red-500 font-semibold' : 'text-slate-300' ?>"><?= (int)$r['voided'] ?></td>
             <td class="py-3 px-4 text-right text-on-surface-variant"><?= (int)$r['acceptances'] ?></td>
             <td class="py-3 px-4 text-right text-on-surface-variant"><?= htmlspecialchars($currency) ?> <?= $money($r['revenue']) ?></td>
-            <td class="py-3 px-4 text-right font-extrabold <?= $r['profit']>=0 ? 'text-emerald-700' : 'text-red-600' ?>"><?= htmlspecialchars($currency) ?> <?= $money($r['profit']) ?></td>
+            <td class="py-3 px-4 text-right font-bold <?= $r['profit']>=0 ? 'text-emerald-700' : 'text-red-600' ?>"><?= htmlspecialchars($currency) ?> <?= $money($r['profit']) ?></td>
+            <td class="py-3 px-4 text-right font-extrabold <?= ($r['net'] ?? $r['profit'])>=0 ? 'text-primary' : 'text-red-600' ?>">
+              <?= htmlspecialchars($currency) ?> <?= $money($r['net'] ?? $r['profit']) ?>
+              <?php if (($r['net'] ?? $r['profit']) < $r['profit']): ?><span class="block text-[9px] font-bold text-rose-400 normal-case">refunded</span><?php endif; ?>
+            </td>
             <td class="py-3 px-4 text-right text-slate-500"><?= htmlspecialchars($currency) ?> <?= $money($r['avg_profit']) ?></td>
           </tr>
           <?php endforeach; ?>
@@ -196,6 +208,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <td class="py-3 px-4 text-right"><?= (int)$totals['acceptances'] ?></td>
             <td class="py-3 px-4 text-right"><?= htmlspecialchars($currency) ?> <?= $money($totals['revenue']) ?></td>
             <td class="py-3 px-4 text-right text-emerald-700"><?= htmlspecialchars($currency) ?> <?= $money($totals['profit']) ?></td>
+            <td class="py-3 px-4 text-right text-primary"><?= htmlspecialchars($currency) ?> <?= $money($totals['net'] ?? $totals['profit']) ?></td>
             <td class="py-3 px-4 text-right text-slate-500"><?= htmlspecialchars($currency) ?> <?= $money($totals['avg_profit']) ?></td>
           </tr>
         </tfoot>

@@ -39,13 +39,33 @@ class PerformanceController
         $q = $request->getQueryParams();
         [$period, $start, $end, $periodLabel] = $this->resolvePeriod($q);
 
-        $agents = $this->scopedAgents($userId, $role);
-        $rows   = $this->computeScores($agents, $start, $end);
-        $totals = $this->summarise($rows);
-
         // Currency label for display (mirrors DashboardController)
         $currencyRow = DB::table('system_config')->where('key', 'default_currency')->first();
         $currency    = $currencyRow?->value ?? 'CAD';
+
+        // Values the form needs to repopulate its inputs.
+        $selMonth = $q['month']     ?? Carbon::now()->format('Y-m');
+        $selFrom  = $q['date_from'] ?? '';
+        $selTo    = $q['date_to']   ?? '';
+
+        // ── Agent self-view: own day-wise bookings + rank among peers ───────────
+        if ($role === User::ROLE_AGENT) {
+            $rows       = $this->bookingDetail([$userId], $start, $end);
+            $netTotals  = $this->agentNetTotals($start, $end);
+            [$rank, $rankTotal, $myGross, $myNet] = $this->rankFor($userId, $netTotals);
+            $myBookings = count($rows);
+
+            ob_start();
+            require __DIR__ . '/../Views/performance/agent.php';
+            $html = ob_get_clean();
+            $response->getBody()->write($html);
+            return $response;
+        }
+
+        // ── Team lead / admin scoreboard ────────────────────────────────────────
+        $agents = $this->scopedAgents($userId, $role);
+        $rows   = $this->computeScores($agents, $start, $end);
+        $totals = $this->summarise($rows);
 
         // Preserve the current filter so the Export button carries it through.
         $exportQuery = http_build_query(array_filter([
@@ -55,16 +75,140 @@ class PerformanceController
             'date_to'   => $q['date_to']   ?? null,
         ], fn($v) => $v !== null && $v !== ''));
 
-        // Values the form needs to repopulate its inputs.
-        $selMonth    = $q['month']     ?? Carbon::now()->format('Y-m');
-        $selFrom     = $q['date_from'] ?? '';
-        $selTo       = $q['date_to']   ?? '';
-
         ob_start();
         require __DIR__ . '/../Views/performance/index.php';
         $html = ob_get_clean();
         $response->getBody()->write($html);
         return $response;
+    }
+
+    // =========================================================================
+    // AGENT DRILL-DOWN — GET /performance/agent/{id}  (team leads / admin)
+    // =========================================================================
+
+    public function agentDetail(Request $request, Response $response, array $args): Response
+    {
+        $userId = (int)$_SESSION['user_id'];
+        $role   = $_SESSION['role'] ?? User::ROLE_AGENT;
+
+        // Agents use their own self-view; this drill-down is for team leads/admin.
+        if (!in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR], true)) {
+            return $response->withHeader('Location', '/performance')->withStatus(302);
+        }
+
+        $targetId = (int)$args['id'];
+
+        // Managers/supervisors may only inspect their own team (or themselves).
+        if ($role !== User::ROLE_ADMIN && $targetId !== $userId) {
+            $actor = User::find($userId);
+            if (!$actor || !$actor->isInMyTeam($targetId)) {
+                $_SESSION['flash_error'] = 'Access denied.';
+                return $response->withHeader('Location', '/performance')->withStatus(302);
+            }
+        }
+
+        $target = User::find($targetId);
+        if (!$target) {
+            return $response->withHeader('Location', '/performance')->withStatus(302);
+        }
+
+        $q = $request->getQueryParams();
+        [$period, $start, $end, $periodLabel] = $this->resolvePeriod($q);
+
+        $currencyRow = DB::table('system_config')->where('key', 'default_currency')->first();
+        $currency    = $currencyRow?->value ?? 'CAD';
+        $selMonth = $q['month']     ?? Carbon::now()->format('Y-m');
+        $selFrom  = $q['date_from'] ?? '';
+        $selTo    = $q['date_to']   ?? '';
+
+        $rows = $this->bookingDetail([$targetId], $start, $end);
+
+        ob_start();
+        require __DIR__ . '/../Views/performance/detail.php';
+        $html = ob_get_clean();
+        $response->getBody()->write($html);
+        return $response;
+    }
+
+    // =========================================================================
+    // PRIVATE — per-booking detail + agent ranking
+    // =========================================================================
+
+    /**
+     * Per-booking rows (approved only) for the given agents in the window.
+     * Each row carries Gross MCO and refund-adjusted Net MCO.
+     */
+    private function bookingDetail(array $agentIds, ?Carbon $start, ?Carbon $end): array
+    {
+        if (empty($agentIds)) {
+            return [];
+        }
+        $txns = Transaction::with('agent')
+            ->whereIn('agent_id', $agentIds)
+            ->where('status', Transaction::STATUS_APPROVED)
+            ->when($start, fn($qq) => $qq->whereBetween('created_at', [$start, $end]))
+            ->orderByDesc('created_at')
+            ->get();
+
+        return $txns->map(fn($t) => [
+            'id'              => $t->id,
+            'date'            => $t->created_at,
+            'customer_name'   => $t->customer_name,
+            'phone'           => $t->customer_phone,
+            'email'           => $t->customer_email,
+            'pnr'             => $t->pnr,
+            'gross'           => $t->grossMco(),
+            'net'             => $t->netMco(),
+            'refund_status'   => $t->refund_status,
+            'refunded_amount' => (float) $t->refunded_amount,
+            'currency'        => $t->currency,
+            'agent_name'      => $t->agent->name ?? '—',
+        ])->all();
+    }
+
+    /**
+     * Net + Gross MCO totals per active agent in the window, keyed by agent id.
+     * Used to rank an agent against their peers.
+     */
+    private function agentNetTotals(?Carbon $start, ?Carbon $end): array
+    {
+        $agentIds = User::where('role', User::ROLE_AGENT)
+            ->where('status', User::STATUS_ACTIVE)
+            ->whereNull('deleted_at')
+            ->pluck('id')->all();
+        if (empty($agentIds)) {
+            return [];
+        }
+
+        $agg = Transaction::whereIn('agent_id', $agentIds)
+            ->where('status', Transaction::STATUS_APPROVED)
+            ->when($start, fn($qq) => $qq->whereBetween('created_at', [$start, $end]))
+            ->selectRaw('agent_id, SUM(profit_mco) AS gross, SUM(refund_mco_impact) AS impact')
+            ->groupBy('agent_id')->get()->keyBy('agent_id');
+
+        $out = [];
+        foreach ($agentIds as $aid) {
+            $g = (float) ($agg->get($aid)->gross  ?? 0);
+            $i = (float) ($agg->get($aid)->impact ?? 0);
+            $out[$aid] = ['gross' => $g, 'net' => round($g - $i, 2)];
+        }
+        return $out;
+    }
+
+    /**
+     * Resolve an agent's rank (1 = best) by Net MCO among their peers.
+     *
+     * @return array{0:int,1:int,2:float,3:float} [rank, totalAgents, myGross, myNet]
+     */
+    private function rankFor(int $agentId, array $netTotals): array
+    {
+        uasort($netTotals, fn($a, $b) => $b['net'] <=> $a['net']);
+        $rank = 0; $i = 0; $mine = ['gross' => 0.0, 'net' => 0.0];
+        foreach ($netTotals as $aid => $v) {
+            $i++;
+            if ((int) $aid === $agentId) { $rank = $i; $mine = $v; }
+        }
+        return [$rank, count($netTotals), $mine['gross'], $mine['net']];
     }
 
     // =========================================================================
@@ -75,6 +219,12 @@ class PerformanceController
     {
         $userId = (int)$_SESSION['user_id'];
         $role   = $_SESSION['role'] ?? User::ROLE_AGENT;
+
+        // Agents have a personal self-view, not the cross-agent export.
+        if ($role === User::ROLE_AGENT) {
+            $response->getBody()->write('Access denied.');
+            return $response->withStatus(403);
+        }
 
         $q = $request->getQueryParams();
         [$period, $start, $end, $periodLabel] = $this->resolvePeriod($q);
@@ -239,6 +389,8 @@ class PerformanceController
                  -- pending bookings don't inflate an agent's revenue/profit score.
                  SUM(CASE WHEN status = 'approved' THEN total_amount ELSE 0 END) AS revenue,
                  SUM(CASE WHEN status = 'approved' THEN profit_mco   ELSE 0 END) AS profit,
+                 -- Net MCO = Gross profit minus the MCO removed by refunds.
+                 SUM(CASE WHEN status = 'approved' THEN refund_mco_impact ELSE 0 END) AS refund_impact,
                  MAX(currency)                       AS currency"
             )
             ->groupBy('agent_id')
@@ -261,6 +413,7 @@ class PerformanceController
             $bookings = (int)   ($t->bookings ?? 0);
             $approved = (int)   ($t->approved ?? 0);
             $profit   = (float) ($t->profit   ?? 0);
+            $net      = round($profit - (float) ($t->refund_impact ?? 0), 2);
             $rows[] = [
                 'id'          => $a->id,
                 'name'        => $a->name,
@@ -271,7 +424,8 @@ class PerformanceController
                 'voided'      => (int)   ($t->voided   ?? 0),
                 'acceptances' => (int)   ($acc->get($a->id)->acc_count ?? 0),
                 'revenue'     => (float) ($t->revenue ?? 0),
-                'profit'      => $profit,
+                'profit'      => $profit,   // Gross MCO
+                'net'         => $net,      // Net MCO (after refunds)
                 // Average is profit per approved booking (same basis as profit).
                 'avg_profit'  => $approved > 0 ? $profit / $approved : 0.0,
                 'currency'    => $t->currency ?? null,
@@ -292,6 +446,7 @@ class PerformanceController
         $acceptances = array_sum(array_column($rows, 'acceptances'));
         $revenue     = array_sum(array_column($rows, 'revenue'));
         $profit      = array_sum(array_column($rows, 'profit'));
+        $net         = array_sum(array_column($rows, 'net'));
 
         $top = $rows[0] ?? null; // already profit-sorted
 
@@ -303,6 +458,7 @@ class PerformanceController
             'acceptances'  => $acceptances,
             'revenue'      => $revenue,
             'profit'       => $profit,
+            'net'          => $net,
             // Profit is approved-only, so the per-booking average uses approved count.
             'avg_profit'   => $approved > 0 ? $profit / $approved : 0.0,
             'avg_per_agent'=> $agentCount > 0 ? $profit / $agentCount : 0.0,

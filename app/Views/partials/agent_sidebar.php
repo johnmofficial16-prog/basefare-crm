@@ -15,6 +15,7 @@ $navItems = [
     ['href' => '/etickets',      'icon' => 'airplane_ticket','label' => 'E-Tickets',    'key' => 'etickets'],
     ['href' => '/emails',        'icon' => 'forward_to_inbox','label' => 'Customer Emails','key' => 'emails'],
     ['href' => '/invoices',      'icon' => 'request_quote',  'label' => 'Invoices',     'key' => 'invoices'],
+    ['href' => '/performance',   'icon' => 'leaderboard',    'label' => 'My Performance','key' => 'performance'],
     ['href' => '/attendance/my', 'icon' => 'calendar_month', 'label' => 'My Attendance','key' => 'attendance'],
 ];
 ?>

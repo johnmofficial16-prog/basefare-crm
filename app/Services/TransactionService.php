@@ -130,7 +130,21 @@ class TransactionService
             );
         }
 
-        return DB::connection()->transaction(function () use ($txn, $data, $isAdmin) {
+        // Snapshot tracked fields BEFORE the edit so we can log an auto field-level
+        // diff (old → new) into the audit trail — mandatory for post-approval edits.
+        $trackFields = [
+            'type', 'customer_name', 'customer_email', 'customer_phone', 'pnr',
+            'airline', 'order_id', 'travel_date', 'departure_time', 'return_date',
+            'total_amount', 'cost_amount', 'profit_mco', 'currency',
+            'payment_method', 'payment_status',
+        ];
+        $before = [];
+        foreach ($trackFields as $f) {
+            $before[$f] = $txn->$f;
+        }
+        $wasApproved = ($txn->status === Transaction::STATUS_APPROVED);
+
+        return DB::connection()->transaction(function () use ($txn, $data, $isAdmin, $before, $trackFields, $wasApproved) {
 
             $txn->update([
                 'status'          => $isAdmin ? ($data['status'] ?? $txn->status) : $txn->status,
@@ -141,12 +155,14 @@ class TransactionService
                 'pnr'             => strtoupper(trim($data['pnr'] ?? $txn->pnr)),
                 'airline'         => trim($data['airline'] ?? $txn->airline),
                 'order_id'        => trim($data['order_id'] ?? $txn->order_id),
-                'travel_date'     => $data['travel_date'] ?: $txn->travel_date,
-                'departure_time'  => $data['departure_time'] ?: $txn->departure_time,
-                'return_date'     => $data['return_date'] ?: $txn->return_date,
+                'travel_date'     => ($data['travel_date']    ?? null) ?: $txn->travel_date,
+                'departure_time'  => ($data['departure_time'] ?? null) ?: $txn->departure_time,
+                'return_date'     => ($data['return_date']    ?? null) ?: $txn->return_date,
                 'total_amount'    => (float)($data['total_amount'] ?? $txn->total_amount),
                 'cost_amount'     => (float)($data['cost_amount'] ?? $txn->cost_amount),
-                'profit_mco'      => ($isAdmin && isset($data['profit_mco'])) ? (float)$data['profit_mco'] : $txn->profit_mco,
+                // Money fields (incl. MCO) are editable by the owning agent too,
+                // per the 2026-06-24 policy — every change is captured in the diff audit.
+                'profit_mco'      => isset($data['profit_mco']) && $data['profit_mco'] !== '' ? (float)$data['profit_mco'] : $txn->profit_mco,
                 'currency'        => strtoupper($data['currency'] ?? $txn->currency),
                 'payment_method'  => $data['payment_method'] ?? $txn->payment_method,
                 'payment_status'  => $data['payment_status'] ?? $txn->payment_status,
@@ -179,17 +195,51 @@ class TransactionService
                 $this->saveCards($txn->id, $data);
             }
 
-            // Log the edit
-            RecordNote::log(
-                'transaction',
-                $txn->id,
-                $_SESSION['user_id'] ?? 0,
-                $data['agent_notes'] ?? 'Transaction updated.',
-                'edited'
-            );
+            // Log the edit with the agent's mandatory comment + an automatic
+            // field-level diff so every change is provable in the audit trail.
+            $changes = $this->diffChanges($before, $txn, $trackFields);
+            $comment = trim($data['agent_notes'] ?? '') ?: 'Transaction updated.';
+            $noteBody = ($wasApproved ? "[Post-approval edit] " : '') . $comment;
+            if (!empty($changes)) {
+                $noteBody .= "\n\nChanged:\n" . implode("\n", $changes);
+            }
+            RecordNote::log('transaction', $txn->id, $_SESSION['user_id'] ?? 0, $noteBody, 'edited');
 
             return $txn->fresh();
         });
+    }
+
+    /**
+     * Build human-readable "Field: old → new" lines for the fields that actually
+     * changed during an edit. Money fields are formatted to 2dp so 100 vs 100.00
+     * doesn't register as a change.
+     */
+    private function diffChanges(array $before, Transaction $after, array $fields): array
+    {
+        $labels = [
+            'type' => 'Type', 'customer_name' => 'Customer name', 'customer_email' => 'Email',
+            'customer_phone' => 'Phone', 'pnr' => 'PNR', 'airline' => 'Airline', 'order_id' => 'Order ID',
+            'travel_date' => 'Travel date', 'departure_time' => 'Departure time', 'return_date' => 'Return date',
+            'total_amount' => 'Total amount', 'cost_amount' => 'Cost', 'profit_mco' => 'Profit / MCO',
+            'currency' => 'Currency', 'payment_method' => 'Payment method', 'payment_status' => 'Payment status',
+        ];
+        $money = ['total_amount', 'cost_amount', 'profit_mco'];
+
+        $fmt = function ($field, $val) use ($money) {
+            if ($val === null || $val === '') return '—';
+            if (in_array($field, $money, true)) return number_format((float) $val, 2);
+            return (string) $val;
+        };
+
+        $out = [];
+        foreach ($fields as $f) {
+            $old = $fmt($f, $before[$f] ?? null);
+            $new = $fmt($f, $after->$f);
+            if ($old !== $new) {
+                $out[] = ($labels[$f] ?? $f) . ': ' . $old . ' → ' . $new;
+            }
+        }
+        return $out;
     }
 
     // =========================================================================
@@ -303,6 +353,97 @@ class TransactionService
             RecordNote::log('transaction', $reversal->id, $adminId, 'Auto-reversal created for void of Transaction #' . $txn->id, 'voided');
 
             return $reversal;
+        });
+    }
+
+    // =========================================================================
+    // REFUND — keeps the sale; records a merchant-statement "Refund −$X" line
+    // =========================================================================
+
+    /**
+     * Refund an approved transaction (full or partial). The sale stays approved;
+     * the refund is shown as a "Refund −$X" line and reduces Net MCO:
+     *   full    → Net MCO = 0
+     *   partial → Net MCO = Gross − refunded amount (floored at 0)
+     *
+     * @param  int    $id       Transaction to refund
+     * @param  bool   $isFull   Full refund of the remaining balance
+     * @param  float  $amount   Partial refund amount (ignored when $isFull)
+     * @param  string $reason   Mandatory reason
+     * @param  int    $adminId  Admin performing the refund
+     * @return Transaction      The refunded transaction (fresh)
+     * @throws \RuntimeException on validation failure
+     */
+    public function refund(int $id, bool $isFull, float $amount, string $reason, int $adminId): Transaction
+    {
+        $reason = trim($reason);
+        if (strlen($reason) < 5) {
+            throw new \RuntimeException('Refund reason must be at least 5 characters.');
+        }
+
+        $txn = Transaction::findOrFail($id);
+
+        if ($txn->status !== Transaction::STATUS_APPROVED) {
+            throw new \RuntimeException('Only an approved transaction can be refunded.');
+        }
+        if ($txn->isFullyRefunded()) {
+            throw new \RuntimeException('This transaction is already fully refunded.');
+        }
+
+        $remaining = $txn->refundRemaining();
+        if ($remaining <= 0) {
+            throw new \RuntimeException('Nothing left to refund on this transaction.');
+        }
+
+        // Determine this refund's amount.
+        if ($isFull) {
+            $thisRefund = $remaining;
+        } else {
+            $thisRefund = round($amount, 2);
+            if ($thisRefund <= 0) {
+                throw new \RuntimeException('Refund amount must be greater than 0.');
+            }
+            if ($thisRefund > $remaining + 0.001) {
+                throw new \RuntimeException(
+                    'Refund amount exceeds the remaining balance (' .
+                    $txn->currency . ' ' . number_format($remaining, 2) . ').'
+                );
+            }
+        }
+
+        return DB::connection()->transaction(function () use ($txn, $thisRefund, $reason, $adminId) {
+            $newRefunded = round((float) $txn->refunded_amount + $thisRefund, 2);
+            $isNowFull   = $newRefunded >= round((float) $txn->total_amount, 2) - 0.001;
+
+            // Net-MCO impact: full → wipe the whole profit; partial → subtract the
+            // refunded amount, but never push Net below 0.
+            $impact = $isNowFull
+                ? (float) $txn->profit_mco
+                : min((float) $txn->profit_mco, $newRefunded);
+            $impact = max(0, round($impact, 2));
+
+            $txn->update([
+                'refund_status'     => $isNowFull ? Transaction::REFUND_FULL : Transaction::REFUND_PARTIAL,
+                'refunded_amount'   => $newRefunded,
+                'refund_mco_impact' => $impact,
+                'refund_reason'     => mb_substr($reason, 0, 500),
+                'refunded_at'       => date('Y-m-d H:i:s'),
+                'refunded_by'       => $adminId,
+                'payment_status'    => $isNowFull ? Transaction::PAYMENT_REFUNDED : Transaction::PAYMENT_PARTIAL,
+            ]);
+
+            $note = sprintf(
+                'Refund %s of %s %s — %s. Net MCO now %s %s.',
+                $isNowFull ? 'FULL' : 'PARTIAL',
+                $txn->currency,
+                number_format($thisRefund, 2),
+                $reason,
+                $txn->currency,
+                number_format($txn->fresh()->netMco(), 2)
+            );
+            RecordNote::log('transaction', $txn->id, $adminId, $note, 'refunded');
+
+            return $txn->fresh();
         });
     }
 

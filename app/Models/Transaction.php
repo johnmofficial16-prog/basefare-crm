@@ -69,6 +69,13 @@ class Transaction extends Model
     const STATUS_VOIDED   = 'voided';
 
     // =========================================================================
+    // Refund state constants
+    // =========================================================================
+    const REFUND_NONE    = 'none';
+    const REFUND_PARTIAL = 'partial';
+    const REFUND_FULL    = 'full';
+
+    // =========================================================================
     // Payment method constants
     // =========================================================================
     const PAY_CREDIT_CARD   = 'credit_card';
@@ -124,6 +131,12 @@ class Transaction extends Model
         'currency',
         'payment_method',
         'payment_status',
+        'refund_status',
+        'refunded_amount',
+        'refund_mco_impact',
+        'refund_reason',
+        'refunded_at',
+        'refunded_by',
         'data',
         'status',
         'void_reason',
@@ -157,6 +170,8 @@ class Transaction extends Model
         'total_amount'        => 'float',
         'cost_amount'         => 'float',
         'profit_mco'          => 'float',
+        'refunded_amount'     => 'float',
+        'refund_mco_impact'   => 'float',
         'acceptance_id'       => 'integer',
         'agent_id'            => 'integer',
         'is_miles_booking'    => 'boolean',
@@ -213,6 +228,11 @@ class Transaction extends Model
         return $this->belongsTo(User::class, 'voided_by');
     }
 
+    public function refundedByUser()
+    {
+        return $this->belongsTo(User::class, 'refunded_by');
+    }
+
     /**
      * All notes / activity log entries for this transaction.
      */
@@ -227,15 +247,63 @@ class Transaction extends Model
     // Status helpers
     // =========================================================================
 
+    /**
+     * Whether this transaction can be edited.
+     *
+     * Per client policy (2026-06-24), agents may edit even APPROVED bookings —
+     * every edit is gated behind a mandatory comment and an auto-logged
+     * field-level diff (see TransactionService::update). Only a voided record is
+     * hard-locked. The $isAdmin parameter is retained for call-site compatibility.
+     */
     public function isEditable(bool $isAdmin = false): bool
     {
-        if ($this->status === self::STATUS_VOIDED) {
-            return false;
-        }
-        if ($isAdmin) {
-            return true;
-        }
-        return $this->status === self::STATUS_PENDING;
+        return !$this->isVoided();
+    }
+
+    // =========================================================================
+    // Refund / MCO helpers
+    // =========================================================================
+
+    public function isRefunded(): bool
+    {
+        return $this->refund_status !== self::REFUND_NONE && $this->refund_status !== null;
+    }
+
+    public function isFullyRefunded(): bool
+    {
+        return $this->refund_status === self::REFUND_FULL;
+    }
+
+    /** Gross MCO — the profit booked on the sale, before any refund. */
+    public function grossMco(): float
+    {
+        return (float) $this->profit_mco;
+    }
+
+    /**
+     * Net MCO — profit after refunds.
+     *   full refund    → 0
+     *   partial refund → Gross − refunded amount   (floored at 0, via stored impact)
+     */
+    public function netMco(): float
+    {
+        return round((float) $this->profit_mco - (float) $this->refund_mco_impact, 2);
+    }
+
+    /** Remaining charge that has not yet been refunded. */
+    public function refundRemaining(): float
+    {
+        return round((float) $this->total_amount - (float) $this->refunded_amount, 2);
+    }
+
+    /** Refund badge [label, tailwind classes] for list/detail display. */
+    public function refundBadge(): array
+    {
+        return match ($this->refund_status) {
+            self::REFUND_FULL    => ['Refunded',         'bg-rose-100 text-rose-700'],
+            self::REFUND_PARTIAL => ['Partial Refund',   'bg-orange-100 text-orange-700'],
+            default              => ['',                 ''],
+        };
     }
 
     public function isImmutable(): bool

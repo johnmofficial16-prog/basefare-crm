@@ -102,12 +102,13 @@ $app->group('', function ($group) {
 // Agent Performance / Scores (admin + manager + supervisor, behind AttendanceGate)
 // Team leads analyse agent-wise scores; export is PII-free (enforced in controller).
 $app->group('/performance', function ($group) {
-    $group->get('',        [PerformanceController::class, 'index']);
-    $group->get('/export', [PerformanceController::class, 'export']);
+    $group->get('',                   [PerformanceController::class, 'index']);        // agents → own day-wise view
+    $group->get('/export',            [PerformanceController::class, 'export']);       // team leads/admin only (enforced in controller)
+    $group->get('/agent/{id:[0-9]+}', [PerformanceController::class, 'agentDetail']);  // team leads/admin drill-down
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
-->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR]));
+->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR, User::ROLE_AGENT]));
 
 // Shift Scheduling Routes (admin + manager + supervisor, behind AttendanceGate)
 $app->group('/shifts', function ($group) {
@@ -243,6 +244,9 @@ $app->group('/transactions', function ($group) {
 
     // Void — manager + admin only (enforced in controller)
     $group->post('/{id:[0-9]+}/void',    [TransactionController::class, 'void']);
+
+    // Refund — admin only (enforced in controller). Keeps the sale; reduces Net MCO.
+    $group->post('/{id:[0-9]+}/refund',  [TransactionController::class, 'refund']);
 
     // Dispute & Gateway — admin/manager only (enforced in controller)
     $group->post('/{id:[0-9]+}/dispute', [TransactionController::class, 'updateDispute']);

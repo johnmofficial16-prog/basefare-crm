@@ -250,7 +250,7 @@ class TransactionController
         $userRole = $_SESSION['role'] ?? 'agent';
         $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR]);
 
-        $txn = Transaction::with(['agent', 'passengers', 'cards', 'acceptance', 'voidOf', 'reversal', 'voidedByUser', 'notes.user'])
+        $txn = Transaction::with(['agent', 'passengers', 'cards', 'acceptance', 'voidOf', 'reversal', 'voidedByUser', 'refundedByUser', 'notes.user'])
             ->find($id);
 
         if (!$txn) {
@@ -356,6 +356,13 @@ class TransactionController
             return $response->withHeader('Location', '/transactions')->withStatus(302);
         }
 
+        // Agents may only edit their OWN records (even post-approval).
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        if ($userRole === User::ROLE_AGENT && (int)$txn->agent_id !== $userId) {
+            $_SESSION['flash_error'] = 'You can only edit your own transactions.';
+            return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
+        }
+
         if (!$txn->isEditable($isAdmin)) {
             $_SESSION['flash_error'] = 'This transaction cannot be edited by your role.';
             return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
@@ -386,6 +393,15 @@ class TransactionController
         if ($userRole === User::ROLE_MANAGER || $userRole === User::ROLE_CSA) {
             $_SESSION['flash_error'] = 'Access denied.';
             return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
+        }
+
+        // Agents may only edit their OWN records (even post-approval).
+        if ($userRole === User::ROLE_AGENT) {
+            $ownerId = (int) (Transaction::where('id', $id)->value('agent_id') ?? 0);
+            if ($ownerId !== (int)($_SESSION['user_id'] ?? 0)) {
+                $_SESSION['flash_error'] = 'You can only edit your own transactions.';
+                return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
+            }
         }
 
         $passengers = json_decode($body['passengers_json'] ?? '[]', true);
@@ -562,6 +578,37 @@ class TransactionController
         try {
             $reversal = $this->service->void($txnId, $reason, $userId);
             $_SESSION['flash_success'] = 'Transaction #' . $txnId . ' voided. Reversal #' . $reversal->id . ' created.';
+        } catch (\RuntimeException $e) {
+            $_SESSION['flash_error'] = $e->getMessage();
+        }
+
+        return $response->withHeader('Location', '/transactions/' . $txnId)->withStatus(302);
+    }
+
+    // =========================================================================
+    // REFUND  —  POST /transactions/{id}/refund  (Admin only)
+    // =========================================================================
+
+    public function refund(Request $request, Response $response, array $args): Response
+    {
+        $userId   = (int)$_SESSION['user_id'];
+        $userRole = $_SESSION['role'] ?? 'agent';
+
+        if ($userRole !== User::ROLE_ADMIN) {
+            $_SESSION['flash_error'] = 'Only admins can refund transactions.';
+            return $response->withHeader('Location', '/transactions')->withStatus(302);
+        }
+
+        $txnId  = (int)($args['id'] ?? 0);
+        $body   = (array)$request->getParsedBody();
+        $isFull = (($body['refund_mode'] ?? 'full') === 'full');
+        $amount = (float)($body['refund_amount'] ?? 0);
+        $reason = trim($body['refund_reason'] ?? '');
+
+        try {
+            $txn = $this->service->refund($txnId, $isFull, $amount, $reason, $userId);
+            $_SESSION['flash_success'] = 'Refund recorded. '
+                . ($txn->isFullyRefunded() ? 'Transaction fully refunded.' : 'Partial refund applied.');
         } catch (\RuntimeException $e) {
             $_SESSION['flash_error'] = $e->getMessage();
         }

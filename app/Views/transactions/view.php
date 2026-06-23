@@ -92,6 +92,9 @@ $canApprove = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_SUPERVISOR])
               && $txn->status === Transaction::STATUS_PENDING;
 $canVoid    = ($userRole === User::ROLE_ADMIN)
               && !$txn->isVoided();
+$canRefund  = ($userRole === User::ROLE_ADMIN)
+              && $txn->status === Transaction::STATUS_APPROVED
+              && !$txn->isFullyRefunded();
 $canEdit    = $txn->isEditable($userRole === User::ROLE_ADMIN)
               && $userRole !== User::ROLE_MANAGER
               && $userRole !== User::ROLE_CSA;
@@ -145,6 +148,12 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         </button>
       </form>
       <?php endif; ?>
+      <?php if ($canRefund): ?>
+      <button type="button" onclick="openRefundModal()"
+        class="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold bg-orange-600 text-white rounded-lg hover:bg-orange-500 transition-colors shadow-sm">
+        <span class="material-symbols-outlined text-sm">currency_exchange</span> Refund
+      </button>
+      <?php endif; ?>
       <?php if ($canVoid): ?>
       <button type="button" onclick="openVoidModal()"
         class="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-500 transition-colors shadow-sm">
@@ -181,6 +190,23 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     <p class="mt-1"><?= htmlspecialchars($txn->void_reason) ?></p>
     <p class="text-xs mt-1 text-red-600">
       Voided by <?= htmlspecialchars($txn->voidedByUser->name ?? '—') ?> on <?= date('M d, Y g:i A', strtotime($txn->voided_at)) ?>
+    </p>
+  </div>
+  <?php endif; ?>
+
+  <!-- Refund Banner -->
+  <?php if ($txn->isRefunded()): ?>
+  <div class="mb-4 px-4 py-3 bg-orange-50 border border-orange-300 rounded-xl text-sm text-orange-900">
+    <p class="font-bold flex items-center gap-1">
+      <span class="material-symbols-outlined text-base">currency_exchange</span>
+      <?= $txn->isFullyRefunded() ? 'FULLY REFUNDED' : 'PARTIALLY REFUNDED' ?>
+      — <?= $txn->currency ?> <?= number_format($txn->refunded_amount, 2) ?> refunded
+    </p>
+    <?php if ($txn->refund_reason): ?><p class="mt-1"><?= htmlspecialchars($txn->refund_reason) ?></p><?php endif; ?>
+    <p class="text-xs mt-1 text-orange-600">
+      Refunded by <?= htmlspecialchars($txn->refundedByUser->name ?? '—') ?>
+      <?= $txn->refunded_at ? 'on ' . date('M d, Y g:i A', strtotime($txn->refunded_at)) : '' ?>
+      · Net MCO now <?= $txn->currency ?> <?= number_format($txn->netMco(), 2) ?>
     </p>
   </div>
   <?php endif; ?>
@@ -624,11 +650,26 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               <?php endif; ?>
             </div>
             <div class="flex justify-between items-baseline">
-              <span class="text-xs font-bold text-slate-700">Profit / MCO</span>
+              <span class="text-xs font-bold text-slate-700"><?= $txn->isRefunded() ? 'Gross MCO' : 'Profit / MCO' ?></span>
               <span class="font-mono font-bold text-lg <?= $txn->profit_mco >= 0 ? 'text-emerald-600' : 'text-red-600' ?>">
                 <?= $txn->formattedMco() ?>
               </span>
             </div>
+            <?php if ($txn->isRefunded()): ?>
+            <div class="flex justify-between items-baseline">
+              <span class="text-xs font-bold text-rose-600 flex items-center gap-1">
+                <span class="material-symbols-outlined text-sm">currency_exchange</span>
+                Refund <?= $txn->isFullyRefunded() ? '(Full)' : '(Partial)' ?>
+              </span>
+              <span class="font-mono font-bold text-sm text-rose-600">− <?= $txn->currency ?> <?= number_format($txn->refunded_amount, 2) ?></span>
+            </div>
+            <div class="flex justify-between items-baseline border-t border-dashed border-slate-300 pt-2 mt-1">
+              <span class="text-xs font-extrabold text-slate-800">Net MCO</span>
+              <span class="font-mono font-extrabold text-lg <?= $txn->netMco() > 0 ? 'text-emerald-700' : 'text-slate-500' ?>">
+                <?= $txn->currency ?> <?= number_format($txn->netMco(), 2) ?>
+              </span>
+            </div>
+            <?php endif; ?>
           </div>
           <div class="border-t border-slate-100 mt-3 pt-3 space-y-2">
             <div class="flex justify-between items-baseline">
@@ -823,8 +864,57 @@ $currentRole   = $_SESSION['role'] ?? 'agent';
 </div>
 <?php endif; ?>
 
+<!-- ── REFUND MODAL ──────────────────────────────────────────────────────── -->
+<?php if ($canRefund): ?>
+<div id="refund_modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-sm">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+    <h3 class="text-lg font-bold text-orange-700 flex items-center gap-2 mb-1">
+      <span class="material-symbols-outlined">currency_exchange</span> Refund Transaction #<?= $txn->id ?>
+    </h3>
+    <p class="text-xs text-slate-500 mb-4">
+      The sale stays approved; a “Refund −$X” line is recorded and Net MCO is reduced.
+      Remaining refundable: <strong class="text-slate-700"><?= $txn->currency ?> <?= number_format($txn->refundRemaining(), 2) ?></strong>.
+    </p>
+    <form method="POST" action="/transactions/<?= $txn->id ?>/refund">
+      <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
+      <div class="grid grid-cols-2 gap-2 mb-3">
+        <label class="flex items-center justify-center gap-1.5 py-2 border border-slate-200 rounded-lg text-sm font-semibold cursor-pointer has-[:checked]:bg-orange-50 has-[:checked]:border-orange-400 has-[:checked]:text-orange-700">
+          <input type="radio" name="refund_mode" value="full" checked onchange="toggleRefundAmount()" class="text-orange-600"> Full
+        </label>
+        <label class="flex items-center justify-center gap-1.5 py-2 border border-slate-200 rounded-lg text-sm font-semibold cursor-pointer has-[:checked]:bg-orange-50 has-[:checked]:border-orange-400 has-[:checked]:text-orange-700">
+          <input type="radio" name="refund_mode" value="partial" onchange="toggleRefundAmount()" class="text-orange-600"> Partial
+        </label>
+      </div>
+      <div id="refund_amount_wrap" class="hidden mb-3">
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Refund Amount (<?= $txn->currency ?>)</label>
+        <input type="number" step="0.01" min="0.01" max="<?= number_format($txn->refundRemaining(), 2, '.', '') ?>"
+          name="refund_amount"
+          class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-400"
+          placeholder="0.00">
+      </div>
+      <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Reason <span class="text-rose-500">*</span></label>
+      <textarea name="refund_reason" rows="3" required minlength="5"
+        class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-4 focus:ring-2 focus:ring-orange-400 resize-none"
+        placeholder="Reason for the refund…"></textarea>
+      <div class="flex items-center gap-3">
+        <button type="button" onclick="document.getElementById('refund_modal').classList.add('hidden')" class="flex-1 py-2 text-sm font-semibold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50">Cancel</button>
+        <button type="submit" class="flex-1 py-2 bg-orange-600 text-white text-sm font-bold rounded-lg hover:bg-orange-500">Confirm Refund</button>
+      </div>
+    </form>
+  </div>
+</div>
+<?php endif; ?>
+
 <script>
 function openVoidModal() { document.getElementById('void_modal').classList.remove('hidden'); }
+function openRefundModal() { document.getElementById('refund_modal').classList.remove('hidden'); }
+function toggleRefundAmount() {
+  const partial = document.querySelector('input[name="refund_mode"][value="partial"]').checked;
+  const wrap = document.getElementById('refund_amount_wrap');
+  wrap.classList.toggle('hidden', !partial);
+  const amt = wrap.querySelector('input');
+  if (partial) { amt.setAttribute('required', 'required'); } else { amt.removeAttribute('required'); amt.value = ''; }
+}
 
 // ── Eye-icon card reveal toggle ──────────────────────────────────────────
 const _cardCache = {};

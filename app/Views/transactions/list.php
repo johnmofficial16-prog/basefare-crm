@@ -223,6 +223,9 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <td class="px-4 py-3 font-mono text-xs font-bold"><?= $t->currency ?> <?= number_format($t->total_amount, 2) ?></td>
             <td class="px-4 py-3 font-mono text-xs font-bold <?= $t->profit_mco >= 0 ? 'text-emerald-600' : 'text-red-600' ?>">
               <?= $t->profit_mco >= 0 ? '+' : '' ?><?= number_format($t->profit_mco, 2) ?>
+              <?php if ($t->isRefunded()): ?>
+              <div class="text-[10px] font-bold text-rose-500" title="Net MCO after refund">&#8617; Net <?= number_format($t->netMco(), 2) ?></div>
+              <?php endif; ?>
             </td>
             <td class="px-4 py-3 text-xs text-slate-500">
               <?php if ($t->primaryCard): ?>
@@ -238,6 +241,9 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               <?php if ($t->hasDispute()): ?>
               <?php [$dl, $dc] = $t->disputeBadge(); ?>
               <span class="ml-1 inline-block px-2 py-0.5 text-[10px] font-bold rounded-full <?= $dc ?>"><?= htmlspecialchars($dl) ?></span>
+              <?php endif; ?>
+              <?php if ($t->isRefunded()): [$rl, $rc] = $t->refundBadge(); ?>
+              <span class="ml-1 inline-block px-2 py-0.5 text-[10px] font-bold rounded-full <?= $rc ?>"><?= htmlspecialchars($rl) ?></span>
               <?php endif; ?>
             </td>
             <?php if ($isAdmin || $isManager || $isSearchingAll): ?>
