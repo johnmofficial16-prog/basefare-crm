@@ -7,6 +7,7 @@ use App\Models\MarketingSpend;
 use App\Services\AnalyticsService;
 use App\Services\CentreService;
 use App\Services\GeminiService;
+use Illuminate\Database\Capsule\Manager as DB;
 use Carbon\Carbon;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -43,16 +44,19 @@ class AnalyticsController
         $trend    = $this->analytics->weeklyTrend(8);
         $configured = $this->centres->isConfigured();
 
+        // Display currency mirrors the rest of the CRM (Performance/Dashboard).
+        $currency = DB::table('system_config')->where('key', 'default_currency')->value('value') ?: 'CAD';
+
         $selFrom = $q['date_from'] ?? '';
         $selTo   = $q['date_to'] ?? '';
-        $ai = new GeminiService();
-        $aiConfigured = $ai->isConfigured();
+        $aiConfigured = (new GeminiService())->isConfigured();
 
         return $this->render($response, 'analytics/index.php', [
             'overview'     => $overview,
             'trend'        => $trend,
             'period'       => $period,
             'periodLabel'  => $periodLabel,
+            'currency'     => $currency,
             'selFrom'      => $selFrom,
             'selTo'        => $selTo,
             'configured'   => $configured,

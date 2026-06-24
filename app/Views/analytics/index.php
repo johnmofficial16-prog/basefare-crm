@@ -16,7 +16,7 @@ $h   = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $m0  = fn($n) => number_format((float)$n, 0);
 $m2  = fn($n) => number_format((float)$n, 2);
 $JS  = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
-$cur = 'USD';
+$cur = $currency ?? 'CAD';
 
 $centres = $overview['centres'];
 $totals  = $overview['totals'];
