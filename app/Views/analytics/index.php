@@ -66,7 +66,18 @@ $delta = function ($pct) {
 <script>
 tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","primary-container":"#314a8d",background:"#f8f9fa","surface-container-low":"#f3f4f5","on-surface":"#191c1d","on-surface-variant":"#434653"},fontFamily:{headline:["Manrope"],body:["Inter"]}}}};
 </script>
-<style>.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}</style>
+<style>
+.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
+.card-hover{transition:transform .16s ease,box-shadow .16s ease}
+.card-hover:hover{transform:translateY(-3px);box-shadow:0 16px 34px rgba(15,30,60,.12)}
+.kpi-ico{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.centre-card{position:relative;overflow:hidden}
+.centre-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--accent)}
+.centre-glow{position:absolute;top:-40px;right:-40px;width:130px;height:130px;border-radius:50%;opacity:.08;background:var(--accent)}
+.stat-up{color:#059669}.stat-down{color:#e11d48}
+@keyframes floatIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.float-in{animation:floatIn .4s ease both}
+</style>
 </head>
 <body class="bg-background font-body text-on-surface antialiased min-h-screen">
 
@@ -121,31 +132,71 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
   <!-- Totals strip -->
   <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-    <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200"><p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Bookings</p><p class="text-2xl font-headline font-extrabold text-on-surface"><?= $m0($totals['bookings']) ?></p></div>
-    <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200"><p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Revenue</p><p class="text-2xl font-headline font-extrabold text-on-surface"><?= $cur ?> <?= $m0($totals['revenue']) ?></p></div>
-    <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200"><p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Net MCO</p><p class="text-2xl font-headline font-extrabold text-emerald-700"><?= $cur ?> <?= $m0($totals['net']) ?></p></div>
-    <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200"><p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Marketing Spend</p><p class="text-2xl font-headline font-extrabold text-on-surface"><?= $cur ?> <?= $m0($totals['spend']) ?></p></div>
-    <div class="bg-gradient-to-br from-primary to-primary-container rounded-2xl p-4 shadow-sm text-white"><p class="text-[10px] font-bold uppercase tracking-wider text-white/70 mb-1">ROI (Net / Spend)</p><p class="text-2xl font-headline font-extrabold"><?= $totals['roi'] !== null ? $totals['roi'].'×' : '—' ?></p></div>
+    <div class="card-hover float-in bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center gap-3">
+      <div class="kpi-ico bg-blue-50 text-blue-600"><span class="material-symbols-outlined text-xl">confirmation_number</span></div>
+      <div><p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bookings</p><p class="text-2xl font-headline font-extrabold text-on-surface leading-tight"><?= $m0($totals['bookings']) ?></p></div>
+    </div>
+    <div class="card-hover float-in bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center gap-3" style="animation-delay:.04s">
+      <div class="kpi-ico bg-slate-100 text-slate-600"><span class="material-symbols-outlined text-xl">payments</span></div>
+      <div><p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Revenue</p><p class="text-2xl font-headline font-extrabold text-on-surface leading-tight"><?= $cur ?> <?= $m0($totals['revenue']) ?></p></div>
+    </div>
+    <div class="card-hover float-in bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center gap-3" style="animation-delay:.08s">
+      <div class="kpi-ico bg-emerald-50 text-emerald-600"><span class="material-symbols-outlined text-xl">savings</span></div>
+      <div><p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Net MCO</p><p class="text-2xl font-headline font-extrabold text-emerald-700 leading-tight"><?= $cur ?> <?= $m0($totals['net']) ?></p></div>
+    </div>
+    <div class="card-hover float-in bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center gap-3" style="animation-delay:.12s">
+      <div class="kpi-ico bg-amber-50 text-amber-600"><span class="material-symbols-outlined text-xl">campaign</span></div>
+      <div><p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Marketing Spend</p><p class="text-2xl font-headline font-extrabold text-on-surface leading-tight"><?= $cur ?> <?= $m0($totals['spend']) ?></p></div>
+    </div>
+    <div class="card-hover float-in bg-gradient-to-br from-primary to-primary-container rounded-2xl p-4 shadow-lg shadow-primary/20 text-white flex items-center gap-3" style="animation-delay:.16s">
+      <div class="kpi-ico bg-white/15 text-white"><span class="material-symbols-outlined text-xl">trending_up</span></div>
+      <div><p class="text-[10px] font-bold uppercase tracking-wider text-white/70">ROI · Net / Spend</p><p class="text-2xl font-headline font-extrabold leading-tight"><?= $totals['roi'] !== null ? $totals['roi'].'×' : '—' ?></p></div>
+    </div>
   </div>
 
   <!-- Per-centre cards -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-    <?php foreach (CentreService::ALL as $code): $c = $centres[$code]; ?>
-    <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
-      <div class="flex items-center gap-2 mb-3">
-        <span class="w-3 h-3 rounded-full" style="background:<?= $c['color'] ?>"></span>
-        <h3 class="font-headline font-extrabold text-slate-900"><?= $h($c['label']) ?></h3>
-        <span class="ml-auto text-[11px] font-bold text-slate-400"><?= (int)$c['agents'] ?> agents</span>
+    <?php foreach (CentreService::ALL as $code): $c = $centres[$code];
+      $roi = $c['roi']; $roiPct = $roi !== null ? max(0, min(1, $roi / 5)) * 100 : 0;
+      $roiGood = $roi !== null && $roi >= 1;
+    ?>
+    <div class="centre-card card-hover float-in bg-white rounded-2xl p-5 shadow-sm border border-slate-200" style="--accent:<?= $c['color'] ?>;animation-delay:<?= 0.05 * array_search($code, CentreService::ALL) ?>s">
+      <div class="centre-glow"></div>
+      <div class="flex items-center gap-2.5 mb-4 relative">
+        <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-sm" style="background:<?= $c['color'] ?>"><span class="material-symbols-outlined text-xl">groups</span></div>
+        <div>
+          <h3 class="font-headline font-extrabold text-slate-900 leading-none"><?= $h($c['label']) ?></h3>
+          <p class="text-[11px] font-semibold text-slate-400 mt-0.5"><?= (int)$c['agents'] ?> agents</p>
+        </div>
+        <span class="ml-auto text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg" style="background:<?= $c['color'] ?>18;color:<?= $c['color'] ?>"><?= $code ?></span>
       </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div><p class="text-[10px] font-bold uppercase text-slate-400">Net MCO</p><p class="text-lg font-extrabold text-emerald-700"><?= $cur ?> <?= $m0($c['net']) ?></p><?= $delta($c['delta']['net']) ?></div>
-        <div><p class="text-[10px] font-bold uppercase text-slate-400">Revenue</p><p class="text-lg font-extrabold text-on-surface"><?= $cur ?> <?= $m0($c['revenue']) ?></p><?= $delta($c['delta']['revenue']) ?></div>
-        <div><p class="text-[10px] font-bold uppercase text-slate-400">Bookings</p><p class="text-lg font-extrabold text-on-surface"><?= (int)$c['bookings'] ?></p><?= $delta($c['delta']['bookings']) ?></div>
-        <div><p class="text-[10px] font-bold uppercase text-slate-400">Spend</p><p class="text-lg font-extrabold text-on-surface"><?= $cur ?> <?= $m0($c['spend']) ?></p></div>
+
+      <!-- Hero: Net MCO -->
+      <div class="mb-4 relative">
+        <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Net MCO</p>
+        <div class="flex items-end gap-2">
+          <p class="text-3xl font-headline font-extrabold text-slate-900 leading-none"><?= $cur ?> <?= $m0($c['net']) ?></p>
+          <span class="mb-0.5"><?= $delta($c['delta']['net']) ?></span>
+        </div>
       </div>
-      <div class="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-100">
-        <div><p class="text-[10px] font-bold uppercase text-slate-400">ROI</p><p class="text-sm font-bold <?= $c['roi'] !== null && $c['roi'] >= 1 ? 'text-emerald-600' : 'text-slate-600' ?>"><?= $c['roi'] !== null ? $c['roi'].'×' : '—' ?></p></div>
-        <div><p class="text-[10px] font-bold uppercase text-slate-400">Cost / Booking</p><p class="text-sm font-bold text-slate-600"><?= $c['cost_per_booking'] !== null ? $cur.' '.$m2($c['cost_per_booking']) : '—' ?></p></div>
+
+      <!-- Mini stats -->
+      <div class="grid grid-cols-3 gap-2 mb-4">
+        <div class="rounded-xl bg-slate-50 px-3 py-2"><p class="text-[9px] font-bold uppercase text-slate-400">Revenue</p><p class="text-sm font-extrabold text-slate-700 leading-tight"><?= $m0($c['revenue']) ?></p></div>
+        <div class="rounded-xl bg-slate-50 px-3 py-2"><p class="text-[9px] font-bold uppercase text-slate-400">Bookings</p><p class="text-sm font-extrabold text-slate-700 leading-tight"><?= (int)$c['bookings'] ?></p></div>
+        <div class="rounded-xl bg-slate-50 px-3 py-2"><p class="text-[9px] font-bold uppercase text-slate-400">Spend</p><p class="text-sm font-extrabold text-slate-700 leading-tight"><?= $m0($c['spend']) ?></p></div>
+      </div>
+
+      <!-- ROI meter -->
+      <div class="pt-3 border-t border-slate-100">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">ROI · Net / Spend</span>
+          <span class="text-sm font-extrabold <?= $roiGood ? 'text-emerald-600' : ($roi !== null ? 'text-amber-600' : 'text-slate-400') ?>"><?= $roi !== null ? $roi.'×' : '—' ?></span>
+        </div>
+        <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
+          <div class="h-full rounded-full" style="width:<?= round($roiPct, 1) ?>%;background:<?= $roiGood ? '#059669' : '#d97706' ?>"></div>
+        </div>
+        <p class="text-[10px] text-slate-400 mt-1.5">Cost / booking: <span class="font-bold text-slate-500"><?= $c['cost_per_booking'] !== null ? $cur.' '.$m2($c['cost_per_booking']) : '—' ?></span></p>
       </div>
     </div>
     <?php endforeach; ?>
@@ -153,19 +204,19 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
   <!-- Charts -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-    <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+    <div class="card-hover bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
       <h3 class="font-headline font-extrabold text-slate-900 mb-4">Net MCO &amp; Revenue by Centre</h3>
       <canvas id="barCentre" height="160"></canvas>
     </div>
-    <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+    <div class="card-hover bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
       <h3 class="font-headline font-extrabold text-slate-900 mb-4">Net MCO — Weekly Trend (8 weeks)</h3>
       <canvas id="lineTrend" height="160"></canvas>
     </div>
-    <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+    <div class="card-hover bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
       <h3 class="font-headline font-extrabold text-slate-900 mb-4">Net MCO Share</h3>
       <canvas id="donutShare" height="160"></canvas>
     </div>
-    <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+    <div class="card-hover bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
       <h3 class="font-headline font-extrabold text-slate-900 mb-4">ROI by Centre (Net MCO per $ spend)</h3>
       <canvas id="barRoi" height="160"></canvas>
     </div>
@@ -198,6 +249,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 const CHART = <?= json_encode($chartData, $JS) ?>;
 const PERIOD = { period: <?= json_encode($period, $JS) ?>, date_from: <?= json_encode($selFrom, $JS) ?>, date_to: <?= json_encode($selTo, $JS) ?> };
 const CSRF = <?= json_encode($_SESSION['csrf_token'] ?? '', $JS) ?>;
+const CUR = <?= json_encode($cur, $JS) ?>;
 
 // ── Period filter UI ──
 (function(){
@@ -214,39 +266,58 @@ const CSRF = <?= json_encode($_SESSION['csrf_token'] ?? '', $JS) ?>;
 })();
 
 // ── Charts ──
-const money = v => (CHART && new Intl.NumberFormat('en-US').format(Math.round(v)));
+const money = v => new Intl.NumberFormat('en-US').format(Math.round(v));
+function gradient(ctx, area, hex){
+  if (!area) return hex;
+  const g = ctx.createLinearGradient(0, area.top, 0, area.bottom);
+  g.addColorStop(0, hex); g.addColorStop(1, hex + '99');
+  return g;
+}
 document.addEventListener('DOMContentLoaded', function(){
   if (typeof Chart === 'undefined') return;
   Chart.defaults.font.family = 'Inter, sans-serif';
+  Chart.defaults.font.size = 11;
   Chart.defaults.color = '#64748b';
+  const grid = { color:'#f1f5f9', drawBorder:false };
+  const legendBottom = { position:'bottom', labels:{ usePointStyle:true, pointStyle:'circle', boxWidth:8, padding:16, font:{weight:'600'} } };
+  const moneyTip = (suffix='') => ({ callbacks:{ label: c => '  ' + c.dataset.label + ': ' + CUR + ' ' + money(c.parsed.y ?? c.parsed) + suffix } });
 
+  // Centre comparison — rounded bars, money tooltips
   new Chart(document.getElementById('barCentre'), {
     type:'bar',
     data:{ labels:CHART.labels, datasets:[
-      { label:'Net MCO', data:CHART.net, backgroundColor:CHART.colors },
-      { label:'Revenue', data:CHART.revenue, backgroundColor:CHART.colors.map(c=>c+'66') },
+      { label:'Net MCO', data:CHART.net, backgroundColor:(c)=>gradient(c.chart.ctx, c.chart.chartArea, CHART.colors[c.dataIndex]||'#2563eb'), borderRadius:8, maxBarThickness:46 },
+      { label:'Revenue', data:CHART.revenue, backgroundColor:CHART.colors.map(c=>c+'40'), borderRadius:8, maxBarThickness:46 },
     ]},
-    options:{ responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{beginAtZero:true}} }
+    options:{ responsive:true, plugins:{ legend:legendBottom, tooltip:moneyTip() }, scales:{ y:{beginAtZero:true, grid, ticks:{ callback:v=>money(v) }}, x:{grid:{display:false}} } }
   });
 
+  // Weekly trend — filled area lines + points
   new Chart(document.getElementById('lineTrend'), {
     type:'line',
     data:{ labels:CHART.trend.labels, datasets:Object.keys(CHART.trend.series).map((code,i)=>({
-      label:CHART.labels[i], data:CHART.trend.series[code], borderColor:CHART.colors[i], backgroundColor:CHART.colors[i]+'22', tension:0.3, fill:false,
+      label:CHART.labels[i], data:CHART.trend.series[code],
+      borderColor:CHART.colors[i], backgroundColor:CHART.colors[i]+'1f',
+      tension:0.4, fill:true, borderWidth:2.5, pointRadius:3, pointHoverRadius:6,
+      pointBackgroundColor:CHART.colors[i], pointBorderColor:'#fff', pointBorderWidth:1.5,
     }))},
-    options:{ responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{beginAtZero:true}} }
+    options:{ responsive:true, interaction:{mode:'index',intersect:false}, plugins:{ legend:legendBottom, tooltip:moneyTip() }, scales:{ y:{beginAtZero:true, grid, ticks:{callback:v=>money(v)}}, x:{grid:{display:false}} } }
   });
 
+  // Net MCO share — donut with center total
+  const netTotal = CHART.net.reduce((a,b)=>a+Math.max(0,b),0);
   new Chart(document.getElementById('donutShare'), {
     type:'doughnut',
-    data:{ labels:CHART.labels, datasets:[{ data:CHART.net.map(v=>Math.max(0,v)), backgroundColor:CHART.colors }]},
-    options:{ responsive:true, plugins:{legend:{position:'bottom'}}, cutout:'62%' }
+    data:{ labels:CHART.labels, datasets:[{ data:CHART.net.map(v=>Math.max(0,v)), backgroundColor:CHART.colors, borderWidth:3, borderColor:'#fff', hoverOffset:8 }]},
+    options:{ responsive:true, cutout:'68%', plugins:{ legend:legendBottom, tooltip:{ callbacks:{ label:c=>'  '+c.label+': '+CUR+' '+money(c.parsed)+(netTotal>0?' ('+Math.round(c.parsed/netTotal*100)+'%)':'') } } } },
+    plugins:[{ id:'centerText', afterDraw(chart){ const {ctx,chartArea:{left,right,top,bottom}}=chart; const x=(left+right)/2, y=(top+bottom)/2; ctx.save(); ctx.textAlign='center'; ctx.fillStyle='#0f1e3c'; ctx.font='800 18px Manrope, sans-serif'; ctx.fillText(money(netTotal), x, y-2); ctx.fillStyle='#94a3b8'; ctx.font='600 10px Inter, sans-serif'; ctx.fillText('NET MCO', x, y+15); ctx.restore(); } }]
   });
 
+  // ROI by centre — rounded bars, '×' tooltip, reference line at 1×
   new Chart(document.getElementById('barRoi'), {
     type:'bar',
-    data:{ labels:CHART.labels, datasets:[{ label:'ROI (×)', data:CHART.roi, backgroundColor:CHART.colors }]},
-    options:{ responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+    data:{ labels:CHART.labels, datasets:[{ label:'ROI', data:CHART.roi, backgroundColor:CHART.colors.map((c,i)=> (CHART.roi[i]>=1? c : '#f59e0b')), borderRadius:8, maxBarThickness:60 }]},
+    options:{ responsive:true, plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>'  ROI: '+c.parsed.y+'×' } } }, scales:{ y:{beginAtZero:true, grid, ticks:{callback:v=>v+'×'}}, x:{grid:{display:false}} } }
   });
 });
 
