@@ -11,6 +11,7 @@ use App\Controllers\UserController;
 use App\Controllers\ETicketController;
 use App\Controllers\CustomerEmailController;
 use App\Controllers\InvoiceController;
+use App\Controllers\AnalyticsController;
 use App\Controllers\AdminController;
 use App\Controllers\MobileAdminController;
 use App\Controllers\PayrollController;
@@ -160,6 +161,22 @@ $app->group('/vouchers', function ($group) {
     $group->post('', [VoucherController::class, 'store']);
     $group->get('/{id}', [VoucherController::class, 'show']);
     $group->delete('/{id}', [VoucherController::class, 'destroy']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
+
+// ==========================================================================
+// Centre Analytics (admin only, behind AttendanceGate)
+// Per-centre performance + marketing ROI dashboards + AI insights.
+// ==========================================================================
+$app->group('/analytics', function ($group) {
+    $group->get('',                            [AnalyticsController::class, 'index']);
+    $group->get('/settings',                   [AnalyticsController::class, 'settings']);
+    $group->post('/settings',                  [AnalyticsController::class, 'saveSettings']);
+    $group->post('/spend',                     [AnalyticsController::class, 'spendStore']);
+    $group->post('/spend/{id:[0-9]+}/delete',  [AnalyticsController::class, 'spendDelete']);
+    $group->post('/ai',                        [AnalyticsController::class, 'aiAnalyze']);   // AJAX — PII-free aggregates
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())

@@ -43,6 +43,7 @@ $files = [
     __DIR__ . '/database/migrations/2026_06_10_customer_emails.sql',
     __DIR__ . '/database/migrations/2026_06_22_invoices.sql',
     __DIR__ . '/database/migrations/2026_06_24_refunds_mco.sql',
+    __DIR__ . '/database/migrations/2026_06_24_marketing_spend.sql',
 ];
 
 foreach ($files as $file) {

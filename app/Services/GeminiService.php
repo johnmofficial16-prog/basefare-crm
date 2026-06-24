@@ -135,6 +135,72 @@ class GeminiService
     }
 
     // =========================================================================
+    // PUBLIC — CONSOLIDATED PERFORMANCE ANALYSIS (admin analytics)
+    // =========================================================================
+
+    /**
+     * Analyse PII-free centre performance + marketing aggregates and return a
+     * written summary, per-centre notes, and prioritised, actionable suggestions.
+     *
+     * @param array $data Aggregate stats only (no customer data). Shape is free;
+     *                    it is JSON-encoded into the prompt verbatim.
+     * @return array {success:bool, summary?:string, centre_notes?:array,
+     *                suggestions?:array, error?:string}
+     */
+    public function analyzePerformance(array $data): array
+    {
+        if (!$this->isConfigured()) {
+            return ['success' => false, 'error' => 'AI is not configured (missing VERTEX_API_KEY).'];
+        }
+
+        $system = <<<PROMPT
+You are a sharp, practical performance analyst for "Base Fare", a travel-agency
+call centre. You are given AGGREGATE, anonymised stats for three sales centres
+(DMR, MOH, JSR) over a period — bookings, revenue, Gross/Net MCO (profit),
+acceptances, marketing spend, ROI (Net MCO per spend), and a weekly trend.
+
+Analyse like a revenue/ops lead who wants the admin to ACT. Be specific and
+quantitative — cite the actual numbers/percentages from the data. Compare the
+centres, call out what is improving or declining week-over-week, flag weak ROI
+or rising cost-per-booking, and note refund drag (Gross vs Net gap) if relevant.
+
+Rules:
+- Use ONLY the numbers provided. Do NOT invent figures, names, or customers.
+- No fluff or generic advice — every point must reference the data.
+- Suggestions must be concrete actions an admin can take this week.
+- Keep it concise: a tight summary, one short note per centre, 3–6 suggestions.
+
+OUTPUT FORMAT — reply with a SINGLE JSON object and nothing else:
+{
+  "summary": "<2–4 sentence overall read of the period>",
+  "centre_notes": {"DMR": "<1–2 sentences>", "MOH": "<...>", "JSR": "<...>"},
+  "suggestions": ["<action 1>", "<action 2>", "..."]
+}
+PROMPT;
+
+        $user = "PERIOD + AGGREGATE STATS (JSON):\n" . json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $result = $this->generate($system, $user, true, 1500);
+        if (!$result['success']) {
+            return $result;
+        }
+
+        $parsed = $this->extractJson($result['text']);
+        $summary = isset($parsed['summary']) ? trim((string) $parsed['summary']) : '';
+        if ($summary === '') {
+            error_log('[Gemini] analyzePerformance: unusable reply. Raw: ' . substr($result['text'], 0, 500));
+            return ['success' => false, 'error' => 'AI returned an unusable analysis. Please try again.'];
+        }
+
+        return [
+            'success'      => true,
+            'summary'      => $summary,
+            'centre_notes' => is_array($parsed['centre_notes'] ?? null) ? $parsed['centre_notes'] : [],
+            'suggestions'  => is_array($parsed['suggestions'] ?? null) ? array_values($parsed['suggestions']) : [],
+        ];
+    }
+
+    // =========================================================================
     // LOW-LEVEL — RAW generateContent CALL
     // =========================================================================
 
