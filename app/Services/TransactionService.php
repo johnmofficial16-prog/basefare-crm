@@ -146,6 +146,23 @@ class TransactionService
 
         return DB::connection()->transaction(function () use ($txn, $data, $isAdmin, $before, $trackFields, $wasApproved) {
 
+            // Normalise proof-of-sale paths to a clean array. The controller passes
+            // a JSON string when new files were uploaded (append). Without this the
+            // newly-uploaded proof was saved to disk but never written to the row.
+            $existingProof = is_array($txn->proof_of_sale_path)
+                ? $txn->proof_of_sale_path
+                : (json_decode((string) $txn->proof_of_sale_path, true) ?: []);
+            $proofPath = $existingProof;
+            if (array_key_exists('proof_of_sale_path', $data)) {
+                $incoming = $data['proof_of_sale_path'];
+                if (is_array($incoming)) {
+                    $proofPath = $incoming;
+                } else {
+                    $decoded   = json_decode((string) $incoming, true);
+                    $proofPath = is_array($decoded) ? $decoded : $existingProof;
+                }
+            }
+
             $txn->update([
                 'status'          => $isAdmin ? ($data['status'] ?? $txn->status) : $txn->status,
                 'type'            => $data['type'] ?? $txn->type,
@@ -168,6 +185,7 @@ class TransactionService
                 'payment_status'  => $data['payment_status'] ?? $txn->payment_status,
                 'data'            => $data['type_specific_data'] ?? $txn->data,
                 'agent_notes'     => trim($data['agent_notes'] ?? $txn->agent_notes),
+                'proof_of_sale_path' => $proofPath,
             ]);
 
             // Re-save passengers (delete + re-insert)

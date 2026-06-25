@@ -344,8 +344,8 @@ class TransactionController
         $userRole = $_SESSION['role'] ?? 'agent';
         $isAdmin  = ($userRole === User::ROLE_ADMIN);
 
-        // Managers and CSA cannot edit transactions
-        if ($userRole === User::ROLE_MANAGER || $userRole === User::ROLE_CSA) {
+        // CSA cannot edit transactions
+        if ($userRole === User::ROLE_CSA) {
             $_SESSION['flash_error'] = 'Access denied.';
             return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
         }
@@ -356,10 +356,16 @@ class TransactionController
             return $response->withHeader('Location', '/transactions')->withStatus(302);
         }
 
-        // Agents may only edit their OWN records (even post-approval).
+        // Scope: agents edit only their own; managers only their team (or own).
         $userId = (int)($_SESSION['user_id'] ?? 0);
         if ($userRole === User::ROLE_AGENT && (int)$txn->agent_id !== $userId) {
             $_SESSION['flash_error'] = 'You can only edit your own transactions.';
+            return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
+        }
+        if ($userRole === User::ROLE_MANAGER
+            && !in_array((int)$txn->agent_id, $this->getManagerTeamIds($userId), true)
+            && (int)$txn->agent_id !== $userId) {
+            $_SESSION['flash_error'] = "You can only edit your team's transactions.";
             return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
         }
 
@@ -389,17 +395,22 @@ class TransactionController
         $userRole = $_SESSION['role'] ?? 'agent';
         $isAdmin  = ($userRole === User::ROLE_ADMIN);
 
-        // Managers and CSA cannot edit transactions
-        if ($userRole === User::ROLE_MANAGER || $userRole === User::ROLE_CSA) {
+        // CSA cannot edit transactions
+        if ($userRole === User::ROLE_CSA) {
             $_SESSION['flash_error'] = 'Access denied.';
             return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
         }
 
-        // Agents may only edit their OWN records (even post-approval).
-        if ($userRole === User::ROLE_AGENT) {
+        // Scope: agents edit only their own; managers only their team (or own).
+        if ($userRole === User::ROLE_AGENT || $userRole === User::ROLE_MANAGER) {
+            $myId    = (int)($_SESSION['user_id'] ?? 0);
             $ownerId = (int) (Transaction::where('id', $id)->value('agent_id') ?? 0);
-            if ($ownerId !== (int)($_SESSION['user_id'] ?? 0)) {
-                $_SESSION['flash_error'] = 'You can only edit your own transactions.';
+            $allowed = ($ownerId === $myId)
+                || ($userRole === User::ROLE_MANAGER && in_array($ownerId, $this->getManagerTeamIds($myId), true));
+            if (!$allowed) {
+                $_SESSION['flash_error'] = $userRole === User::ROLE_MANAGER
+                    ? "You can only edit your team's transactions."
+                    : 'You can only edit your own transactions.';
                 return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
             }
         }

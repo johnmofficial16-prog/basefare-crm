@@ -96,7 +96,6 @@ $canRefund  = ($userRole === User::ROLE_ADMIN)
               && $txn->status === Transaction::STATUS_APPROVED
               && !$txn->isFullyRefunded();
 $canEdit    = $txn->isEditable($userRole === User::ROLE_ADMIN)
-              && $userRole !== User::ROLE_MANAGER
               && $userRole !== User::ROLE_CSA;
 $isAdminOnly = ($userRole === User::ROLE_ADMIN);
 
