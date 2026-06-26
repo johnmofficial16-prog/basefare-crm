@@ -15,6 +15,7 @@ $navItems = [
     ['href' => '/attendance/admin/history', 'icon' => 'history',        'label' => 'History',          'key' => 'history',       'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/performance',             'icon' => 'leaderboard',    'label' => 'Performance',      'key' => 'performance',   'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/analytics',               'icon' => 'insights',       'label' => 'Centre Analytics', 'key' => 'analytics',     'roles' => ['admin']],
+    ['href' => '/chargebacks',             'icon' => 'credit_card_off','label' => 'Chargebacks & Refunds', 'key' => 'chargebacks', 'roles' => ['admin']],
     ['href' => '/shifts/week',             'icon' => 'calendar_month', 'label' => 'Shift Schedule',   'key' => 'shifts',        'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/acceptance',              'icon' => 'verified',       'label' => 'Acceptance',       'key' => 'acceptance',    'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',     'key' => 'transactions',  'roles' => ['admin', 'manager', 'supervisor']],

@@ -12,6 +12,7 @@ use App\Controllers\ETicketController;
 use App\Controllers\CustomerEmailController;
 use App\Controllers\InvoiceController;
 use App\Controllers\AnalyticsController;
+use App\Controllers\ChargebackController;
 use App\Controllers\AdminController;
 use App\Controllers\MobileAdminController;
 use App\Controllers\PayrollController;
@@ -177,6 +178,20 @@ $app->group('/analytics', function ($group) {
     $group->post('/spend',                     [AnalyticsController::class, 'spendStore']);
     $group->post('/spend/{id:[0-9]+}/delete',  [AnalyticsController::class, 'spendDelete']);
     $group->post('/ai',                        [AnalyticsController::class, 'aiAnalyze']);   // AJAX — PII-free aggregates
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
+
+// ==========================================================================
+// Chargebacks & Refunds (admin only, behind AttendanceGate)
+// Manually-entered chargeback/refund events, bifurcated per centre.
+// ==========================================================================
+$app->group('/chargebacks', function ($group) {
+    $group->get('',                           [ChargebackController::class, 'index']);
+    $group->post('',                          [ChargebackController::class, 'store']);          // AJAX add
+    $group->post('/{id:[0-9]+}/update',       [ChargebackController::class, 'update']);         // AJAX edit
+    $group->post('/{id:[0-9]+}/delete',       [ChargebackController::class, 'delete']);         // AJAX delete
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())

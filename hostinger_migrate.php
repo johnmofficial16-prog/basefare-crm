@@ -44,6 +44,7 @@ $files = [
     __DIR__ . '/database/migrations/2026_06_22_invoices.sql',
     __DIR__ . '/database/migrations/2026_06_24_refunds_mco.sql',
     __DIR__ . '/database/migrations/2026_06_24_marketing_spend.sql',
+    __DIR__ . '/database/migrations/2026_06_26_chargeback_refunds.sql',
 ];
 
 foreach ($files as $file) {
