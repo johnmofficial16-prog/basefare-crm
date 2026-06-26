@@ -46,7 +46,7 @@ class ChargebackController
 
         // Recent entries for the management log (all-time, newest first) so the
         // admin always sees what they just added regardless of the period filter.
-        $entries = ChargebackRefund::with('creator')->orderByDesc('event_date')->orderByDesc('id')->limit(200)->get();
+        $entries = ChargebackRefund::orderByDesc('event_date')->orderByDesc('id')->limit(200)->get();
 
         return $this->render($response, 'chargebacks/index.php', [
             'analysis'    => $analysis,
@@ -83,7 +83,7 @@ class ChargebackController
         $data['created_by'] = (int) $_SESSION['user_id'];
         $entry = ChargebackRefund::create($data);
 
-        return $this->json($response, ['success' => true, 'entry' => $this->presentEntry($entry->fresh('creator'))]);
+        return $this->json($response, ['success' => true, 'entry' => $this->presentEntry($entry->fresh())]);
     }
 
     // =========================================================================
@@ -111,7 +111,7 @@ class ChargebackController
         }
 
         $entry->update($data);
-        return $this->json($response, ['success' => true, 'entry' => $this->presentEntry($entry->fresh('creator'))]);
+        return $this->json($response, ['success' => true, 'entry' => $this->presentEntry($entry->fresh())]);
     }
 
     // =========================================================================
@@ -193,7 +193,10 @@ class ChargebackController
 
     private function resolvePeriod(array $q): array
     {
-        $period = $q['period'] ?? 'monthly';
+        // Default to All Time: this is a manual-entry tool, so a newly-recorded
+        // (often historical) event should show in the analysis straight away
+        // rather than being hidden by a "this month" default.
+        $period = $q['period'] ?? 'all';
         $now    = Carbon::now();
         try {
             switch ($period) {
