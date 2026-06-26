@@ -97,7 +97,7 @@ class TransactionController
         $todayStats = [
             'count'   => $statBase()->count(),
             'revenue' => (float) $statBase()->sum('total_amount'),
-            'mco'     => (float) $statBase()->sum('profit_mco'),
+            'mco'     => (float) $statBase()->sum('profit_mco') - (float) $statBase()->sum('refund_mco_impact'), // Net MCO (refund-adjusted)
         ];
 
         ob_start();

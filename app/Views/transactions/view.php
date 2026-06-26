@@ -663,11 +663,16 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               <span class="font-mono font-bold text-sm text-rose-600">− <?= $txn->currency ?> <?= number_format($txn->refunded_amount, 2) ?></span>
             </div>
             <div class="flex justify-between items-baseline border-t border-dashed border-slate-300 pt-2 mt-1">
-              <span class="text-xs font-extrabold text-slate-800">Net MCO</span>
-              <span class="font-mono font-extrabold text-lg <?= $txn->netMco() > 0 ? 'text-emerald-700' : 'text-slate-500' ?>">
+              <span class="text-xs font-extrabold text-slate-800">Net MCO <?php if ($txn->isMcoLoss()): ?><span class="text-[10px] font-bold text-red-600">(LOSS)</span><?php endif; ?></span>
+              <span class="font-mono font-extrabold text-lg <?= $txn->netMco() > 0 ? 'text-emerald-700' : ($txn->isMcoLoss() ? 'text-red-600' : 'text-slate-500') ?>">
                 <?= $txn->currency ?> <?= number_format($txn->netMco(), 2) ?>
               </span>
             </div>
+            <?php if ($txn->isMcoLoss()): ?>
+            <div class="mt-1 text-[11px] text-red-600 text-right">
+              Refund loss = gross MCO <?= $txn->currency ?> <?= number_format($txn->actualMco(), 2) ?> + merchant fee <?= $txn->currency ?> <?= number_format($txn->merchantFee(), 2) ?>
+            </div>
+            <?php endif; ?>
             <?php endif; ?>
           </div>
           <div class="border-t border-slate-100 mt-3 pt-3 space-y-2">

@@ -69,8 +69,9 @@ class MobileAdminController
         // Today KPIs
         $todayTxns   = Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
                            ->where('status', '!=', Transaction::STATUS_VOIDED)->count();
-        $todayProfit = (float) Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
-                           ->where('status', '!=', Transaction::STATUS_VOIDED)->sum('profit_mco');
+        $todayProfitBase = fn() => Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
+                           ->where('status', '!=', Transaction::STATUS_VOIDED);
+        $todayProfit = (float) $todayProfitBase()->sum('profit_mco') - (float) $todayProfitBase()->sum('refund_mco_impact'); // Net MCO
         $pendingTxns = Transaction::where('status', Transaction::STATUS_PENDING)->count();
         $pendingAcc  = AcceptanceRequest::where('status', AcceptanceRequest::STATUS_PENDING)
                            ->where('is_preauth', false)->count();
@@ -78,13 +79,14 @@ class MobileAdminController
         // Month KPIs
         $monthTxns   = Transaction::whereBetween('created_at', [$monthStart, $monthEnd])
                            ->where('status', '!=', Transaction::STATUS_VOIDED)->count();
-        $monthProfit = (float) Transaction::whereBetween('created_at', [$monthStart, $monthEnd])
-                           ->where('status', '!=', Transaction::STATUS_VOIDED)->sum('profit_mco');
+        $monthProfitBase = fn() => Transaction::whereBetween('created_at', [$monthStart, $monthEnd])
+                           ->where('status', '!=', Transaction::STATUS_VOIDED);
+        $monthProfit = (float) $monthProfitBase()->sum('profit_mco') - (float) $monthProfitBase()->sum('refund_mco_impact'); // Net MCO
 
         // Today's leaderboard
         $leaderboard = Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
             ->where('status', '!=', Transaction::STATUS_VOIDED)
-            ->selectRaw('agent_id, SUM(profit_mco) as profit, COUNT(*) as txn_count, MAX(currency) as currency')
+            ->selectRaw('agent_id, SUM(profit_mco - refund_mco_impact) as profit, COUNT(*) as txn_count, MAX(currency) as currency')
             ->groupBy('agent_id')->orderByDesc('profit')->limit(5)
             ->with('agent:id,name')->get()
             ->map(fn($r) => [
@@ -96,13 +98,13 @@ class MobileAdminController
 
         // Recent transactions
         $recent = Transaction::with('agent:id,name')->latest()->limit(8)
-            ->get(['id','agent_id','customer_name','type','total_amount','profit_mco','currency','status','created_at'])
+            ->get(['id','agent_id','customer_name','type','total_amount','profit_mco','refund_mco_impact','currency','status','created_at'])
             ->map(fn($t) => [
                 'id'            => $t->id,
                 'customer_name' => $t->customer_name,
                 'type'          => $t->typeLabel(),
                 'amount'        => (float)$t->total_amount,
-                'mco'           => (float)$t->profit_mco,
+                'mco'           => (float)$t->netMco(),
                 'currency'      => $t->currency,
                 'status'        => $t->status,
                 'agent'         => $t->agent->name ?? '—',
@@ -161,7 +163,7 @@ class MobileAdminController
             'type'          => $t->typeLabel(),
             'type_badge'    => $t->typeBadge(),
             'amount'        => (float)$t->total_amount,
-            'mco'           => (float)$t->profit_mco,
+            'mco'           => (float)$t->netMco(),
             'currency'      => $t->currency,
             'status'        => $t->status,
             'payment_status'=> $t->payment_status,
@@ -201,7 +203,7 @@ class MobileAdminController
                 'type'          => $t->typeLabel(),
                 'type_badge'    => $t->typeBadge(),
                 'amount'        => (float)$t->total_amount,
-                'mco'           => (float)$t->profit_mco,
+                'mco'           => (float)$t->netMco(),
                 'currency'      => $t->currency,
                 'agent'         => $t->agent->name ?? '—',
                 'gateway_status'=> $t->gateway_status,

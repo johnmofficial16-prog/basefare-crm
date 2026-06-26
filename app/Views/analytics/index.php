@@ -142,7 +142,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     </div>
     <div class="card-hover float-in bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center gap-3" style="animation-delay:.08s">
       <div class="kpi-ico bg-emerald-50 text-emerald-600"><span class="material-symbols-outlined text-xl">savings</span></div>
-      <div><p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Net MCO</p><p class="text-2xl font-headline font-extrabold text-emerald-700 leading-tight"><?= $cur ?> <?= $m0($totals['net']) ?></p></div>
+      <div><p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Net MCO</p><p class="text-2xl font-headline font-extrabold <?= $totals['net'] < 0 ? 'text-red-600' : 'text-emerald-700' ?> leading-tight"><?= $cur ?> <?= $m0($totals['net']) ?></p></div>
     </div>
     <div class="card-hover float-in bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center gap-3" style="animation-delay:.12s">
       <div class="kpi-ico bg-amber-50 text-amber-600"><span class="material-symbols-outlined text-xl">campaign</span></div>
@@ -175,7 +175,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <div class="mb-4 relative">
         <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Net MCO</p>
         <div class="flex items-end gap-2">
-          <p class="text-3xl font-headline font-extrabold text-slate-900 leading-none"><?= $cur ?> <?= $m0($c['net']) ?></p>
+          <p class="text-3xl font-headline font-extrabold <?= $c['net'] < 0 ? 'text-red-600' : 'text-slate-900' ?> leading-none"><?= $cur ?> <?= $m0($c['net']) ?></p>
           <span class="mb-0.5"><?= $delta($c['delta']['net']) ?></span>
         </div>
       </div>

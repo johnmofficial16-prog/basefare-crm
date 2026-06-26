@@ -120,8 +120,9 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     </div>
     <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Net MCO</p>
-      <p class="text-2xl font-headline font-extrabold text-primary"><?= htmlspecialchars($currency) ?> <?= $money($totals['net'] ?? $totals['profit']) ?></p>
-      <p class="text-[10px] text-slate-400 mt-1">after refunds</p>
+      <?php $tnet = $totals['net'] ?? $totals['profit']; ?>
+      <p class="text-2xl font-headline font-extrabold <?= $tnet < 0 ? 'text-red-600' : 'text-primary' ?>"><?= htmlspecialchars($currency) ?> <?= $money($tnet) ?></p>
+      <p class="text-[10px] <?= $tnet < 0 ? 'text-red-500 font-bold' : 'text-slate-400' ?> mt-1">after refunds<?= $tnet < 0 ? ' — net loss' : '' ?></p>
     </div>
     <div class="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 shadow-sm border border-amber-100">
       <p class="text-[10px] font-bold uppercase tracking-wider text-amber-700/70 mb-2">Top Performer</p>
@@ -208,7 +209,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <td class="py-3 px-4 text-right"><?= (int)$totals['acceptances'] ?></td>
             <td class="py-3 px-4 text-right"><?= htmlspecialchars($currency) ?> <?= $money($totals['revenue']) ?></td>
             <td class="py-3 px-4 text-right text-emerald-700"><?= htmlspecialchars($currency) ?> <?= $money($totals['profit']) ?></td>
-            <td class="py-3 px-4 text-right text-primary"><?= htmlspecialchars($currency) ?> <?= $money($totals['net'] ?? $totals['profit']) ?></td>
+            <td class="py-3 px-4 text-right font-bold <?= ($totals['net'] ?? $totals['profit']) < 0 ? 'text-red-600' : 'text-primary' ?>"><?= htmlspecialchars($currency) ?> <?= $money($totals['net'] ?? $totals['profit']) ?></td>
             <td class="py-3 px-4 text-right text-slate-500"><?= htmlspecialchars($currency) ?> <?= $money($totals['avg_profit']) ?></td>
           </tr>
         </tfoot>

@@ -281,13 +281,62 @@ class Transaction extends Model
     }
 
     /**
-     * Net MCO — profit after refunds.
-     *   full refund    → 0
-     *   partial refund → Gross − refunded amount   (floored at 0, via stored impact)
+     * Net MCO — profit after refunds, via the single stored impact.
+     *   no refund      → profit_mco (the net-of-fee margin)
+     *   refund         → goes NEGATIVE by (refunded share of gross + full merchant fee)
      */
     public function netMco(): float
     {
         return round((float) $this->profit_mco - (float) $this->refund_mco_impact, 2);
+    }
+
+    /** True when the refund-adjusted Net MCO is a loss (show it in red). */
+    public function isMcoLoss(): bool
+    {
+        return $this->netMco() < 0;
+    }
+
+    /**
+     * Actual (GROSS) MCO — the primary fare item's full amount, BEFORE the
+     * gateway merchant-fee deduction. `profit_mco` stores the NET (after the
+     * 20% Base-Fare / 25% Airline-Tickets deduction). Falls back to deriving
+     * the gross from the net + the label's rate, then to the net itself.
+     */
+    public function actualMco(): float
+    {
+        $primary = $this->primaryFareItem();
+        if ($primary && (float) ($primary['amount'] ?? 0) > 0) {
+            return round((float) $primary['amount'], 2);
+        }
+        $rate = $this->merchantFeeRate();
+        return ($rate > 0 && $rate < 1)
+            ? round((float) $this->profit_mco / (1 - $rate), 2)
+            : (float) $this->profit_mco;
+    }
+
+    /** Merchant (gateway) fee on the sale = gross MCO − net MCO. */
+    public function merchantFee(): float
+    {
+        return max(0.0, round($this->actualMco() - (float) $this->profit_mco, 2));
+    }
+
+    /** Merchant-fee rate from the primary fare label (Base Fare 20%, Airline Tickets 25%). */
+    public function merchantFeeRate(): float
+    {
+        $label = strtolower(trim((string) ($this->primaryFareItem()['label'] ?? '')));
+        return match ($label) {
+            'airline tickets' => 0.25,
+            'base fare'       => 0.20,
+            default           => 0.20,
+        };
+    }
+
+    /** The primary (first) fare-breakdown item, if present. */
+    private function primaryFareItem(): ?array
+    {
+        $d  = is_array($this->data) ? $this->data : (json_decode((string) $this->data, true) ?: []);
+        $fb = $d['fare_breakdown'] ?? $d['fareItems'] ?? null;
+        return (is_array($fb) && isset($fb[0]) && is_array($fb[0])) ? $fb[0] : null;
     }
 
     /** Remaining charge that has not yet been refunded. */

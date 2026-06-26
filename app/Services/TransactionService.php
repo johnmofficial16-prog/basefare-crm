@@ -433,12 +433,18 @@ class TransactionService
             $newRefunded = round((float) $txn->refunded_amount + $thisRefund, 2);
             $isNowFull   = $newRefunded >= round((float) $txn->total_amount, 2) - 0.001;
 
-            // Net-MCO impact: full → wipe the whole profit; partial → subtract the
-            // refunded amount, but never push Net below 0.
-            $impact = $isNowFull
-                ? (float) $txn->profit_mco
-                : min((float) $txn->profit_mco, $newRefunded);
-            $impact = max(0, round($impact, 2));
+            // Refund LOSS = (refunded share of the GROSS MCO) + (the FULL merchant
+            // fee — the gateway keeps its fee on any refund). Net MCO goes negative
+            // by that loss. Encoded as refund_mco_impact so that, everywhere,
+            //   Net MCO = profit_mco − refund_mco_impact.
+            //   impact = profit_mco + refundedGross + fee
+            //          → netMco = -(refundedGross + fee)
+            $gross         = $txn->actualMco();
+            $fee           = $txn->merchantFee();
+            $total         = max(0.01, (float) $txn->total_amount);
+            $fraction      = $isNowFull ? 1.0 : min(1.0, $newRefunded / $total);
+            $refundedGross = round($fraction * $gross, 2);
+            $impact        = round((float) $txn->profit_mco + $refundedGross + $fee, 2);
 
             $txn->update([
                 'refund_status'     => $isNowFull ? Transaction::REFUND_FULL : Transaction::REFUND_PARTIAL,

@@ -153,8 +153,9 @@ class DashboardController
                                     ->where('status', '!=', Transaction::STATUS_VOIDED);
             $todayTxnCount    = $todayBase()->count();
             $todayRevenue     = (float) $todayBase()->sum('total_amount');
-            $todayProfit      = (float) $todayBase()->sum('profit_mco');
-            $todayCost        = $todayRevenue - $todayProfit;
+            $todayGrossMco    = (float) $todayBase()->sum('profit_mco');
+            $todayProfit      = $todayGrossMco - (float) $todayBase()->sum('refund_mco_impact'); // Net MCO (refund-adjusted)
+            $todayCost        = $todayRevenue - $todayGrossMco; // cost unaffected by refunds
             $todayGrossProfit = (float) $todayBase()->get()->sum($calcGross);
             $pendingTxnCount  = Transaction::where('status', Transaction::STATUS_PENDING)->count();
 
@@ -163,28 +164,29 @@ class DashboardController
                                   ->where('status', '!=', Transaction::STATUS_VOIDED);
             $monthTxnCount  = $monthBase()->count();
             $monthRevenue   = (float) $monthBase()->sum('total_amount');
-            $monthProfit    = (float) $monthBase()->sum('profit_mco');
-            $monthCost      = $monthRevenue - $monthProfit;
+            $monthGrossMco  = (float) $monthBase()->sum('profit_mco');
+            $monthProfit    = $monthGrossMco - (float) $monthBase()->sum('refund_mco_impact'); // Net MCO (refund-adjusted)
+            $monthCost      = $monthRevenue - $monthGrossMco; // cost unaffected by refunds
             $monthGrossProfit = (float) $monthBase()->get()->sum($calcGross);
 
             // All-time totals (non-voided)
             $allBase        = fn() => Transaction::where('status', '!=', Transaction::STATUS_VOIDED);
             $allTxnCount    = $allBase()->count();
             $allRevenue     = (float) $allBase()->sum('total_amount');
-            $allProfit      = (float) $allBase()->sum('profit_mco');
+            $allProfit      = (float) $allBase()->sum('profit_mco') - (float) $allBase()->sum('refund_mco_impact'); // Net MCO (refund-adjusted)
             $allGrossProfit = (float) $allBase()->get()->sum($calcGross);
 
             // Agent leaderboard — today
             $leaderboard = Transaction::whereBetween('created_at', [$todayStart, $todayEnd])
                 ->where('status', '!=', Transaction::STATUS_VOIDED)
-                ->selectRaw('agent_id, SUM(total_amount) as revenue, SUM(profit_mco) as profit, COUNT(*) as txn_count')
+                ->selectRaw('agent_id, SUM(total_amount) as revenue, SUM(profit_mco - refund_mco_impact) as profit, COUNT(*) as txn_count')
                 ->groupBy('agent_id')->orderByDesc('profit')->limit(5)
                 ->with('agent:id,name')->get();
 
             // Agent leaderboard — this month
             $monthLeaderboard = Transaction::whereBetween('created_at', [$monthStart, $monthEnd])
                 ->where('status', '!=', Transaction::STATUS_VOIDED)
-                ->selectRaw('agent_id, SUM(total_amount) as revenue, SUM(profit_mco) as profit, COUNT(*) as txn_count')
+                ->selectRaw('agent_id, SUM(total_amount) as revenue, SUM(profit_mco - refund_mco_impact) as profit, COUNT(*) as txn_count')
                 ->groupBy('agent_id')->orderByDesc('profit')->limit(5)
                 ->with('agent:id,name')->get();
 
@@ -387,7 +389,7 @@ class DashboardController
                                    ->where('status', '!=', Transaction::STATUS_VOIDED)
                                    ->where('agent_id', $userId);
             $myMonthCount    = $myMonthBase()->count();
-            $myMonthProfit   = (float) $myMonthBase()->sum('profit_mco');
+            $myMonthProfit   = (float) $myMonthBase()->sum('profit_mco') - (float) $myMonthBase()->sum('refund_mco_impact'); // Net MCO (refund-adjusted)
 
             $myPendingCount  = Transaction::where('status', Transaction::STATUS_PENDING)
                                    ->where('agent_id', $userId)->count();

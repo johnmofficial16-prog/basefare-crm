@@ -93,7 +93,7 @@ class LiveBoardController
         // ── Leaderboard: approved transactions today ──────────────────────────
         $txnRows = Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
             ->where('status', Transaction::STATUS_APPROVED)
-            ->selectRaw('agent_id, COUNT(*) as txn_count, SUM(profit_mco) as profit, MAX(currency) as currency')
+            ->selectRaw('agent_id, COUNT(*) as txn_count, SUM(profit_mco - refund_mco_impact) as profit, MAX(currency) as currency')
             ->groupBy('agent_id')
             ->with('agent:id,name')
             ->get()
@@ -139,7 +139,7 @@ class LiveBoardController
             ->with('agent:id,name')
             ->orderByDesc('updated_at')
             ->limit(15)
-            ->get(['id', 'agent_id', 'type', 'profit_mco', 'currency', 'updated_at']);
+            ->get(['id', 'agent_id', 'type', 'profit_mco', 'refund_mco_impact', 'currency', 'updated_at']);
 
         $events = collect();
 
@@ -149,7 +149,7 @@ class LiveBoardController
                 'agent_name' => $t->agent->name ?? 'Agent',
                 'kind'       => 'transaction',
                 'label'      => $this->typeLabel($t->type),
-                'profit'     => (int) round((float) $t->profit_mco),
+                'profit'     => (int) round($t->netMco()),
                 'currency'   => $t->currency ?? 'USD',
                 // convert UTC back to IST for frontend display
                 'time'       => $t->updated_at ? Carbon::parse($t->updated_at, 'UTC')->setTimezone('Asia/Kolkata')->toIso8601String() : null,
@@ -163,7 +163,9 @@ class LiveBoardController
             ->where('status', 'APPROVED')->where('is_preauth', false)->count();
             
         $totalProfit = (int) round((float) Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
-            ->where('status', Transaction::STATUS_APPROVED)->sum('profit_mco'));
+            ->where('status', Transaction::STATUS_APPROVED)->sum('profit_mco')
+            - (float) Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
+            ->where('status', Transaction::STATUS_APPROVED)->sum('refund_mco_impact'));
 
         $payload = [
             'leaderboard'   => $leaderboard,
