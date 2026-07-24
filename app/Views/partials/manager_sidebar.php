@@ -17,6 +17,7 @@ $navItems = [
     ['href' => '/shifts/week',              'icon' => 'calendar_month', 'label' => 'Shift Schedule', 'key' => 'shifts'],
     ['href' => '/acceptance',              'icon' => 'verified',       'label' => 'Acceptance',     'key' => 'acceptance'],
     ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',   'key' => 'transactions'],
+    ['href' => '/reminders',                'icon' => 'notifications_active', 'label' => 'Reminders', 'key' => 'reminders'],
     ['href' => '/etickets',                 'icon' => 'airplane_ticket', 'label' => 'E-Tickets', 'key' => 'etickets'],
     ['href' => '/emails',                   'icon' => 'forward_to_inbox','label' => 'Customer Emails','key' => 'emails'],
     ['href' => '/invoices',                 'icon' => 'request_quote',  'label' => 'Invoices',      'key' => 'invoices'],
@@ -64,3 +65,4 @@ $navItems = [
     </a>
   </div>
 </aside>
+<?php require __DIR__ . "/notification_bell.php"; ?>

@@ -119,6 +119,7 @@ $navItems = [
     </a>
   </div>
 </aside>
+<?php require __DIR__ . "/notification_bell.php"; ?>
 
 <script>
 // ── Sidebar attendance mini-widget ──────────────────────────────────────

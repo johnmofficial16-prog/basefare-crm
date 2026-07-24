@@ -250,7 +250,7 @@ class TransactionController
         $userRole = $_SESSION['role'] ?? 'agent';
         $isAdmin  = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR]);
 
-        $txn = Transaction::with(['agent', 'passengers', 'cards', 'acceptance', 'voidOf', 'reversal', 'voidedByUser', 'refundedByUser', 'notes.user'])
+        $txn = Transaction::with(['agent', 'passengers', 'cards', 'acceptance', 'voidOf', 'reversal', 'voidedByUser', 'refundedByUser', 'notes.user', 'reminders.creator'])
             ->find($id);
 
         if (!$txn) {

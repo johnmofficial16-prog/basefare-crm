@@ -224,6 +224,288 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     <!-- ── LEFT COLUMN (2/3) ─────────────────────────────────────── -->
     <div class="lg:col-span-2 space-y-6">
 
+      <?php
+        $canManageReminders = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER], true);
+        $reminders = $txn->reminders ?? [];
+        // datetime-local prefill (Y-m-d\TH:i) from the booking's departure.
+        $depPrefillRaw = $txn->departureDatetime();
+        $depPrefill    = $depPrefillRaw ? date('Y-m-d\TH:i', strtotime($depPrefillRaw)) : '';
+      ?>
+      <?php if ($canManageReminders): ?>
+      <!-- Booking Reminders -->
+      <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden" id="reminderCard">
+        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+          <h2 class="font-bold text-slate-900" style="font-family:Manrope">
+            <span class="material-symbols-outlined text-base align-text-bottom mr-1">notifications_active</span>
+            Reminders
+            <span id="reminderCount" class="ml-1 text-xs font-semibold text-slate-400"><?= count($reminders) ? '(' . count($reminders) . ')' : '' ?></span>
+          </h2>
+          <button type="button" onclick="toggleReminderForm()" id="reminderAddBtn"
+            class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-primary border border-primary rounded-lg hover:bg-primary/5 transition-colors">
+            <span class="material-symbols-outlined text-sm">add</span> Add reminder
+          </button>
+        </div>
+
+        <!-- Existing reminders -->
+        <div id="reminderList" class="divide-y divide-slate-100">
+          <?php foreach ($reminders as $rem): [$rl, $rc] = $rem->statusBadge(); ?>
+          <div class="px-6 py-3 flex items-start gap-3" data-reminder-id="<?= $rem->id ?>">
+            <span class="material-symbols-outlined text-[18px] text-primary mt-0.5">alarm</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <p class="text-sm font-semibold text-slate-800"><?= htmlspecialchars($rem->title) ?></p>
+                <span class="inline-block px-2 py-0.5 text-[10px] font-bold rounded-full <?= $rc ?>"><?= $rl ?></span>
+              </div>
+              <?php if ($rem->message): ?>
+              <p class="text-xs text-slate-500 mt-0.5 whitespace-pre-line"><?= htmlspecialchars($rem->message) ?></p>
+              <?php endif; ?>
+              <p class="text-[11px] text-slate-400 mt-1">
+                <span class="material-symbols-outlined text-[12px] align-text-bottom">schedule</span>
+                Fires <?= $rem->remind_at ? date('M j, Y g:i A', strtotime($rem->remind_at)) : '—' ?>
+                · <?= htmlspecialchars($rem->timingLabel()) ?>
+                · by <?= htmlspecialchars($rem->creator->name ?? '—') ?>
+              </p>
+            </div>
+            <?php if ($rem->isScheduled()): ?>
+            <button type="button" onclick="cancelReminder(<?= $rem->id ?>)"
+              class="shrink-0 text-xs font-semibold text-slate-400 hover:text-red-600 transition-colors" title="Cancel reminder">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+            </button>
+            <?php endif; ?>
+          </div>
+          <?php endforeach; ?>
+          <div id="reminderEmpty" class="px-6 py-5 text-center text-xs text-slate-400 <?= count($reminders) ? 'hidden' : '' ?>">
+            No reminders yet. Add one to alert the agent, their manager, and admins before departure.
+          </div>
+        </div>
+
+        <!-- Add form -->
+        <div id="reminderForm" class="hidden px-6 py-4 border-t border-slate-100 bg-slate-50/40">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="sm:col-span-2">
+              <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Title</label>
+              <input type="text" id="rm_title" maxlength="160" placeholder="e.g. Name correction required"
+                class="w-full text-sm rounded-lg border-slate-300 focus:border-primary focus:ring-primary">
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Confirm departure (date &amp; time)</label>
+              <input type="datetime-local" id="rm_departure" value="<?= htmlspecialchars($depPrefill) ?>"
+                class="w-full text-sm rounded-lg border-slate-300 focus:border-primary focus:ring-primary">
+              <p class="text-[10px] text-slate-400 mt-1">Times are in centre time (<?= htmlspecialchars($_ENV['APP_TIMEZONE'] ?? 'local') ?>).</p>
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">When to remind</label>
+              <div class="flex flex-wrap gap-1.5" id="rm_presetChips">
+                <button type="button" data-hours="72" class="rm-chip px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-300 hover:border-primary">72h before</button>
+                <button type="button" data-hours="48" class="rm-chip px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-300 hover:border-primary">48h before</button>
+                <button type="button" data-hours="24" class="rm-chip px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-300 hover:border-primary">24h before</button>
+                <button type="button" data-hours="custom" class="rm-chip px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-300 hover:border-primary">Custom</button>
+                <button type="button" data-hours="absolute" class="rm-chip px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-300 hover:border-primary">Exact time</button>
+              </div>
+              <div id="rm_customWrap" class="hidden mt-2">
+                <div class="flex items-center gap-2">
+                  <input type="number" id="rm_customHours" min="1" max="2160" placeholder="Hours"
+                    class="w-24 text-sm rounded-lg border-slate-300 focus:border-primary focus:ring-primary">
+                  <span class="text-xs text-slate-500">hours before departure</span>
+                </div>
+              </div>
+              <div id="rm_absoluteWrap" class="hidden mt-2">
+                <input type="datetime-local" id="rm_absoluteAt"
+                  class="w-full text-sm rounded-lg border-slate-300 focus:border-primary focus:ring-primary">
+              </div>
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Note (optional)</label>
+              <textarea id="rm_message" rows="2" placeholder="Extra context for whoever gets alerted…"
+                class="w-full text-sm rounded-lg border-slate-300 focus:border-primary focus:ring-primary"></textarea>
+            </div>
+          </div>
+          <div class="flex items-center justify-between mt-3">
+            <p id="rm_preview" class="text-xs text-slate-500"></p>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="toggleReminderForm()" class="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+              <button type="button" id="rm_saveBtn" onclick="saveReminder()"
+                class="inline-flex items-center gap-1 px-4 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary-container transition-colors">
+                <span class="material-symbols-outlined text-sm">check</span> Save reminder
+              </button>
+            </div>
+          </div>
+          <p id="rm_error" class="hidden mt-2 text-xs font-semibold text-red-600"></p>
+        </div>
+      </div>
+
+      <script>
+      (function () {
+        var CSRF = <?= json_encode($_SESSION['csrf_token'] ?? '') ?>;
+        var TXN_ID = <?= (int) $txn->id ?>;
+        var selectedMode = null;   // 'preset' hours number | 'custom' | 'absolute'
+
+        window.toggleReminderForm = function () {
+          var f = document.getElementById('reminderForm');
+          f.classList.toggle('hidden');
+          if (!f.classList.contains('hidden')) { document.getElementById('rm_title').focus(); updatePreview(); }
+        };
+
+        function chips() { return Array.prototype.slice.call(document.querySelectorAll('.rm-chip')); }
+
+        chips().forEach(function (c) {
+          c.addEventListener('click', function () {
+            chips().forEach(function (x) { x.classList.remove('bg-primary','text-white','border-primary'); });
+            c.classList.add('bg-primary','text-white','border-primary');
+            var h = c.getAttribute('data-hours');
+            document.getElementById('rm_customWrap').classList.toggle('hidden', h !== 'custom');
+            document.getElementById('rm_absoluteWrap').classList.toggle('hidden', h !== 'absolute');
+            selectedMode = h;
+            updatePreview();
+          });
+        });
+
+        ['rm_departure','rm_customHours','rm_absoluteAt'].forEach(function (id) {
+          document.getElementById(id).addEventListener('input', updatePreview);
+        });
+
+        function computeFireDate() {
+          if (selectedMode === 'absolute') {
+            var a = document.getElementById('rm_absoluteAt').value;
+            return a ? new Date(a) : null;
+          }
+          var dep = document.getElementById('rm_departure').value;
+          if (!dep) return null;
+          var hrs = selectedMode === 'custom'
+            ? parseInt(document.getElementById('rm_customHours').value || '0', 10)
+            : parseInt(selectedMode || '0', 10);
+          if (!hrs || hrs <= 0) return null;
+          return new Date(new Date(dep).getTime() - hrs * 3600 * 1000);
+        }
+
+        function updatePreview() {
+          var el = document.getElementById('rm_preview');
+          var d = computeFireDate();
+          if (!d || isNaN(d.getTime())) { el.textContent = ''; return; }
+          var opts = { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' };
+          var txt = 'Fires ' + d.toLocaleString(undefined, opts);
+          if (d.getTime() < Date.now()) txt += ' — in the past, will alert on the next dispatch run.';
+          el.textContent = txt;
+        }
+
+        function showErr(msg) {
+          var e = document.getElementById('rm_error');
+          e.textContent = msg; e.classList.remove('hidden');
+        }
+
+        window.saveReminder = function () {
+          document.getElementById('rm_error').classList.add('hidden');
+          var title = document.getElementById('rm_title').value.trim();
+          var dep   = document.getElementById('rm_departure').value;
+          if (!title)  return showErr('Give the reminder a short title.');
+          if (!dep)    return showErr('Confirm the departure date & time.');
+          if (!selectedMode) return showErr('Choose when to remind.');
+
+          var payload = {
+            csrf_token: CSRF,
+            title: title,
+            message: document.getElementById('rm_message').value.trim(),
+            departure_at: dep.replace('T', ' ') + ':00'
+          };
+          if (selectedMode === 'absolute') {
+            var abs = document.getElementById('rm_absoluteAt').value;
+            if (!abs) return showErr('Pick the exact date & time.');
+            payload.timing_mode = 'absolute';
+            payload.absolute_at = abs.replace('T', ' ') + ':00';
+          } else {
+            var hrs = selectedMode === 'custom'
+              ? parseInt(document.getElementById('rm_customHours').value || '0', 10)
+              : parseInt(selectedMode, 10);
+            if (!hrs || hrs <= 0) return showErr('Enter a valid number of hours.');
+            payload.timing_mode = 'preset';
+            payload.offset_hours = hrs;
+          }
+
+          var btn = document.getElementById('rm_saveBtn');
+          btn.disabled = true; btn.classList.add('opacity-60');
+
+          fetch('/transactions/' + TXN_ID + '/reminders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: Object.keys(payload).map(function (k) {
+              return encodeURIComponent(k) + '=' + encodeURIComponent(payload[k]);
+            }).join('&')
+          })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            btn.disabled = false; btn.classList.remove('opacity-60');
+            if (!d.success) return showErr(d.error || 'Could not save the reminder.');
+            addReminderRow(d.reminder);
+            // reset form
+            document.getElementById('rm_title').value = '';
+            document.getElementById('rm_message').value = '';
+            document.getElementById('rm_preview').textContent = '';
+            chips().forEach(function (x) { x.classList.remove('bg-primary','text-white','border-primary'); });
+            selectedMode = null;
+            document.getElementById('rm_customWrap').classList.add('hidden');
+            document.getElementById('rm_absoluteWrap').classList.add('hidden');
+            toggleReminderForm();
+          })
+          .catch(function () {
+            btn.disabled = false; btn.classList.remove('opacity-60');
+            showErr('Network error — please try again.');
+          });
+        };
+
+        function esc(s) {
+          return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+          });
+        }
+
+        function addReminderRow(r) {
+          document.getElementById('reminderEmpty').classList.add('hidden');
+          var list = document.getElementById('reminderList');
+          var wrap = document.createElement('div');
+          wrap.className = 'px-6 py-3 flex items-start gap-3';
+          wrap.setAttribute('data-reminder-id', r.id);
+          wrap.innerHTML =
+            '<span class="material-symbols-outlined text-[18px] text-primary mt-0.5">alarm</span>' +
+            '<div class="flex-1 min-w-0">' +
+              '<div class="flex items-center gap-2 flex-wrap">' +
+                '<p class="text-sm font-semibold text-slate-800">' + esc(r.title) + '</p>' +
+                '<span class="inline-block px-2 py-0.5 text-[10px] font-bold rounded-full ' + r.status_class + '">' + esc(r.status_label) + '</span>' +
+              '</div>' +
+              (r.message ? '<p class="text-xs text-slate-500 mt-0.5 whitespace-pre-line">' + esc(r.message) + '</p>' : '') +
+              '<p class="text-[11px] text-slate-400 mt-1">Fires ' + esc(r.remind_at) + ' · ' + esc(r.timing_label) + ' · by ' + esc(r.creator) + '</p>' +
+            '</div>' +
+            (r.can_cancel ? '<button type="button" onclick="cancelReminder(' + r.id + ')" class="shrink-0 text-slate-400 hover:text-red-600" title="Cancel reminder"><span class="material-symbols-outlined text-[18px]">close</span></button>' : '');
+          list.insertBefore(wrap, document.getElementById('reminderEmpty'));
+          bumpCount(1);
+        }
+
+        window.cancelReminder = function (id) {
+          if (!confirm('Cancel this reminder? It will no longer fire.')) return;
+          fetch('/reminders/' + id + '/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'csrf_token=' + encodeURIComponent(CSRF)
+          })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d.success) { alert(d.error || 'Could not cancel.'); return; }
+            var row = document.querySelector('[data-reminder-id="' + id + '"]');
+            if (row) row.parentNode.removeChild(row);
+            bumpCount(-1);
+          })
+          .catch(function () { alert('Network error.'); });
+        };
+
+        function bumpCount(delta) {
+          var el = document.getElementById('reminderCount');
+          var rows = document.querySelectorAll('#reminderList [data-reminder-id]').length;
+          el.textContent = rows ? '(' + rows + ')' : '';
+          if (!rows) document.getElementById('reminderEmpty').classList.remove('hidden');
+        }
+      })();
+      </script>
+      <?php endif; ?>
+
       <!-- Customer & Booking -->
       <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">

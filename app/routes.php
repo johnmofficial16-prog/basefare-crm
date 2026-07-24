@@ -13,6 +13,8 @@ use App\Controllers\CustomerEmailController;
 use App\Controllers\InvoiceController;
 use App\Controllers\AnalyticsController;
 use App\Controllers\ChargebackController;
+use App\Controllers\ReminderController;
+use App\Controllers\NotificationController;
 use App\Controllers\AdminController;
 use App\Controllers\MobileAdminController;
 use App\Controllers\PayrollController;
@@ -286,8 +288,35 @@ $app->group('/transactions', function ($group) {
 
     // Add note — all authenticated users
     $group->post('/{id:[0-9]+}/note',    [TransactionController::class, 'addNote']);
+
+    // Booking reminders — admin/manager only (enforced in controller)
+    $group->post('/{id:[0-9]+}/reminders', [ReminderController::class, 'store']);
 })
 ->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware());
+
+// ==========================================================================
+// Booking Reminders — management page + cancel (admin/manager only)
+// ==========================================================================
+$app->group('/reminders', function ($group) {
+    $group->get('',                      [ReminderController::class, 'index']);
+    $group->post('/{id:[0-9]+}/cancel',  [ReminderController::class, 'cancel']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware());
+
+// ==========================================================================
+// In-app Notifications (bell) — all authenticated users, outside the gate so
+// the bell polls from every page (including attendance/clock-in surfaces).
+// ==========================================================================
+$app->group('', function ($group) {
+    $group->get('/api/notifications',              [NotificationController::class, 'feed']);
+    $group->get('/notifications',                  [NotificationController::class, 'index']);
+    $group->post('/notifications/{id:[0-9]+}/read',[NotificationController::class, 'markRead']);
+    $group->post('/notifications/read-all',        [NotificationController::class, 'markAllRead']);
+})
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
 

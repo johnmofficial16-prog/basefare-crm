@@ -243,6 +243,30 @@ class Transaction extends Model
                     ->orderBy('created_at', 'asc');
     }
 
+    /**
+     * Reminders attached to this booking (admin/manager set), newest fire first.
+     */
+    public function reminders()
+    {
+        return $this->hasMany(BookingReminder::class, 'transaction_id')
+                    ->orderBy('remind_at', 'asc');
+    }
+
+    /**
+     * Best-guess departure datetime string ("Y-m-d H:i:s") from the booking's
+     * travel_date + departure_time, for prefilling the reminder form. Returns
+     * null when there's no travel date to anchor on.
+     */
+    public function departureDatetime(): ?string
+    {
+        if (!$this->travel_date) {
+            return null;
+        }
+        $date = date('Y-m-d', strtotime((string) $this->travel_date));
+        $time = $this->departure_time ? date('H:i:s', strtotime((string) $this->departure_time)) : '09:00:00';
+        return $date . ' ' . $time;
+    }
+
     // =========================================================================
     // Status helpers
     // =========================================================================
