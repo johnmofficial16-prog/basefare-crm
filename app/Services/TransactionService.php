@@ -735,24 +735,31 @@ class TransactionService
      */
     public function revealCard(int $cardId, int $adminId, string $password): array
     {
-        // Re-validate admin password (skip password check for session-based reveal)
-        if ($password !== '__session__') {
-            $admin = \App\Models\User::findOrFail($adminId);
-            $envAdminPass = $_ENV['ADMIN_PASSWORD_OVERRIDE'] ?? getenv('ADMIN_PASSWORD_OVERRIDE') ?? null;
-            
-            $isValidPassword = false;
-            if ($admin->role === 'admin' && !empty($envAdminPass)) {
-                // If override is set, ONLY the override password works
-                if ($password === $envAdminPass) {
-                    $isValidPassword = true;
-                }
-            } elseif (password_verify($password, $admin->password_hash)) {
-                $isValidPassword = true;
-            }
+        // Re-validate the operator's password on EVERY reveal.
+        //
+        // This used to be skipped whenever the caller sent the literal string
+        // '__session__' — which the shipped UI always did, so the step-up check
+        // never actually ran. Anyone with a live admin session (unlocked laptop,
+        // stolen cookie, XSS) could dump every stored card. No bypass now.
+        $admin = \App\Models\User::findOrFail($adminId);
+        $envAdminPass = $_ENV['ADMIN_PASSWORD_OVERRIDE'] ?? getenv('ADMIN_PASSWORD_OVERRIDE') ?? null;
 
-            if (!$isValidPassword) {
-                throw new \RuntimeException('Invalid password. Card reveal denied.');
-            }
+        $isValidPassword = false;
+
+        // The operator's OWN password is always accepted first. (Previously, if
+        // the override was set, an admin's real password was rejected outright.)
+        if (!empty($admin->password_hash) && password_verify($password, $admin->password_hash)) {
+            $isValidPassword = true;
+        } elseif ($admin->role === 'admin' && !empty($envAdminPass) && hash_equals((string) $envAdminPass, $password)) {
+            // DEPRECATED shared override — retained only so admins aren't locked
+            // out mid-migration. Remove ADMIN_PASSWORD_OVERRIDE from .env once
+            // every admin has a working individual password.
+            $isValidPassword = true;
+            error_log('[SECURITY] Deprecated ADMIN_PASSWORD_OVERRIDE used for card reveal by user ' . $adminId);
+        }
+
+        if (!$isValidPassword) {
+            throw new \RuntimeException('Invalid password. Card reveal denied.');
         }
 
         $card = PaymentCard::findOrFail($cardId);

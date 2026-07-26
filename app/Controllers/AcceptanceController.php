@@ -456,6 +456,13 @@ class AcceptanceController
             return $this->jsonResponse($response, ['success' => false, 'error' => 'Not found.'], 404);
         }
 
+        // Was unscoped: any non-CSA user could resend another agent's acceptance
+        // and receive that customer's auth token back in the JSON response,
+        // which grants unauthenticated access to their booking and PII.
+        if (!$this->canAccessAcceptanceRecord($acceptance)) {
+            return $this->jsonResponse($response, ['success' => false, 'error' => 'Access denied.'], 403);
+        }
+
         if ($acceptance->isApproved()) {
             return $this->jsonResponse($response, ['success' => false, 'error' => 'Already approved — no need to resend.'], 422);
         }
@@ -499,6 +506,12 @@ class AcceptanceController
 
         if (!$acceptance) {
             return $this->jsonResponse($response, ['success' => false, 'error' => 'Not found.'], 404);
+        }
+
+        // Was unscoped: any non-CSA user could cancel every pending acceptance in
+        // the system, killing colleagues' in-flight sales.
+        if (!$this->canAccessAcceptanceRecord($acceptance)) {
+            return $this->jsonResponse($response, ['success' => false, 'error' => 'Access denied.'], 403);
         }
 
         $success = $this->service->cancel($acceptance, $agentId);
@@ -665,15 +678,11 @@ class AcceptanceController
             return $response->withStatus(404);
         }
 
-        // Manager: only allow access to own team's records (including records they created themselves)
-        if ($userRole === User::ROLE_MANAGER) {
-            $teamIds = $this->getManagerTeamIds((int)$userId);
-            if (!in_array($acceptance->agent_id, $teamIds) && $acceptance->agent_id !== (int)$userId) {
-                $response->getBody()->write('Access denied.');
-                return $response->withStatus(403);
-            }
-        } elseif ($userRole === User::ROLE_AGENT && $acceptance->agent_id !== $userId) {
-            // Agents can only download their own records
+        // These files are passport scans, credit-card-front photos and customer
+        // signatures — the most sensitive data in the system. The old check only
+        // covered manager and agent, so supervisors and CSAs (the lowest-trust
+        // role) fell through and could download any customer's ID documents.
+        if (!$this->canAccessAcceptanceRecord($acceptance)) {
             $response->getBody()->write('Access denied.');
             return $response->withStatus(403);
         }
@@ -809,6 +818,31 @@ class AcceptanceController
             ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
             ->withHeader('Cache-Control', 'no-cache, no-store')
             ->withHeader('Pragma', 'no-cache');
+    }
+
+    /**
+     * Whether the current user may read/act on an acceptance record.
+     * Admin: any. Manager/supervisor: own team, or their own. Others: own only.
+     *
+     * Several endpoints previously guarded only manager and agent, letting
+     * supervisors and CSAs through unscoped.
+     */
+    private function canAccessAcceptanceRecord(AcceptanceRequest $acceptance): bool
+    {
+        $role    = $_SESSION['role'] ?? 'agent';
+        $userId  = (int) ($_SESSION['user_id'] ?? 0);
+        $ownerId = (int) ($acceptance->agent_id ?? 0);
+
+        if ($role === User::ROLE_ADMIN) {
+            return true;
+        }
+        if ($ownerId === $userId) {
+            return true;
+        }
+        if ($role === User::ROLE_MANAGER || $role === User::ROLE_SUPERVISOR) {
+            return in_array($ownerId, $this->getManagerTeamIds($userId), true);
+        }
+        return false;
     }
 
     // =========================================================================

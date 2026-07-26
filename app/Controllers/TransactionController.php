@@ -566,6 +566,26 @@ class TransactionController
     {
         $acceptanceId = (int)$args['id'];
 
+        // AUTHORIZATION — this endpoint returns DECRYPTED card data (PAN, expiry,
+        // CVV) so the agent can key the charge into Amadeus/the merchant portal.
+        // It previously had no role or ownership check at all, so any logged-in
+        // user could walk /transactions/acceptance-data/1..N and harvest every
+        // stored card. Scope it, and log every access to cardholder data.
+        $acc = \App\Models\AcceptanceRequest::find($acceptanceId);
+        if (!$acc) {
+            return $this->jsonResponse($response, [
+                'success' => false,
+                'error'   => 'Acceptance not found or not yet approved by the customer.',
+            ], 404);
+        }
+        if (!$this->canAccessAcceptance($acc)) {
+            return $this->jsonResponse($response, [
+                'success' => false,
+                'error'   => "Access denied — you can only import your own team's acceptances.",
+            ], 403);
+        }
+        $this->logCardDataAccess($acc);
+
         try {
             $data = $this->service->getAcceptanceAutofill($acceptanceId);
         } catch (\RuntimeException $e) {
@@ -948,6 +968,54 @@ class TransactionController
         if (!$manager) return [-1];
         $ids = $manager->getTeamAgentIds(true); // include suspended ex-reports for record access
         return empty($ids) ? [-1] : $ids;
+    }
+
+    /**
+     * Whether the current user may read an acceptance (and therefore its card
+     * data) for import. Admin: any. Manager/supervisor: own team, or their own.
+     * Everyone else: only their own records.
+     */
+    private function canAccessAcceptance(\App\Models\AcceptanceRequest $acc): bool
+    {
+        $role    = $_SESSION['role'] ?? 'agent';
+        $userId  = (int) ($_SESSION['user_id'] ?? 0);
+        $ownerId = (int) ($acc->agent_id ?? 0);
+
+        if ($role === User::ROLE_ADMIN) {
+            return true;
+        }
+        if ($ownerId === $userId) {
+            return true;
+        }
+        if ($role === User::ROLE_MANAGER || $role === User::ROLE_SUPERVISOR) {
+            return in_array($ownerId, $this->getManagerTeamIds($userId), true);
+        }
+        return false;
+    }
+
+    /**
+     * Audit every read of decrypted cardholder data. Records who, what and when
+     * — never the PAN itself (last four only).
+     */
+    private function logCardDataAccess(\App\Models\AcceptanceRequest $acc): void
+    {
+        try {
+            \Illuminate\Database\Capsule\Manager::table('activity_log')->insert([
+                'user_id'     => (int) ($_SESSION['user_id'] ?? 0) ?: null,
+                'action'      => 'card_data_accessed',
+                'entity_type' => 'acceptance_request',
+                'entity_id'   => $acc->id,
+                'details'     => json_encode([
+                    'via'        => 'transaction_import_autofill',
+                    'pnr'        => $acc->pnr,
+                    'card_last4' => $acc->card_last_four,
+                ]),
+                'ip_address'  => $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0',
+                'created_at'  => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[TransactionController] card access log failed: ' . $e->getMessage());
+        }
     }
 
     /**

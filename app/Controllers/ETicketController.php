@@ -193,13 +193,12 @@ class ETicketController
 
         $eticket = ETicket::with(['agent', 'transaction'])->findOrFail((int)$args['id']);
 
-        // Manager: only allow access to own team's e-tickets (including ones they created themselves)
-        if ($role === User::ROLE_MANAGER) {
-            $teamIds = $this->getManagerTeamIds($userId);
-            if (!in_array($eticket->agent_id, $teamIds) && $eticket->agent_id !== $userId) {
-                $_SESSION['flash_error'] = 'Access denied.';
-                return $response->withHeader('Location', '/etickets')->withStatus(302);
-            }
+        // Only managers were scoped here, so any agent/supervisor/CSA could open
+        // another agent's e-ticket by changing the ID — and this page renders the
+        // customer-facing token URL, which grants permanent auth-free access.
+        if (!$this->canAccessETicket($eticket)) {
+            $_SESSION['flash_error'] = 'Access denied.';
+            return $response->withHeader('Location', '/etickets')->withStatus(302);
         }
 
         $notes   = RecordNote::where('entity_type', 'eticket')
@@ -230,12 +229,26 @@ class ETicketController
             return $response->withHeader('Location', '/etickets/' . $eticket->id . '?send_error=1')->withStatus(302);
         }
 
+        // Ownership check — without this, any agent could post to another agent's
+        // e-ticket ID and (via resend_email below) mail that customer's full
+        // itinerary and passenger details to an address of their choosing.
+        if (!$this->canAccessETicket($eticket)) {
+            $_SESSION['flash_error'] = 'Access denied.';
+            return $response->withHeader('Location', '/etickets')->withStatus(302);
+        }
+
         if (empty($body['csrf_token']) || $body['csrf_token'] !== ($_SESSION['csrf_token'] ?? '')) {
             return $this->jsonError($response, 'CSRF validation failed.', 403);
         }
 
-        // Optional override email for resend
-        $overrideEmail = !empty($body['resend_email']) ? trim($body['resend_email']) : null;
+        // Optional override email for resend — admin/manager only. An arbitrary
+        // caller-supplied recipient is an exfiltration channel, so agents may
+        // only resend to the address already on the record.
+        $canOverride   = in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER], true);
+        $overrideEmail = ($canOverride && !empty($body['resend_email'])) ? trim($body['resend_email']) : null;
+        if ($overrideEmail !== null && !filter_var($overrideEmail, FILTER_VALIDATE_EMAIL)) {
+            return $response->withHeader('Location', '/etickets/' . $eticket->id . '?send_error=1')->withStatus(302);
+        }
         $sendTo        = $overrideEmail ?? $eticket->customer_email;
 
         $result = $this->emailService->send($eticket, $overrideEmail);
@@ -300,6 +313,12 @@ class ETicketController
     public function transactionData(Request $request, Response $response, array $args): Response
     {
         $txnId = (int)$args['id'];
+
+        // Was unscoped: any authenticated user could walk transaction IDs and
+        // pull customer contact details and passenger DOBs as JSON.
+        if (!$this->canAccessTransactionId($txnId)) {
+            return $this->jsonError($response, 'Access denied.', 403);
+        }
 
         try {
             $data = $this->service->getTransactionAutofill($txnId);
@@ -482,5 +501,49 @@ class ETicketController
         if (!$manager) return [-1];
         $ids = $manager->getTeamAgentIds(true); // include suspended ex-reports for record access
         return empty($ids) ? [-1] : $ids;
+    }
+
+    /**
+     * Whether the current user may read/act on an e-ticket.
+     * Admin: any. Manager/supervisor: own team, or their own. Others: own only.
+     */
+    private function canAccessETicket(ETicket $eticket): bool
+    {
+        $role    = $_SESSION['role'] ?? 'agent';
+        $userId  = (int) ($_SESSION['user_id'] ?? 0);
+        $ownerId = (int) ($eticket->agent_id ?? 0);
+
+        if ($role === User::ROLE_ADMIN) {
+            return true;
+        }
+        if ($ownerId === $userId) {
+            return true;
+        }
+        if ($role === User::ROLE_MANAGER || $role === User::ROLE_SUPERVISOR) {
+            return in_array($ownerId, $this->getManagerTeamIds($userId), true);
+        }
+        return false;
+    }
+
+    /**
+     * Whether the current user may read a transaction (for e-ticket autofill).
+     * Mirrors canAccessETicket, keyed on the transaction's owning agent.
+     */
+    private function canAccessTransactionId(int $txnId): bool
+    {
+        $role    = $_SESSION['role'] ?? 'agent';
+        $userId  = (int) ($_SESSION['user_id'] ?? 0);
+        $ownerId = (int) (\App\Models\Transaction::where('id', $txnId)->value('agent_id') ?? 0);
+
+        if (!$ownerId) {
+            return false;
+        }
+        if ($role === User::ROLE_ADMIN || $ownerId === $userId) {
+            return true;
+        }
+        if ($role === User::ROLE_MANAGER || $role === User::ROLE_SUPERVISOR) {
+            return in_array($ownerId, $this->getManagerTeamIds($userId), true);
+        }
+        return false;
     }
 }

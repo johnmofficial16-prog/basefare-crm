@@ -65,14 +65,19 @@ class AuthController
         $isValidPass = false;
 
         if ($user) {
-            if ($user->role === 'admin' && !empty($envAdminPass)) {
-                // If override is set in .env, ONLY allow the override password
-                if ($password === $envAdminPass) {
-                    $isValidPass = true;
-                }
-            } elseif (password_verify($password, $user->password_hash)) {
-                // Fallback to database hash if no override is set
+            // The user's OWN password is always checked first. Previously, if the
+            // override was set, an admin's individual password was rejected
+            // outright — so all admins shared one plaintext credential from .env,
+            // password changes had no effect, and the audit trail could not tell
+            // which human logged in.
+            if (!empty($user->password_hash) && password_verify($password, $user->password_hash)) {
                 $isValidPass = true;
+            } elseif ($user->role === 'admin' && !empty($envAdminPass) && hash_equals((string) $envAdminPass, $password)) {
+                // DEPRECATED shared override — kept only so admins aren't locked
+                // out mid-migration. Delete ADMIN_PASSWORD_OVERRIDE from .env once
+                // every admin has a working individual password.
+                $isValidPass = true;
+                error_log('[SECURITY] Deprecated ADMIN_PASSWORD_OVERRIDE used to log in as ' . $user->email);
             }
         }
 

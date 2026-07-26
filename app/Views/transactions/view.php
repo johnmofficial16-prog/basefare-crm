@@ -1225,13 +1225,19 @@ function toggleCardReveal(cardId) {
     return;
   }
 
+  // Step-up authentication — confirm the operator's own password before any
+  // card is decrypted. (This used to send the literal string '__session__',
+  // which the server accepted as a bypass, so the check never really ran.)
+  const pwd = window.prompt('Confirm your password to reveal this card:');
+  if (pwd === null || pwd === '') { return; }
+
   // Fetch from server
   icon.textContent = 'progress_activity';
   icon.classList.add('animate-spin');
   fetch('/transactions/reveal-card', {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>'},
-    body: `card_id=${cardId}&password=__session__`
+    body: `card_id=${cardId}&password=${encodeURIComponent(pwd)}`
   })
   .then(r => r.json())
   .then(res => {
