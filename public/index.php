@@ -30,7 +30,11 @@ session_set_cookie_params([
     'lifetime' => 0,
     'path'     => '/',
     'domain'   => '',
-    'secure'   => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on', // Enforce secure cookie if running on HTTPS
+    // Behind Hostinger's TLS-terminating proxy, $_SERVER['HTTPS'] is often unset
+    // and only X-Forwarded-Proto reflects the real scheme — without this check
+    // the cookie ships WITHOUT Secure and can leak over a plaintext request.
+    'secure'   => (($_SERVER['HTTPS'] ?? '') === 'on')
+                  || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'),
     'httponly' => true, // Prevents Javascript from accessing session cookie
     'samesite' => 'Lax' // Protects against broad cross-site attacks
 ]);

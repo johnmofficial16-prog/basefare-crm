@@ -317,7 +317,8 @@ class TransactionController
         $paths = is_array($raw) ? $raw : (json_decode((string)$raw, true) ?: [$raw]);
 
         $index    = max(0, (int)($request->getQueryParams()['index'] ?? 0));
-        $filePath = isset($paths[$index]) ? __DIR__ . '/../../' . $paths[$index] : null;
+        // Confine to storage/proofs — a stored path is not trusted input.
+        $filePath = isset($paths[$index]) ? $this->safeProofPath((string) $paths[$index]) : null;
 
         if (!$filePath || !file_exists($filePath)) {
             $response->getBody()->write('File not found on server.');
@@ -427,6 +428,12 @@ class TransactionController
         }
 
         // ── Handle Proof of Sale — admin may remove; anyone (per scope) may append ─
+        // SECURITY: never trust a client-supplied proof list. The stored value is
+        // used to build filesystem paths (serve + delete), so a forged entry like
+        // "../.env" would become an arbitrary file read/unlink. Drop whatever the
+        // request sent and rebuild the list from the database every time.
+        unset($body['proof_of_sale_path']);
+
         // Load the current stored proof list once (needed for both removal & append).
         $txnOld      = Transaction::find($id);
         $existingRaw = $txnOld->proof_of_sale_path ?? null;
@@ -435,6 +442,12 @@ class TransactionController
             $dec      = is_array($existingRaw) ? $existingRaw : json_decode((string)$existingRaw, true);
             $existing = is_array($dec) ? $dec : [$existingRaw];
         }
+        // Defence in depth: discard any stored entry that isn't a well-formed
+        // proof path, so a value poisoned before this fix can't be acted on.
+        $existing = array_values(array_filter(
+            $existing,
+            fn($p) => is_string($p) && preg_match('#^storage/proofs/[A-Za-z0-9_.-]+$#', $p) === 1
+        ));
         $proofChanged = false;
 
         // Admin-only removal. Once uploaded, proof of sale is locked for everyone
@@ -449,9 +462,11 @@ class TransactionController
             $kept      = [];
             foreach ($existing as $p) {
                 if (in_array((string) $p, $removeSet, true)) {
-                    // Best-effort physical delete so removed docs don't linger on disk.
-                    $abs = __DIR__ . '/../../' . ltrim((string) $p, '/');
-                    if (is_file($abs)) {
+                    // Best-effort physical delete so removed docs don't linger on
+                    // disk. Confined to storage/proofs via realpath so a poisoned
+                    // path can never unlink anything outside it.
+                    $abs = $this->safeProofPath((string) $p);
+                    if ($abs !== null && is_file($abs)) {
                         @unlink($abs);
                     }
                 } else {
@@ -933,6 +948,27 @@ class TransactionController
         if (!$manager) return [-1];
         $ids = $manager->getTeamAgentIds(true); // include suspended ex-reports for record access
         return empty($ids) ? [-1] : $ids;
+    }
+
+    /**
+     * Resolve a stored proof path to an absolute path, confined to storage/proofs.
+     *
+     * Stored paths are treated as untrusted: they are used to build filesystem
+     * paths for serving and deleting, so a poisoned entry such as "../.env" must
+     * not resolve. Returns null when the path escapes the proofs directory,
+     * fails the filename pattern, or does not exist.
+     */
+    private function safeProofPath(string $storedPath): ?string
+    {
+        if (preg_match('#^storage/proofs/[A-Za-z0-9_.-]+$#', $storedPath) !== 1) {
+            return null;
+        }
+        $base = realpath(__DIR__ . '/../../storage/proofs');
+        $real = realpath(__DIR__ . '/../../' . $storedPath);
+        if ($base === false || $real === false) {
+            return null;
+        }
+        return str_starts_with($real, $base . DIRECTORY_SEPARATOR) ? $real : null;
     }
 
     // =========================================================================

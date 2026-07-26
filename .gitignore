@@ -43,10 +43,35 @@ setup.php
 composer.phar
 
 # Local-only debug / migration scripts (must NOT be deployed)
+# The project root sits inside the web docroot on Hostinger, so anything here is
+# HTTP-reachable. These connect to the production DB, dump customer records, or
+# send live mail — several were publicly executable until 2026-07-27.
 run_migration.php
 create_test_user.php
 check_sessions.php
 check_sessions2.php
+test.php
+test_*.php
+inspect_flights.php
+backfill_ips.php
+update_policy.php
+update_acceptances.php
+update_ip_cols.php
+update_mco_col.php
+run_notes_migration.php
+add_updated_at.php
+temp_*.php
+temp_*.txt
+temp_*.html
+public_auth_test.html
+
+# Uploaded customer documents — PII, never commit
+storage/proofs/*
+!storage/proofs/.gitkeep
+storage/etickets/*
+!storage/etickets/.gitkeep
+storage/email_previews/*
+storage/payroll/*.pdf
 test_autofill.php
 add_updated_at.php
 update_acceptances.php

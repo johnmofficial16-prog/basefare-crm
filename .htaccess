@@ -1,0 +1,35 @@
+# =============================================================================
+# PROJECT ROOT .htaccess — deny-only hardening
+# =============================================================================
+# This app is deployed at public_html/crm/, i.e. the project root sits INSIDE
+# the web docroot. Without this file, .env, .git/, database dumps, vendor code
+# and any loose script at the root are directly fetchable over HTTP.
+#
+# DELIBERATELY deny-only: it adds no routing rewrites, so it cannot change how
+# requests reach the app. (The variant on `main` funnels traffic into public/
+# via `RewriteRule ^(.*)$ public/$1`, whose companion `RewriteCond %{REQUEST_URI}
+# ^/public/` never matches under a /crm/ sub-path — deploying that here would
+# break routing. Do not merge the two without testing.)
+# =============================================================================
+
+# ── Sensitive files ──────────────────────────────────────────────────────────
+# .env, .env.production, .env.bak, composer manifests, dumps, logs, archives.
+<FilesMatch "(^\.env|^\.git|composer\.(json|lock)|\.(sql|lock|log|bat|sh|phar|md|bak)$)">
+    Require all denied
+</FilesMatch>
+
+# ── One-off maintenance scripts that must stay CLI-only ──────────────────────
+# These connect to the production database. They are kept in the repo because
+# they are run over SSH; they must never be executable over HTTP.
+<FilesMatch "^(hostinger_migrate|run_migration|run_notes_migration|setup|create_test_user)\.php$">
+    Require all denied
+</FilesMatch>
+
+# ── Application directories — never served directly ──────────────────────────
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(app|vendor|database|scripts|scratch|cron|storage|\.git)(/.*)?$ - [F,L]
+</IfModule>
+
+# ── No directory listings ────────────────────────────────────────────────────
+Options -Indexes
