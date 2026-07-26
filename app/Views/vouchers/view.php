@@ -122,7 +122,7 @@ function render() {
     const issue  = "<?= strtoupper($voucher->issue_date->format('d M Y')) ?>";
     const expiry = "<?= strtoupper($voucher->expiry_date->format('d M Y')) ?>";
     const reason = "<?= htmlspecialchars($voucher->reason) ?>";
-    const terms  = `<?= addslashes($voucher->terms) ?>`;
+    const terms  = <?= json_encode($voucher->terms ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE) ?>;
 
     // main panel
     setText('p_vno',    vno);

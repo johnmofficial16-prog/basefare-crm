@@ -214,7 +214,7 @@ var notesPanel = {
         '<div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-black text-white" style="background:' + bgColor + ';">' + avatar + '</div>' +
         '<div class="flex-1 min-w-0">' +
           '<div class="flex items-center gap-2 flex-wrap">' +
-            '<span class="text-sm font-bold text-slate-800">' + (n.user_name||'Unknown') + '</span>' +
+            '<span class="text-sm font-bold text-slate-800">' + (n.user_name||'Unknown').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>' +
             '<span class="text-[10px] text-slate-400 uppercase tracking-wider">' + (n.user_role||'') + '</span>' +
             '<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ' + badgeClass + '">' +
               '<span class="material-symbols-outlined text-[11px]">' + icon + '</span>' + label +

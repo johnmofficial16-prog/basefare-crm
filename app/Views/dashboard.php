@@ -201,7 +201,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <span class="material-symbols-outlined text-rose-500 text-base mt-0.5">verified</span>
           <div class="min-w-0">
             <p class="text-sm font-bold text-rose-900 truncate"><?= htmlspecialchars($acc->customer_name) ?></p>
-            <p class="text-[11px] text-rose-700">Acc #<?= $acc->id ?> · <?= $acc->currency ?> <?= number_format($acc->total_amount, 2) ?> · <?= $acc->agent?->name ?? '—' ?></p>
+            <p class="text-[11px] text-rose-700">Acc #<?= $acc->id ?> · <?= $acc->currency ?> <?= number_format($acc->total_amount, 2) ?> · <?= htmlspecialchars($acc->agent?->name ?? '—', ENT_QUOTES, 'UTF-8') ?></p>
           </div>
         </a>
         <?php endforeach; ?>
@@ -247,7 +247,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           </div>
           <div class="min-w-0 flex-1">
             <p class="text-sm font-semibold text-slate-900 truncate"><?= htmlspecialchars($item->customer_name) ?></p>
-            <p class="text-[11px] text-slate-500"><?= $isTxn ? 'Txn #'.$item->id.' · '.dbTypeLabel($item->type) : 'Acc #'.$item->id.' · '.dbTypeLabel($item->type) ?> · <?= $item->agent?->name ?? '—' ?></p>
+            <p class="text-[11px] text-slate-500"><?= $isTxn ? 'Txn #'.$item->id.' · '.dbTypeLabel($item->type) : 'Acc #'.$item->id.' · '.dbTypeLabel($item->type) ?> · <?= htmlspecialchars($item->agent?->name ?? '—', ENT_QUOTES, 'UTF-8') ?></p>
           </div>
           <div class="text-right flex-none">
             <p class="text-sm font-bold text-slate-800"><?= $item->currency ?> <?= number_format($item->total_amount, 2) ?></p>
@@ -442,7 +442,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <div class="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center flex-none"><span class="material-symbols-outlined text-amber-600 text-sm">payments</span></div>
           <div class="min-w-0 flex-1">
             <p class="text-sm font-semibold text-slate-900 truncate"><?= htmlspecialchars($txn->customer_name) ?></p>
-            <p class="text-[11px] text-slate-500">Txn #<?= $txn->id ?> · <?= dbTypeLabel($txn->type) ?> · by <?= $txn->agent?->name ?? '—' ?></p>
+            <p class="text-[11px] text-slate-500">Txn #<?= $txn->id ?> · <?= dbTypeLabel($txn->type) ?> · by <?= htmlspecialchars($txn->agent?->name ?? '—', ENT_QUOTES, 'UTF-8') ?></p>
           </div>
           <div class="text-right flex-none">
             <p class="text-sm font-bold text-slate-800"><?= $txn->currency ?> <?= number_format($txn->total_amount, 2) ?></p>
@@ -470,7 +470,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-none"><span class="material-symbols-outlined text-blue-600 text-sm">payments</span></div>
         <div class="min-w-0 flex-1">
           <p class="text-sm font-semibold text-slate-900 truncate"><?= htmlspecialchars($txn->customer_name) ?></p>
-          <p class="text-[11px] text-slate-500">Txn #<?= $txn->id ?> · <?= dbTypeLabel($txn->type) ?> · <?= $txn->agent?->name ?? '—' ?></p>
+          <p class="text-[11px] text-slate-500">Txn #<?= $txn->id ?> · <?= dbTypeLabel($txn->type) ?> · <?= htmlspecialchars($txn->agent?->name ?? '—', ENT_QUOTES, 'UTF-8') ?></p>
         </div>
         <div class="text-right flex-none">
           <p class="text-sm font-bold text-slate-800"><?= $txn->currency ?> <?= number_format($txn->total_amount, 2) ?></p>
@@ -557,7 +557,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <div class="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center flex-none"><span class="material-symbols-outlined text-amber-600 text-sm">payments</span></div>
           <div class="min-w-0 flex-1">
             <p class="text-sm font-semibold text-slate-900 truncate"><?= htmlspecialchars($txn->customer_name) ?></p>
-            <p class="text-[11px] text-slate-500">Txn #<?= $txn->id ?> · <?= dbTypeLabel($txn->type) ?> · by <?= $txn->agent?->name ?? '—' ?></p>
+            <p class="text-[11px] text-slate-500">Txn #<?= $txn->id ?> · <?= dbTypeLabel($txn->type) ?> · by <?= htmlspecialchars($txn->agent?->name ?? '—', ENT_QUOTES, 'UTF-8') ?></p>
           </div>
           <div class="text-right flex-none">
             <p class="text-sm font-bold text-slate-800"><?= $txn->currency ?> <?= number_format($txn->total_amount, 2) ?></p>
@@ -585,7 +585,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-none"><span class="material-symbols-outlined text-blue-600 text-sm">payments</span></div>
         <div class="min-w-0 flex-1">
           <p class="text-sm font-semibold text-slate-900 truncate"><?= htmlspecialchars($txn->customer_name) ?></p>
-          <p class="text-[11px] text-slate-500">Txn #<?= $txn->id ?> · <?= dbTypeLabel($txn->type) ?> · <?= $txn->agent?->name ?? '—' ?></p>
+          <p class="text-[11px] text-slate-500">Txn #<?= $txn->id ?> · <?= dbTypeLabel($txn->type) ?> · <?= htmlspecialchars($txn->agent?->name ?? '—', ENT_QUOTES, 'UTF-8') ?></p>
         </div>
         <div class="text-right flex-none">
           <p class="text-sm font-bold text-slate-800"><?= $txn->currency ?> <?= number_format($txn->total_amount, 2) ?></p>

@@ -1,1 +1,29 @@
-Deny from all
+# =============================================================================
+# storage/ — never web-accessible
+# =============================================================================
+# Holds proof-of-sale documents, acceptance signatures, passport scans,
+# credit-card-front photos, payroll PDFs and logs. The project root sits inside
+# the web docroot on Hostinger, so this file is a load-bearing control.
+#
+# Previously this file contained only `Deny from all`, which is Apache 2.2
+# (mod_access_compat) syntax — a no-op or a 500 depending on the server build.
+# Both syntaxes are declared below so it fails closed either way, and PHP
+# execution is disabled so an uploaded file can never run from here.
+# =============================================================================
+
+<IfModule mod_authz_core.c>
+    # Apache 2.4+
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    # Apache 2.2 / mod_access_compat
+    Order allow,deny
+    Deny from all
+</IfModule>
+
+# Belt and braces: never execute anything in this tree.
+Options -Indexes
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .phar
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>

@@ -156,7 +156,7 @@
 
 <script>
 (function () {
-    const esc = s => (s == null ? '' : String(s));
+    const esc = s => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     const showCell = (id, on) => { const el = document.getElementById(id); if (el) el.classList.toggle('hide', !on); };
 

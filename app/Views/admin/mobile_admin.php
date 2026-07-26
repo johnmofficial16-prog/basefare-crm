@@ -210,6 +210,9 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 <script>
 const csrfToken = '<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>';
 
+// Escape server/API-derived strings before they go into innerHTML (text or attribute context).
+const esc = s => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
 // ── TAB NAVIGATION ────────────────────────────────────────────────────────
 function switchTab(tabId, btnElement) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -246,11 +249,11 @@ async function loadDashboard() {
             ${idx+1}
           </div>
           <div>
-            <p class="font-bold text-sm text-slate-800">${item.name}</p>
+            <p class="font-bold text-sm text-slate-800">${esc(item.name)}</p>
             <p class="text-xs text-slate-500">${item.txn_count} txns</p>
           </div>
         </div>
-        <p class="font-bold text-emerald-600">+${item.currency} ${item.profit.toFixed(2)}</p>
+        <p class="font-bold text-emerald-600">+${esc(item.currency)} ${item.profit.toFixed(2)}</p>
       </div>
     `).join('');
 
@@ -281,8 +284,8 @@ async function loadLiveBoard() {
           <span class="material-symbols-outlined">paid</span>
         </div>
         <div class="flex-1">
-          <p class="text-xs text-slate-400">${item.created_at} — ${item.agent}</p>
-          <p class="font-bold text-sm text-slate-800">Approved: ${item.type || 'Booking'}</p>
+          <p class="text-xs text-slate-400">${esc(item.created_at)} — ${esc(item.agent)}</p>
+          <p class="font-bold text-sm text-slate-800">Approved: ${esc(item.type || 'Booking')}</p>
           <p class="font-bold text-emerald-600">+${item.mco.toFixed(2)}</p>
         </div>
       </div>
@@ -310,7 +313,7 @@ async function loadAttendance() {
       ovl.innerHTML = d.pending_agents.map(a => `
         <div class="bg-red-50 rounded-xl p-3 border border-red-200">
           <div class="flex justify-between items-center mb-2">
-            <p class="font-bold text-red-900">${a.name}</p>
+            <p class="font-bold text-red-900">${esc(a.name)}</p>
             <span class="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">Blocked</span>
           </div>
           <input type="text" id="ov-reason-${a.id}" placeholder="Reason..." class="w-full rounded bg-white border-red-200 text-xs py-1.5 px-2 mb-2">
@@ -328,10 +331,10 @@ async function loadAttendance() {
     document.getElementById('att-working-list').innerHTML = d.in_agents.map(i => `
       <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
         <div>
-          <p class="font-bold text-sm text-slate-800">${i.name}</p>
+          <p class="font-bold text-sm text-slate-800">${esc(i.name)}</p>
           <p class="text-[10px] text-slate-400">In since ${new Date(i.clock_in).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
         </div>
-        <button onclick="clkOut(${i.id}, '${i.name.replace(/'/g, "\\'")}')" class="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+        <button data-att-action="clock-out" data-att-id="${i.id}" data-att-name="${esc(i.name)}" class="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
           <span class="material-symbols-outlined text-[18px]">logout</span>
         </button>
       </div>
@@ -344,10 +347,10 @@ async function loadAttendance() {
       return `
       <div class="bg-amber-50 rounded-xl p-3 shadow-sm border border-amber-200 flex items-center justify-between">
         <div>
-          <p class="font-bold text-sm text-amber-900">${a.name}</p>
-          <p class="text-[10px] text-amber-700 font-bold">${a.type} break · ${elapsed}m</p>
+          <p class="font-bold text-sm text-amber-900">${esc(a.name)}</p>
+          <p class="text-[10px] text-amber-700 font-bold">${esc(a.type)} break · ${elapsed}m</p>
         </div>
-        <button onclick="endBrk(${a.id}, '${a.name.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-lg bg-orange-100 text-orange-700 text-xs font-bold">End</button>
+        <button data-att-action="end-break" data-att-id="${a.id}" data-att-name="${esc(a.name)}" class="px-3 py-1.5 rounded-lg bg-orange-100 text-orange-700 text-xs font-bold">End</button>
       </div>
       `;
     }).join('') || '<p class="text-xs text-slate-400">No one on break</p>';
@@ -355,8 +358,8 @@ async function loadAttendance() {
     // Absent
     document.getElementById('att-absent-list').innerHTML = (d.absent_agents || []).map(a => `
       <div class="bg-slate-50 rounded-xl p-3 shadow-sm border border-slate-200 flex items-center justify-between">
-        <p class="font-bold text-sm text-slate-700">${a.name}</p>
-        <button onclick="clkIn(${a.id}, '${a.name.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center gap-1">
+        <p class="font-bold text-sm text-slate-700">${esc(a.name)}</p>
+        <button data-att-action="clock-in" data-att-id="${a.id}" data-att-name="${esc(a.name)}" class="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center gap-1">
           <span class="material-symbols-outlined text-[14px]">login</span> Clock In
         </button>
       </div>
@@ -365,7 +368,7 @@ async function loadAttendance() {
     // Completed
     document.getElementById('att-completed-list').innerHTML = (d.completed_agents || []).map(a => `
       <div class="bg-blue-50 rounded-xl p-3 shadow-sm border border-blue-100">
-        <p class="font-bold text-sm text-blue-900">${a.name}</p>
+        <p class="font-bold text-sm text-blue-900">${esc(a.name)}</p>
         <p class="text-[10px] text-blue-700">${Math.floor(a.work_mins/60)}h ${a.work_mins%60}m worked · Out at ${new Date(a.clock_out).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
       </div>
     `).join('') || '<p class="text-xs text-slate-400">None</p>';
@@ -396,6 +399,18 @@ async function endBrk(id, name) {
   loadAttendance();
 }
 
+// Attendance row actions are wired via data-attributes (never by building JS from
+// agent-controlled names) and dispatched here through one delegated listener.
+document.addEventListener('click', function (ev) {
+  const btn = ev.target.closest ? ev.target.closest('[data-att-action]') : null;
+  if (!btn) return;
+  const id = parseInt(btn.dataset.attId, 10);
+  const name = btn.dataset.attName || '';
+  if (btn.dataset.attAction === 'clock-out') clkOut(id, name);
+  else if (btn.dataset.attAction === 'end-break') endBrk(id, name);
+  else if (btn.dataset.attAction === 'clock-in') clkIn(id, name);
+});
+
 // ── TRANSACTIONS ──────────────────────────────────────────────────────────
 let txnPage = 1;
 let txnStatus = 'all';
@@ -420,22 +435,22 @@ async function loadTransactions(status = txnStatus, page = 1) {
       <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100" onclick="toggleTxnDetail(${t.id})">
         <div class="flex justify-between items-start mb-2">
           <div>
-            <p class="font-bold text-sm text-slate-800">${t.customer_name}</p>
-            <p class="text-xs font-mono font-bold text-primary">${t.pnr}</p>
+            <p class="font-bold text-sm text-slate-800">${esc(t.customer_name)}</p>
+            <p class="text-xs font-mono font-bold text-primary">${esc(t.pnr)}</p>
           </div>
-          <span class="text-[10px] font-bold px-2 py-0.5 rounded ${t.status==='approved'?'bg-green-100 text-green-700':t.status==='pending_review'?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}">${t.status}</span>
+          <span class="text-[10px] font-bold px-2 py-0.5 rounded ${t.status==='approved'?'bg-green-100 text-green-700':t.status==='pending_review'?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}">${esc(t.status)}</span>
         </div>
         <div class="flex justify-between items-end">
           <div>
-            <p class="text-[10px] text-slate-400">${t.agent} · ${t.created_at}</p>
+            <p class="text-[10px] text-slate-400">${esc(t.agent)} · ${esc(t.created_at)}</p>
           </div>
-          <p class="font-bold text-sm ${t.mco>=0?'text-emerald-600':'text-red-600'}">${t.mco>=0?'+':''}${t.currency} ${t.mco.toFixed(2)}</p>
+          <p class="font-bold text-sm ${t.mco>=0?'text-emerald-600':'text-red-600'}">${t.mco>=0?'+':''}${esc(t.currency)} ${t.mco.toFixed(2)}</p>
         </div>
         
         <div id="txn-detail-${t.id}" class="hidden mt-3 pt-3 border-t border-slate-100">
-          <p class="text-xs text-slate-600 mb-1"><strong>Type:</strong> ${t.type}</p>
-          <p class="text-xs text-slate-600 mb-1"><strong>Total:</strong> ${t.amount.toFixed(2)} ${t.currency}</p>
-          <p class="text-xs text-slate-600 mb-2"><strong>Gateway:</strong> ${t.gateway_status || 'Pending'}</p>
+          <p class="text-xs text-slate-600 mb-1"><strong>Type:</strong> ${esc(t.type)}</p>
+          <p class="text-xs text-slate-600 mb-1"><strong>Total:</strong> ${t.amount.toFixed(2)} ${esc(t.currency)}</p>
+          <p class="text-xs text-slate-600 mb-2"><strong>Gateway:</strong> ${esc(t.gateway_status || 'Pending')}</p>
           <a href="/transactions/${t.id}" class="text-xs font-bold text-primary flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">open_in_new</span> Open Full View</a>
         </div>
       </div>
@@ -467,10 +482,10 @@ async function loadActions() {
       <div class="bg-amber-50 rounded-xl p-3 shadow-sm border border-amber-200">
         <div class="flex justify-between items-start mb-2">
           <div>
-            <p class="font-bold text-sm text-amber-900">${t.customer_name}</p>
-            <p class="text-xs font-mono font-bold text-primary">${t.pnr}</p>
+            <p class="font-bold text-sm text-amber-900">${esc(t.customer_name)}</p>
+            <p class="text-xs font-mono font-bold text-primary">${esc(t.pnr)}</p>
           </div>
-          <p class="font-bold text-sm text-emerald-600">+${t.currency} ${t.mco.toFixed(2)}</p>
+          <p class="font-bold text-sm text-emerald-600">+${esc(t.currency)} ${t.mco.toFixed(2)}</p>
         </div>
         
         <div class="bg-white rounded-lg p-2 mt-2 border border-amber-100 space-y-2">
@@ -483,7 +498,7 @@ async function loadActions() {
               <option value="charge_successful" ${t.gateway_status==='charge_successful'?'selected':''}>✓ Charge Successful</option>
               <option value="charge_declined" ${t.gateway_status==='charge_declined'?'selected':''}>✗ Charge Declined</option>
             </select>
-            <input type="text" id="gw-id-${t.id}" placeholder="Gateway ID (req for success)" value="${t.gateway_txn_id}" class="w-full text-xs p-1.5 border rounded mb-1 ${t.gateway_status==='charge_declined'?'hidden':''}">
+            <input type="text" id="gw-id-${t.id}" placeholder="Gateway ID (req for success)" value="${esc(t.gateway_txn_id)}" class="w-full text-xs p-1.5 border rounded mb-1 ${t.gateway_status==='charge_declined'?'hidden':''}">
             <button onclick="saveGw(${t.id})" class="w-full bg-slate-800 text-white text-xs font-bold py-1.5 rounded">Save Gateway</button>
           </div>
         </div>
@@ -495,14 +510,14 @@ async function loadActions() {
       <div class="bg-blue-50 rounded-xl p-3 shadow-sm border border-blue-200" onclick="toggleAccDetail(${a.id})">
         <div class="flex justify-between items-center">
           <div>
-            <p class="font-bold text-sm text-blue-900">${a.customer_name}</p>
-            <p class="text-[10px] text-blue-700">${a.pnr} · ${a.amount} ${a.currency}</p>
+            <p class="font-bold text-sm text-blue-900">${esc(a.customer_name)}</p>
+            <p class="text-[10px] text-blue-700">${esc(a.pnr)} · ${a.amount} ${esc(a.currency)}</p>
           </div>
           <span class="material-symbols-outlined text-blue-400">expand_more</span>
         </div>
         <div id="acc-detail-${a.id}" class="hidden mt-3 pt-3 border-t border-blue-100">
-           <p class="text-xs text-blue-800 mb-1"><strong>Agent:</strong> ${a.agent}</p>
-           <p class="text-xs text-blue-800 mb-2"><strong>Time:</strong> ${a.created_at}</p>
+           <p class="text-xs text-blue-800 mb-1"><strong>Agent:</strong> ${esc(a.agent)}</p>
+           <p class="text-xs text-blue-800 mb-2"><strong>Time:</strong> ${esc(a.created_at)}</p>
            <a href="/acceptance/${a.id}" class="text-xs font-bold text-primary flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">open_in_new</span> Open Full View</a>
         </div>
       </div>

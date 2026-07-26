@@ -120,6 +120,19 @@ class AcceptanceRequest extends Model
     ];
 
     // =========================================================================
+    // Hidden from array/JSON serialization
+    // =========================================================================
+    // Defence in depth, mirroring PaymentCard. These are ciphertext, not
+    // plaintext, but without this any toArray()/toJson()/json_encode() of an
+    // acceptance — a future API endpoint, a debug dump, an AI prompt context —
+    // silently emits the encrypted card blobs wherever that output goes.
+    protected $hidden = [
+        'card_number_enc',
+        'card_expiry_enc',
+        'card_cvv_enc',
+    ];
+
+    // =========================================================================
     // Type casts
     // =========================================================================
     protected $casts = [

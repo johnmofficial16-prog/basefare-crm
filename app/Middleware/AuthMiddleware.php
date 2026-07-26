@@ -46,6 +46,32 @@ class AuthMiddleware
         $userId   = $_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'guest';
 
+        // ── 1a. Revalidate the account against the database ──────────────
+        // The role was previously trusted for the life of the session and never
+        // re-read, and suspending/deleting/demoting a user did not touch their
+        // live session. A manager demoted or suspended at 10:00 kept full
+        // manager access until they chose to log out. Re-checked at most once a
+        // minute so this costs one cheap query per user per minute.
+        $lastCheck = $_SESSION['_acct_checked_at'] ?? 0;
+        if (time() - $lastCheck > 60) {
+            $fresh = User::whereNull('deleted_at')->find($userId);
+
+            if (!$fresh || $fresh->status !== User::STATUS_ACTIVE) {
+                // Account suspended, deactivated or deleted — end the session now.
+                $_SESSION = [];
+                session_destroy();
+                $response = new SlimResponse();
+                return $response->withHeader('Location', '/login?expired=1')->withStatus(302);
+            }
+
+            // Pick up role changes without forcing a re-login.
+            if ($fresh->role !== $userRole) {
+                $_SESSION['role'] = $fresh->role;
+                $userRole         = $fresh->role;
+            }
+            $_SESSION['_acct_checked_at'] = time();
+        }
+
         // ── 1b. Mobile device restriction ────────────────────────────────
         // Only admins may use the CRM on a mobile device. Non-admins get a
         // "desktop only" page on every authenticated route (we do NOT destroy

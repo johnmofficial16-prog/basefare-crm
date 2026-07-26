@@ -311,6 +311,8 @@ function announce(msg, typeLabel, emoji) {
 // ── FEED POLLING ───────────────────────────────────────────────
 let lastEventId = null, firstLoad = true;
 
+const esc = s => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
 const MEDALS = ['🥇','🥈','🥉'];
 const RANK_COLORS = [
   'background:#fef3c7;color:#d97706;border:1px solid #fde68a;',
@@ -331,7 +333,7 @@ function renderLeaderboard(lb) {
       <div style="background:#ffffff;border:1px solid ${isFirst?'#f59e0b':'#e2e8f0'};border-radius:16px;padding:16px 20px;display:flex;align-items:center;gap:16px;${isFirst?'box-shadow:0 4px 15px rgba(245,158,11,.15);':''}">
         <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;flex-shrink:0;${rankStyle}">${i < 3 ? MEDALS[i] : i+1}</div>
         <div style="flex:1;min-width:0;">
-          <div style="font-weight:800;font-size:18px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.display}</div>
+          <div style="font-weight:800;font-size:18px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(a.display)}</div>
           <div style="color:#64748b;font-size:12px;margin-top:2px;">${a.txn_count} txn${a.txn_count!==1?'s':''}${a.acc_count>0?' · '+a.acc_count+' auth'+( a.acc_count!==1?'s':''):''}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
@@ -357,11 +359,11 @@ function renderFeed(events) {
     return `
       <div class="${idx===0&&!firstLoad?'flash':''}" style="background:#ffffff;border:1px solid #e2e8f0;border-left:4px solid ${accent};border-radius:14px;padding:14px 16px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-          <span style="font-weight:700;font-size:14px;color:#0f172a;">${ev.agent_name}</span>
+          <span style="font-weight:700;font-size:14px;color:#0f172a;">${esc(ev.agent_name)}</span>
           <span style="color:#64748b;font-size:12px;">${timeStr}</span>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;">
-          <span style="color:${accent};font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">${badge}: ${ev.label}</span>
+          <span style="color:${accent};font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">${badge}: ${esc(ev.label)}</span>
           ${ev.profit !== null ? `<span style="color:#10b981;font-weight:900;font-size:14px;">+${ev.profit.toLocaleString()}</span>` : ''}
         </div>
       </div>

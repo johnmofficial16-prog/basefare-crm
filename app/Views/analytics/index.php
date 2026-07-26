@@ -336,7 +336,7 @@ async function runAi(){
     const colors={DMR:'#2563eb',MOH:'#7c3aed',JSR:'#0d9488'};
     Object.keys(j.centre_notes||{}).forEach(code=>{
       const d=document.createElement('div'); d.className='rounded-xl border border-slate-200 p-3';
-      d.innerHTML='<p class="text-[11px] font-bold uppercase mb-1" style="color:'+(colors[code]||'#64748b')+'">'+code+'</p><p class="text-[13px] text-slate-600">'+escapeHtml(j.centre_notes[code])+'</p>';
+      d.innerHTML='<p class="text-[11px] font-bold uppercase mb-1" style="color:'+(colors[code]||'#64748b')+'">'+escapeHtml(code)+'</p><p class="text-[13px] text-slate-600">'+escapeHtml(j.centre_notes[code])+'</p>';
       notes.appendChild(d);
     });
     const sug=document.getElementById('aiSuggestions');

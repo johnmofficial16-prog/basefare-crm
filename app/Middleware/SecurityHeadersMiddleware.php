@@ -19,6 +19,12 @@ class SecurityHeadersMiddleware
         $response = $handler->handle($request);
 
         return $response
+            // Never cache CRM responses to disk. Pages and JSON here carry
+            // cardholder data, customer PII and revealed card details; without
+            // this they persist in the browser cache on shared agent
+            // workstations and survive logout.
+            ->withHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+            ->withHeader('Pragma', 'no-cache')
             // Prevent clickjacking — CRM should never be embedded in an iframe
             ->withHeader('X-Frame-Options', 'DENY')
             // Block MIME-type sniffing exploits

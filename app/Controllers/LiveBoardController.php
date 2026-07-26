@@ -57,10 +57,32 @@ class LiveBoardController
         $entered = trim($body['pin'] ?? '');
         $correct = $this->getPin();
 
-        if ($entered === $correct) {
+        // Throttle brute force. This endpoint sits outside every middleware group,
+        // so without a limiter the whole 4-digit PIN space is exhaustible in
+        // seconds — and the feed behind it exposes per-agent revenue and profit.
+        $now      = time();
+        $attempts = $_SESSION['tv_pin_attempts'] ?? 0;
+        $lockedTo = $_SESSION['tv_pin_locked_until'] ?? 0;
+
+        if ($lockedTo > $now) {
+            $_SESSION['tv_pin_error'] = 'Too many attempts. Try again in '
+                . max(1, (int) ceil(($lockedTo - $now) / 60)) . ' minute(s).';
+            return $response->withHeader('Location', '/liveboard/score')->withStatus(302);
+        }
+
+        if (hash_equals($correct, $entered)) {
             $_SESSION['tv_pin_verified'] = true;
+            unset($_SESSION['tv_pin_attempts'], $_SESSION['tv_pin_locked_until'], $_SESSION['tv_pin_error']);
         } else {
-            $_SESSION['tv_pin_error'] = 'Incorrect PIN. Please try again.';
+            $attempts++;
+            $_SESSION['tv_pin_attempts'] = $attempts;
+            if ($attempts >= 5) {
+                $_SESSION['tv_pin_locked_until'] = $now + 900; // 15 minutes
+                $_SESSION['tv_pin_attempts']     = 0;
+                $_SESSION['tv_pin_error']        = 'Too many attempts. Try again in 15 minutes.';
+            } else {
+                $_SESSION['tv_pin_error'] = 'Incorrect PIN. Please try again.';
+            }
         }
 
         return $response->withHeader('Location', '/liveboard/score')->withStatus(302);

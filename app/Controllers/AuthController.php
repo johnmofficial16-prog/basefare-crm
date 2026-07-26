@@ -41,8 +41,13 @@ class AuthController
         $password = $parsedBody['password'] ?? '';
         $redirect = $parsedBody['redirect'] ?? '/dashboard';
         
-        // Ensure redirect is a relative path to prevent open redirect vulnerabilities
-        if (!str_starts_with($redirect, '/')) {
+        // Ensure redirect is a relative path to prevent open redirect vulnerabilities.
+        // A leading "/" alone is not enough: "//evil.com" is protocol-relative and
+        // "/\evil.com" is normalised by browsers, so both send the user off-site
+        // after a legitimate login — ideal for credential-harvesting phishing.
+        if (!str_starts_with($redirect, '/')
+            || str_starts_with($redirect, '//')
+            || str_starts_with($redirect, '/\\')) {
             $redirect = '/dashboard';
         }
 
@@ -154,6 +159,29 @@ class AuthController
             }
         }
 
+        // Full teardown. session_destroy() alone left the session array populated,
+        // the cookie live in the browser, and users.active_session_id pointing at
+        // a dead session — which quietly broke concurrent-login displacement.
+        if (!empty($userId)) {
+            try {
+                \App\Models\User::where('id', $userId)->update(['active_session_id' => null]);
+            } catch (\Throwable $e) {
+                error_log('[AuthController] clearing active_session_id failed: ' . $e->getMessage());
+            }
+        }
+
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $p = session_get_cookie_params();
+            setcookie(session_name(), '', [
+                'expires'  => time() - 42000,
+                'path'     => $p['path'],
+                'domain'   => $p['domain'],
+                'secure'   => $p['secure'],
+                'httponly' => $p['httponly'],
+                'samesite' => $p['samesite'] ?? 'Lax',
+            ]);
+        }
         session_destroy();
         return $response->withHeader('Location', '/login')->withStatus(302);
     }
