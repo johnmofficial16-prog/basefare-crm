@@ -426,7 +426,45 @@ class TransactionController
             return $response->withHeader('Location', '/transactions/' . $id . '/edit')->withStatus(302);
         }
 
-        // ── Handle Proof of Sale — append new files to existing list ────────────
+        // ── Handle Proof of Sale — admin may remove; anyone (per scope) may append ─
+        // Load the current stored proof list once (needed for both removal & append).
+        $txnOld      = Transaction::find($id);
+        $existingRaw = $txnOld->proof_of_sale_path ?? null;
+        $existing    = [];
+        if ($existingRaw) {
+            $dec      = is_array($existingRaw) ? $existingRaw : json_decode((string)$existingRaw, true);
+            $existing = is_array($dec) ? $dec : [$existingRaw];
+        }
+        $proofChanged = false;
+
+        // Admin-only removal. Once uploaded, proof of sale is locked for everyone
+        // EXCEPT admins, who may delete documents from any transaction (including
+        // historical ones). Gated server-side so a non-admin can't forge the field.
+        $removeProofs = $body['remove_proofs'] ?? [];
+        if ($isAdmin && !empty($removeProofs)) {
+            if (!is_array($removeProofs)) {
+                $removeProofs = [$removeProofs];
+            }
+            $removeSet = array_map('strval', $removeProofs);
+            $kept      = [];
+            foreach ($existing as $p) {
+                if (in_array((string) $p, $removeSet, true)) {
+                    // Best-effort physical delete so removed docs don't linger on disk.
+                    $abs = __DIR__ . '/../../' . ltrim((string) $p, '/');
+                    if (is_file($abs)) {
+                        @unlink($abs);
+                    }
+                } else {
+                    $kept[] = $p;
+                }
+            }
+            if (count($kept) !== count($existing)) {
+                $existing     = array_values($kept);
+                $proofChanged = true;
+            }
+        }
+
+        // Append newly uploaded proofs (subject to normal edit scope).
         $uploadedFiles = $request->getUploadedFiles();
         $rawProofsEdit = $uploadedFiles['proof_of_sale'] ?? [];
         if (!is_array($rawProofsEdit)) {
@@ -439,16 +477,12 @@ class TransactionController
             if (is_string($savedNew)) {
                 return $response->withHeader('Location', $savedNew)->withStatus(302);
             }
+            $existing     = array_values(array_merge($existing, $savedNew));
+            $proofChanged = true;
+        }
 
-            // Merge with existing stored paths
-            $txnOld      = Transaction::find($id);
-            $existingRaw = $txnOld->proof_of_sale_path ?? null;
-            $existing    = [];
-            if ($existingRaw) {
-                $dec      = is_array($existingRaw) ? $existingRaw : json_decode((string)$existingRaw, true);
-                $existing = is_array($dec) ? $dec : [$existingRaw];
-            }
-            $body['proof_of_sale_path'] = json_encode(array_values(array_merge($existing, $savedNew)));
+        if ($proofChanged) {
+            $body['proof_of_sale_path'] = json_encode($existing);
         }
 
         $data = array_merge($body, [

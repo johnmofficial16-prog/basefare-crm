@@ -328,16 +328,30 @@ tailwind.config = {
           <p style="font-size:11px;font-weight:700;color:#065f46;margin-bottom:8px;">Current Documents (<?= count($proofPaths) ?>)</p>
           <div style="display:flex;flex-wrap:wrap;gap:8px;">
             <?php foreach ($proofPaths as $idx => $path): ?>
-            <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
-              <span class="msym" style="color:#16a34a;font-size:16px;">check_circle</span>
-              <span style="font-size:11px;font-family:monospace;color:#166534;"><?= htmlspecialchars(basename($path)) ?></span>
+            <div class="proof-chip" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+              <span class="msym proof-ok" style="color:#16a34a;font-size:16px;">check_circle</span>
+              <span class="proof-name" style="font-size:11px;font-family:monospace;color:#166534;"><?= htmlspecialchars(basename($path)) ?></span>
               <a href="/transactions/<?= $txn->id ?>/proof?index=<?= $idx ?>" target="_blank"
                  style="flex-none;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#0f1e3c;background:#fff;border:1px solid #d1fae5;padding:4px 10px;border-radius:7px;text-decoration:none;">
                 <span class="msym" style="font-size:13px;">open_in_new</span> View
               </a>
+              <?php if ($isAdmin): ?>
+              <label title="Remove this document (admin only)"
+                     style="flex-none;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#b91c1c;background:#fff;border:1px solid #fecaca;padding:4px 10px;border-radius:7px;cursor:pointer;user-select:none;">
+                <input type="checkbox" name="remove_proofs[]" value="<?= htmlspecialchars($path) ?>"
+                       onchange="toggleProofRemoval(this)" style="accent-color:#dc2626;cursor:pointer;">
+                <span class="msym" style="font-size:13px;">delete</span> Remove
+              </label>
+              <?php endif; ?>
             </div>
             <?php endforeach; ?>
           </div>
+          <?php if ($isAdmin): ?>
+          <p style="font-size:10px;color:#b45309;margin-top:6px;display:flex;align-items:center;gap:4px;">
+            <span class="msym" style="font-size:13px;">admin_panel_settings</span>
+            Admin: checking <strong style="margin:0 3px;">Remove</strong> deletes that document permanently when you save.
+          </p>
+          <?php endif; ?>
         </div>
         <?php else: ?>
         <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;margin-bottom:14px;">
@@ -454,6 +468,25 @@ function handleEditProof(input) {
   if (errEl)  { errEl.textContent = ''; errEl.style.display = 'none'; }
   if (zone)   zone.style.borderColor = '#34d399';
   if (nameEl) nameEl.textContent = '\u2713 ' + names.length + ' file(s): ' + names.join(', ');
+}
+
+// \u2500\u2500 Admin proof removal: visually mark a chip as staged-for-deletion \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function toggleProofRemoval(cb) {
+  const chip = cb.closest('.proof-chip');
+  if (!chip) return;
+  const name = chip.querySelector('.proof-name');
+  const ok   = chip.querySelector('.proof-ok');
+  if (cb.checked) {
+    chip.style.background = '#fef2f2';
+    chip.style.borderColor = '#fecaca';
+    if (name) { name.style.textDecoration = 'line-through'; name.style.color = '#b91c1c'; }
+    if (ok)   { ok.textContent = 'delete'; ok.style.color = '#dc2626'; }
+  } else {
+    chip.style.background = '#f0fdf4';
+    chip.style.borderColor = '#bbf7d0';
+    if (name) { name.style.textDecoration = 'none'; name.style.color = '#166534'; }
+    if (ok)   { ok.textContent = 'check_circle'; ok.style.color = '#16a34a'; }
+  }
 }
 
 // \u2500\u2500 Init \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
