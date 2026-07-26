@@ -31,11 +31,35 @@ class EncryptionService
     private string $key;
 
     /**
+     * Previous key, derived from ENCRYPTION_KEY_A_OLD / ENCRYPTION_KEY_B_OLD
+     * when present. Used ONLY as a decryption fallback during key rotation so
+     * rows not yet re-encrypted stay readable — encryption always uses the
+     * current key. Null when no rotation is in progress.
+     */
+    private ?string $oldKey = null;
+
+    /**
      * @throws \RuntimeException if encryption keys are not configured
      */
     public function __construct()
     {
-        $this->key = $this->deriveKey();
+        $this->key    = $this->deriveKey();
+        $this->oldKey = $this->deriveOldKey();
+    }
+
+    /**
+     * The active encryption key (raw 32 bytes). Exposed for the rotation script
+     * so it can verify a round-trip without re-reading the environment.
+     */
+    public function activeKey(): string
+    {
+        return $this->key;
+    }
+
+    /** Whether a previous key is configured (i.e. a rotation is in progress). */
+    public function hasOldKey(): bool
+    {
+        return $this->oldKey !== null;
     }
 
     // =========================================================================
@@ -101,11 +125,46 @@ class EncryptionService
             $tag
         );
 
+        // Rotation fallback: a row that hasn't been re-encrypted yet still
+        // carries ciphertext under the previous key. GCM authenticates, so a
+        // wrong key fails cleanly rather than returning garbage — that makes
+        // "try current, then previous" safe and unambiguous.
+        if ($plaintext === false && $this->oldKey !== null) {
+            $plaintext = openssl_decrypt(
+                $ciphertext,
+                self::CIPHER,
+                $this->oldKey,
+                OPENSSL_RAW_DATA,
+                $iv,
+                $tag
+            );
+        }
+
         if ($plaintext === false) {
             throw new \RuntimeException('Decryption failed: authentication tag mismatch or corrupted data.');
         }
 
         return $plaintext;
+    }
+
+    /**
+     * Whether a ciphertext decrypts under the CURRENT key (no fallback).
+     * The rotation script uses this to tell migrated rows from pending ones.
+     */
+    public function isUnderCurrentKey(string $encoded): bool
+    {
+        $raw = base64_decode($encoded, strict: true);
+        if ($raw === false || strlen($raw) < self::IV_LENGTH + self::TAG_LENGTH + 1) {
+            return false;
+        }
+        return openssl_decrypt(
+            substr($raw, self::IV_LENGTH + self::TAG_LENGTH),
+            self::CIPHER,
+            $this->key,
+            OPENSSL_RAW_DATA,
+            substr($raw, 0, self::IV_LENGTH),
+            substr($raw, self::IV_LENGTH, self::TAG_LENGTH)
+        ) !== false;
     }
 
     /**
@@ -173,5 +232,35 @@ class EncryptionService
         }
 
         return $derived;
+    }
+
+    /**
+     * Derive the PREVIOUS key, if a rotation is in progress.
+     *
+     * Set ENCRYPTION_KEY_A_OLD and ENCRYPTION_KEY_B_OLD (or
+     * ENCRYPTION_KEY_FILE_OLD) alongside the new keys, run the rotation script,
+     * then delete the _OLD entries. Returns null when they are absent, which is
+     * the normal steady state.
+     */
+    private function deriveOldKey(): ?string
+    {
+        $keyA = $_ENV['ENCRYPTION_KEY_A_OLD'] ?? getenv('ENCRYPTION_KEY_A_OLD') ?: '';
+        if (empty($keyA)) {
+            return null;
+        }
+
+        $keyFilePath = $_ENV['ENCRYPTION_KEY_FILE_OLD'] ?? getenv('ENCRYPTION_KEY_FILE_OLD') ?: '';
+        if (!empty($keyFilePath) && is_readable($keyFilePath)) {
+            $keyB = trim(file_get_contents($keyFilePath));
+        } else {
+            $keyB = $_ENV['ENCRYPTION_KEY_B_OLD'] ?? getenv('ENCRYPTION_KEY_B_OLD') ?: '';
+        }
+
+        if (empty($keyB)) {
+            return null;
+        }
+
+        $derived = hash_hkdf('sha256', $keyA . $keyB, 32, 'basefare-crm-card-encryption');
+        return ($derived === false || strlen($derived) !== 32) ? null : $derived;
     }
 }
