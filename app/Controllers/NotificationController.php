@@ -136,41 +136,6 @@ class NotificationController
         return !empty($body['csrf_token']) && $body['csrf_token'] === ($_SESSION['csrf_token'] ?? '');
     }
 
-    // =========================================================================
-    // EDGE-BLOCK BEACON — GET /api/edge-log
-    // =========================================================================
-
-    /**
-     * Client-side beacon fired when the hosting layer 403s a request before it
-     * reaches PHP. Blocked requests leave no server-side trace (they never
-     * execute our code, and shared hosting hides the web server's own logs), so
-     * the page that observed the block reports it here. GET because only POSTs
-     * are being eaten. This builds the audit trail we otherwise cannot get:
-     * who was blocked, when, on which URL, and whether the retry got through.
-     */
-    public function edgeLog(Request $request, Response $response): Response
-    {
-        $q = $request->getQueryParams();
-        try {
-            \Illuminate\Database\Capsule\Manager::table('activity_log')->insert([
-                'user_id'     => (int) ($_SESSION['user_id'] ?? 0) ?: null,
-                'action'      => 'edge_block_reported',
-                'entity_type' => 'http',
-                'entity_id'   => null,
-                'details'     => json_encode([
-                    'status'  => mb_substr((string) ($q['s'] ?? ''), 0, 12),
-                    'url'     => mb_substr((string) ($q['u'] ?? ''), 0, 150),
-                    'attempt' => (int) ($q['a'] ?? 0),
-                ]),
-                'ip_address'  => $_SERVER['REMOTE_ADDR'] ?? null,
-                'created_at'  => date('Y-m-d H:i:s'),
-            ]);
-        } catch (\Throwable $e) {
-            error_log('[NotificationController] edgeLog insert failed: ' . $e->getMessage());
-        }
-        return $this->json($response, ['ok' => true]);
-    }
-
     private function json(Response $response, array $data, int $status = 200): Response
     {
         $response->getBody()->write(json_encode($data));

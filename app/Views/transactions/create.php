@@ -99,7 +99,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','Manr
 
   <!-- Flash Messages -->
   <?php if ($flashError): ?>
-  <div data-flash-error class="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm font-semibold text-red-700 flex items-center gap-2">
+  <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm font-semibold text-red-700 flex items-center gap-2">
     <span class="material-symbols-outlined text-base">error</span> <?= htmlspecialchars($flashError) ?>
   </div>
   <?php endif; ?>
@@ -557,6 +557,5 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','Manr
 <script>
 <?php require __DIR__ . '/create_js.php'; ?>
 </script>
-<?php require __DIR__ . '/../partials/txn_resilient_submit.php'; ?>
 </body>
 </html>

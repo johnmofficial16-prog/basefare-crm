@@ -143,80 +143,6 @@ class TransactionController
     }
 
     // =========================================================================
-    // WAF SHIELD — decode fields the form base64-encodes in transit
-    // =========================================================================
-
-    /**
-     * Fields the create/edit forms wrap as "b64:<base64>" before POSTing.
-     *
-     * WHY: Hostinger's web-application firewall inspects POST bodies before PHP
-     * ever runs and 403s anything resembling an attack signature. Ordinary
-     * booking content trips it — free-text remarks, quotes in names, JSON blobs
-     * — which is how a manager's legitimate save died with a bare LiteSpeed
-     * "403 Forbidden" while another manager's save (different words) went
-     * through. We can't tune the WAF on shared hosting, but we own both ends of
-     * the form, so the risky free-text/JSON fields travel base64-encoded and are
-     * decoded here, immediately after parsing, before any validation reads them.
-     *
-     * Backward compatible by design: values without the "b64:" marker pass
-     * through untouched, so an old cached form page keeps working.
-     */
-    private const B64_SHIELDED_FIELDS = [
-        'agent_notes',
-        'passengers_json',
-        'type_specific_data_json',
-        'fare_breakdown_json',
-        'additional_cards_json',
-    ];
-
-    /**
-     * TOTAL SHIELD — unpack __wafpack, the single opaque field the resilient
-     * submit packs the entire form into (see txn_resilient_submit.php:packForm).
-     *
-     * The whole body except csrf_token and file uploads travels as one base64
-     * blob so the hosting firewall has nothing to pattern-match. Reverse it here
-     * before anything reads $body. Runs ahead of decodeShieldedFields, which
-     * remains for backward compatibility with any already-open form.
-     *
-     * Strict base64 + valid-JSON required; a mangled pack is ignored rather than
-     * half-applied. Unpacked keys mirror PHP's own form parsing (name="x[]"
-     * arrives as an array under "x").
-     */
-    private static function decodeWafPack(array $body): array
-    {
-        $p = $body['__wafpack'] ?? null;
-        if (is_string($p) && str_starts_with($p, 'b64:')) {
-            $json = base64_decode(substr($p, 4), true);
-            if ($json !== false) {
-                $data = json_decode($json, true);
-                if (is_array($data)) {
-                    foreach ($data as $k => $v) {
-                        $body[$k] = $v;
-                    }
-                }
-            }
-        }
-        unset($body['__wafpack']);
-        return $body;
-    }
-
-    private static function decodeShieldedFields(array $body): array
-    {
-        foreach (self::B64_SHIELDED_FIELDS as $f) {
-            $v = $body[$f] ?? null;
-            if (is_string($v) && str_starts_with($v, 'b64:')) {
-                // strict mode: reject anything that isn't clean base64 rather
-                // than let a mangled payload through half-decoded.
-                $decoded = base64_decode(substr($v, 4), true);
-                if ($decoded !== false) {
-                    $body[$f] = $decoded;
-                }
-            }
-        }
-        return $body;
-    }
-
-    // =========================================================================
     // STORE  —  POST /transactions/create
     // =========================================================================
 
@@ -224,7 +150,7 @@ class TransactionController
     {
         $agentId = $_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'agent';
-        $body    = self::decodeShieldedFields(self::decodeWafPack((array) $request->getParsedBody()));
+        $body    = (array) $request->getParsedBody();
 
         if ($userRole === User::ROLE_CSA) {
             $_SESSION['flash_error'] = 'Access denied. CSA cannot create transactions.';
@@ -466,8 +392,7 @@ class TransactionController
     public function update(Request $request, Response $response, array $args): Response
     {
         $id   = (int)$args['id'];
-        // Decode before anything reads $body — total shield then legacy shield.
-        $body = self::decodeShieldedFields(self::decodeWafPack((array) $request->getParsedBody()));
+        $body = (array) $request->getParsedBody();
         $userRole = $_SESSION['role'] ?? 'agent';
         $isAdmin  = ($userRole === User::ROLE_ADMIN);
 

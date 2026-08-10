@@ -293,7 +293,6 @@ $app->group('/reminders', function ($group) {
 // ==========================================================================
 $app->group('', function ($group) {
     $group->get('/api/notifications',              [NotificationController::class, 'feed']);
-    $group->get('/api/edge-log',                   [NotificationController::class, 'edgeLog']); // hosting-layer 403 telemetry
     $group->get('/notifications',                  [NotificationController::class, 'index']);
     $group->post('/notifications/{id:[0-9]+}/read',[NotificationController::class, 'markRead']);
     $group->post('/notifications/read-all',        [NotificationController::class, 'markAllRead']);
