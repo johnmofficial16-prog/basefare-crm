@@ -114,6 +114,32 @@ class AuthController
             $_SESSION['active_session_id'] = session_id(); // Cache it in session to save DB queries
             $_SESSION['last_activity'] = time(); // Initialize inactivity timer
 
+            // ── Audit: record the successful login ──────────────────────────
+            // Until now nothing recorded a successful login anywhere: logout was
+            // logged, failures went to `login_attempts` (and were cleared on
+            // success), and `active_session_id` keeps no history. That made
+            // "who actually logged in on date X" unanswerable, so attendance
+            // reporting had to fall back on clock-in as a proxy.
+            //
+            // Best-effort by design — a logging failure must never stop someone
+            // signing in.
+            try {
+                \Illuminate\Database\Capsule\Manager::table('activity_log')->insert([
+                    'user_id'     => $user->id,
+                    'action'      => 'login',
+                    'entity_type' => 'users',
+                    'entity_id'   => $user->id,
+                    'details'     => json_encode([
+                        'role'       => $user->role,
+                        'user_agent' => mb_substr($userAgent, 0, 255),
+                    ]),
+                    'ip_address'  => $ip,
+                    'created_at'  => date('Y-m-d H:i:s'),
+                ]);
+            } catch (\Throwable $e) {
+                error_log('[AuthController] login activity_log insert failed: ' . $e->getMessage());
+            }
+
             // Auto-redirect mobile admins to the mobile panel
             if ($redirect === '/dashboard' && $user->role === \App\Models\User::ROLE_ADMIN) {
                 $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';

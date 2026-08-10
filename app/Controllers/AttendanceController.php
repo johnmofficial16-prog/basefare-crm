@@ -254,7 +254,23 @@ class AttendanceController
             }
         }
 
-        $result = $this->service->adminClockIn($adminId, $agentId, $ip);
+        // A reason is mandatory. Clocking someone in on their behalf produces an
+        // attendance record the agent never created — the July 2026 review found
+        // most of one team's month was recorded this way with no stated cause and
+        // no way to tell it apart from a real clock-in. Late-login overrides have
+        // always demanded a reason; this now matches.
+        $reason = trim((string)($body['reason'] ?? ''));
+        if (mb_strlen($reason) < 5) {
+            return $this->jsonResponse($response, [
+                'success' => false,
+                'message' => 'A reason is required (min 5 characters) — e.g. "agent phone died", "network outage at desk".',
+            ], 422);
+        }
+        if (mb_strlen($reason) > 255) {
+            $reason = mb_substr($reason, 0, 255);
+        }
+
+        $result = $this->service->adminClockIn($adminId, $agentId, $ip, $reason);
         return $this->jsonResponse($response, $result, $result['success'] ? 200 : 422);
     }
 

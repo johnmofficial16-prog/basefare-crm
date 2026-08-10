@@ -533,7 +533,12 @@ class AttendanceService
     /**
      * P1 #10 — Admin manually clocks in an agent, bypassing all rules.
      */
-    public function adminClockIn(int $adminId, int $agentId, string $ip): array
+    /**
+     * @param string $reason  Why the session is being opened on the agent's behalf.
+     *                        Required — see AttendanceController::adminClockIn, which
+     *                        rejects an empty or too-short reason before we get here.
+     */
+    public function adminClockIn(int $adminId, int $agentId, string $ip, string $reason = ''): array
     {
         $admin = User::find($adminId);
         if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
@@ -555,7 +560,13 @@ class AttendanceService
         $schedStart = $shift ? $shift->shift_start : '09:00:00';
         $schedEnd   = $shift ? $shift->shift_end : '18:00:00';
 
-        $result = $this->createSession($agentId, $schedStart, $schedEnd, 0, $ip, 'admin-manual');
+        // 'admin-manual' is still written to user_agent for backward compatibility
+        // (older reports and scripts key off it); created_via/created_by_user_id are
+        // the fields to read from here on.
+        $result = $this->createSession(
+            $agentId, $schedStart, $schedEnd, 0, $ip, 'admin-manual',
+            AttendanceSession::VIA_ADMIN, $adminId, ($reason !== '' ? $reason : null)
+        );
 
         if ($result['success']) {
             Capsule::table('activity_log')->insert([
@@ -563,7 +574,11 @@ class AttendanceService
                 'action'      => 'admin_clock_in',
                 'entity_type' => 'attendance_sessions',
                 'entity_id'   => $result['session']->id ?? null,
-                'details'     => json_encode(['agent_id' => $agentId, 'agent_name' => $agent->name]),
+                'details'     => json_encode([
+                    'agent_id'   => $agentId,
+                    'agent_name' => $agent->name,
+                    'reason'     => $reason,
+                ]),
                 'ip_address'  => $ip,
                 'created_at'  => date('Y-m-d H:i:s'),
             ]);
@@ -897,7 +912,10 @@ class AttendanceService
                 $q->where('date', $today)
                   ->orWhere('status', AttendanceSession::STATUS_ACTIVE);
             })
-            ->with(['breaks', 'user'])
+            // createdBy is eager-loaded so the live board can name whoever opened
+            // a session on an agent's behalf without an N+1. Harmless before the
+            // 2026_08_03 migration: the FK is simply absent, so no query is issued.
+            ->with(['breaks', 'user', 'createdBy'])
             ->orderBy('id', 'asc') // oldest first so active (created later) overwrites completed
             ->get();
 
@@ -976,11 +994,46 @@ class AttendanceService
     /**
      * Create a new attendance session record in the database.
      */
-    private function createSession(int $userId, string $schedStart, string $schedEnd, int $lateMins, string $ip, string $ua): array
+    /** Cached per-process: has the clock-in-source migration been applied here? */
+    private static ?bool $hasSourceCols = null;
+
+    /**
+     * Whether attendance_sessions carries created_via / created_by_user_id yet.
+     * Checked once per process and cached, so this costs at most one query.
+     * Returns false on any error — the caller then simply omits the columns.
+     */
+    private static function hasClockInSourceColumns(): bool
     {
+        if (self::$hasSourceCols === null) {
+            try {
+                self::$hasSourceCols = Capsule::schema()->hasColumn('attendance_sessions', 'created_via');
+            } catch (\Throwable $e) {
+                self::$hasSourceCols = false;
+            }
+        }
+        return self::$hasSourceCols;
+    }
+
+    /**
+     * @param string   $via       AttendanceSession::VIA_SELF | VIA_ADMIN. Defaults to
+     *                            self so the existing agent clock-in call sites are
+     *                            unchanged; only adminClockIn() passes VIA_ADMIN.
+     * @param int|null $byUserId  The admin/manager who opened it, when $via is admin.
+     */
+    private function createSession(
+        int $userId,
+        string $schedStart,
+        string $schedEnd,
+        int $lateMins,
+        string $ip,
+        string $ua,
+        string $via = AttendanceSession::VIA_SELF,
+        ?int $byUserId = null,
+        ?string $reason = null
+    ): array {
         try {
             // P1 #24 — Wrap in explicit transaction so SELECT FOR UPDATE actually acquires a row lock
-            $session = Capsule::connection()->transaction(function () use ($userId, $schedStart, $schedEnd, $lateMins, $ip, $ua) {
+            $session = Capsule::connection()->transaction(function () use ($userId, $schedStart, $schedEnd, $lateMins, $ip, $ua, $via, $byUserId, $reason) {
                 // Check for existing active session under lock — prevents race on rapid double-click
                 $locked = Capsule::connection()->select(
                     'SELECT id FROM attendance_sessions WHERE user_id = ? AND status = ? FOR UPDATE',
@@ -990,17 +1043,28 @@ class AttendanceService
                     throw new \RuntimeException('already_active');
                 }
 
-                $sess = AttendanceSession::create([
-                    'user_id'          => $userId,
-                    'clock_in'         => date('Y-m-d H:i:s'),
-                    'scheduled_start'  => $schedStart,
-                    'scheduled_end'    => $schedEnd,
-                    'late_minutes'     => $lateMins,
-                    'status'           => AttendanceSession::STATUS_ACTIVE,
-                    'ip_address'       => $ip,
-                    'user_agent'       => $ua,
-                    'date'             => date('Y-m-d'),
-                ]);
+                $attrs = [
+                    'user_id'         => $userId,
+                    'clock_in'        => date('Y-m-d H:i:s'),
+                    'scheduled_start' => $schedStart,
+                    'scheduled_end'   => $schedEnd,
+                    'late_minutes'    => $lateMins,
+                    'status'          => AttendanceSession::STATUS_ACTIVE,
+                    'ip_address'      => $ip,
+                    'user_agent'      => $ua,
+                    'date'            => date('Y-m-d'),
+                ];
+
+                // Only set the source columns once the 2026_08_03 migration has
+                // run. Without this guard, deploying the code ahead of the
+                // migration would make every clock-in fail on an unknown column.
+                if (self::hasClockInSourceColumns()) {
+                    $attrs['created_via']        = $via;
+                    $attrs['created_by_user_id'] = $byUserId;
+                    $attrs['created_reason']     = $reason;
+                }
+
+                $sess = AttendanceSession::create($attrs);
 
                 // Log inside transaction — rolls back with the session if DB fails
                 Capsule::table('activity_log')->insert([
@@ -1008,7 +1072,12 @@ class AttendanceService
                     'action'      => 'clock_in',
                     'entity_type' => 'attendance_sessions',
                     'entity_id'   => $sess->id,
-                    'details'     => json_encode(['late_minutes' => $lateMins, 'scheduled_start' => $schedStart]),
+                    'details'     => json_encode([
+                        'late_minutes'    => $lateMins,
+                        'scheduled_start' => $schedStart,
+                        'created_via'     => $via,
+                        'created_by'      => $byUserId,
+                    ]),
                     'ip_address'  => $ip,
                     'created_at'  => date('Y-m-d H:i:s'),
                 ]);

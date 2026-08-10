@@ -147,6 +147,26 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               <span class="text-red-500 font-semibold"> • <?= $item['session']->late_minutes ?>m late</span>
             <?php endif; ?>
           </p>
+          <?php
+            // Flag sessions the agent did not open themselves. Without this the
+            // board reads identically whether someone logged in or was clocked in
+            // by a manager — which is exactly how a headcount overstates presence.
+            $sess    = $item['session'];
+            $byAdmin = $sess->wasAdminCreated();
+            $byWhom  = $sess->createdBy->name ?? null;
+            $whyText = $sess->created_reason ?? null;
+            $tip     = 'Clocked in by ' . ($byWhom ?: 'an admin/manager')
+                     . ' — the agent did not clock in themselves'
+                     . ($whyText ? ' · Reason: ' . $whyText : '');
+          ?>
+          <?php if ($byAdmin): ?>
+          <p class="mt-1">
+            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700"
+                  title="<?= htmlspecialchars($tip) ?>">
+              by <?= htmlspecialchars($byWhom ?: 'admin') ?>
+            </span>
+          </p>
+          <?php endif; ?>
         </div>
         <button onclick="manualClockOut(<?= $item['agent']->id ?>, '<?= addslashes($item['agent']->name) ?>')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-all" title="Manual Clock Out">
           <span class="material-symbols-outlined text-sm">logout</span>
@@ -361,11 +381,23 @@ async function adminForceEndBreak(agentId, agentName) {
 }
 
 async function manualClockIn(agentId, agentName) {
-  if (!confirm('Manually clock in ' + agentName + '?')) return;
+  // A manual clock-in creates an attendance record the agent did not create
+  // themselves, so the reason is mandatory and is stored against the session.
+  const reason = prompt(
+    'Clocking in ' + agentName + ' manually.\n\n'
+    + 'This records attendance the agent did not clock in for themselves, and is\n'
+    + 'logged against your name. Why is it needed?\n\n'
+    + '(e.g. "agent PC would not boot", "power cut at desk", "clocked in late after approval")'
+  );
+  if (reason === null) return;                       // cancelled
+  if (reason.trim().length < 5) {
+    alert('A reason of at least 5 characters is required.');
+    return;
+  }
   const r = await fetch('/attendance/admin/clock-in', {
     method: 'POST',
     headers: {'Content-Type':'application/json', 'X-CSRF-Token': csrfToken},
-    body: JSON.stringify({agent_id: agentId})
+    body: JSON.stringify({agent_id: agentId, reason: reason.trim()})
   });
   const data = await r.json();
   alert(data.message);

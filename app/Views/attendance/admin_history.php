@@ -106,6 +106,19 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
               };
             ?>
             <span class="inline-block px-3 py-1 rounded-full text-xs font-bold <?= $sc ?>"><?= ucfirst(str_replace('_', ' ', $s['status'] ?? 'unknown')) ?></span>
+            <?php
+              // Was this session opened by someone other than the agent? Reads the
+              // new created_via column, falling back to the legacy user_agent marker
+              // so rows predating the migration still show correctly.
+              $adminMade = (($s['created_via'] ?? '') === 'admin')
+                        || (($s['user_agent'] ?? '') === 'admin-manual');
+              if ($adminMade):
+            ?>
+            <div class="mt-1">
+              <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700"
+                    title="Opened by an admin or manager — the agent did not clock in themselves">by admin</span>
+            </div>
+            <?php endif; ?>
           </td>
           <td class="py-3 px-6 text-center">
             <?php 

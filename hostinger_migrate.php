@@ -46,6 +46,7 @@ $files = [
     __DIR__ . '/database/migrations/2026_06_24_marketing_spend.sql',
     __DIR__ . '/database/migrations/2026_06_26_chargeback_refunds.sql',
     __DIR__ . '/database/migrations/2026_07_24_booking_reminders.sql',
+    __DIR__ . '/database/migrations/2026_08_03_clockin_source.sql',
     __DIR__ . '/database/migrations/2026_08_10_manual_etickets.sql',
 ];
 

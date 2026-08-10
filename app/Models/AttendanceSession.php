@@ -24,7 +24,14 @@ class AttendanceSession extends Model
         'ip_address',
         'user_agent',
         'date',
+        'created_via',
+        'created_by_user_id',
+        'created_reason',
     ];
+
+    // How the session came to exist
+    const VIA_SELF  = 'self';   // the agent authenticated and clocked in
+    const VIA_ADMIN = 'admin';  // an admin/manager opened it on their behalf
 
     // Status constants
     const STATUS_ACTIVE         = 'active';
@@ -54,6 +61,28 @@ class AttendanceSession extends Model
     public function overrideAdmin()
     {
         return $this->belongsTo(User::class, 'override_by');
+    }
+
+    /**
+     * The admin/manager who opened this session on the agent's behalf.
+     * NULL for self clock-ins, and for pre-2026-08 admin sessions (the actor
+     * for those lives in activity_log, not here).
+     */
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    /**
+     * True when someone other than the agent opened this session.
+     *
+     * Falls back to the legacy `user_agent` marker so historic rows still
+     * report correctly even if the backfill has not been run in this
+     * environment.
+     */
+    public function wasAdminCreated(): bool
+    {
+        return $this->created_via === self::VIA_ADMIN || $this->user_agent === 'admin-manual';
     }
 
     // ---- Scopes ----
