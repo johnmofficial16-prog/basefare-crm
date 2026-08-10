@@ -49,31 +49,51 @@ class ETicketService
     public function create(array $data, int $agentId): ETicket
     {
         $txnId = (int)($data['transaction_id'] ?? 0);
-        $txn   = Transaction::findOrFail($txnId);
 
-        if (!$this->canIssue($txn)) {
-            throw new \RuntimeException(
-                'E-Ticket cannot be issued: Transaction must be Approved and Charged (gateway charge successful).'
-            );
+        // MANUAL MODE — no linked transaction. The role gate (manager/admin
+        // only) lives in ETicketController::store; the service just needs the
+        // caller to have set the flag explicitly, so a stray transaction_id=0
+        // from an old form can never silently create an unlinked ticket.
+        // Born of the Aug 2026 hosting incident: transaction saves were being
+        // blocked upstream, and with e-tickets hard-wired to a logged
+        // transaction there was no way to send customers their tickets at all.
+        $isManual = $txnId === 0 && !empty($data['manual']);
+
+        if ($isManual) {
+            $txn = null;
+        } else {
+            $txn = Transaction::findOrFail($txnId);
+
+            if (!$this->canIssue($txn)) {
+                throw new \RuntimeException(
+                    'E-Ticket cannot be issued: Transaction must be Approved and Charged (gateway charge successful).'
+                );
+            }
+
+            if ($this->existsForTransaction($txnId)) {
+                throw new \RuntimeException('An e-ticket already exists for Transaction #' . $txnId . '. Use resend instead.');
+            }
         }
 
-        if ($this->existsForTransaction($txnId)) {
-            throw new \RuntimeException('An e-ticket already exists for Transaction #' . $txnId . '. Use resend instead.');
-        }
-
-        return DB::connection()->transaction(function () use ($data, $agentId, $txn) {
+        return DB::connection()->transaction(function () use ($data, $agentId, $txn, $isManual) {
             $ticketData = $data['ticket_data'] ?? [];
+            // Manual tickets get an M-series number (random suffix — there is no
+            // transaction id to derive from, and the eticket id doesn't exist
+            // until after this insert).
+            $manualSeries = 'BF-M' . strtoupper(bin2hex(random_bytes(2)));
             foreach ($ticketData as $i => &$pax) {
                 if (empty($pax['ticket_number'])) {
-                    $pax['ticket_number'] = 'BF-' . str_pad($txn->id, 6, '0', STR_PAD_LEFT) . '-' . ($i + 1);
+                    $pax['ticket_number'] = $txn
+                        ? 'BF-' . str_pad($txn->id, 6, '0', STR_PAD_LEFT) . '-' . ($i + 1)
+                        : $manualSeries . '-' . ($i + 1);
                 }
             }
             unset($pax);
 
             $eticket = ETicket::create([
                 'token'            => $this->generateToken(),
-                'transaction_id'   => $txn->id,
-                'acceptance_id'    => $txn->acceptance_id ?: null,
+                'transaction_id'   => $txn?->id,
+                'acceptance_id'    => $txn?->acceptance_id ?: null,
                 'agent_id'         => $agentId,
                 'customer_name'    => trim($data['customer_name']),
                 'customer_email'   => strtolower(trim($data['customer_email'])),
@@ -95,13 +115,18 @@ class ETicketService
                 'status'           => ETicket::STATUS_DRAFT,
                 'email_status'     => ETicket::EMAIL_PENDING,
                 // Miles / Award booking
-                'is_miles_booking' => (bool)($txn->is_miles_booking ?? false),
-                'miles_used'       => $txn->miles_used ?? null,
-                'miles_program'    => $txn->miles_program ?? null,
+                'is_miles_booking' => (bool)($txn?->is_miles_booking ?? false),
+                'miles_used'       => $txn?->miles_used ?? null,
+                'miles_program'    => $txn?->miles_program ?? null,
             ]);
 
-            RecordNote::log('eticket', $eticket->id, $agentId,
-                !empty($data['agent_notes']) ? $data['agent_notes'] : 'E-Ticket created.', 'created');
+            // The audit note names manual issuance explicitly — a permission-
+            // gated bypass must be visible in the record's timeline.
+            $noteText = !empty($data['agent_notes']) ? $data['agent_notes'] : 'E-Ticket created.';
+            if ($isManual) {
+                $noteText = '[MANUAL E-TICKET — no linked booking] ' . $noteText;
+            }
+            RecordNote::log('eticket', $eticket->id, $agentId, $noteText, 'created');
 
             return $eticket;
         });

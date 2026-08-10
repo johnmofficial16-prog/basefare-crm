@@ -92,9 +92,26 @@ tailwind.config = {
     <p id="autofill-msg" class="text-xs text-slate-400 mt-2"></p>
   </div>
 
+  <?php if (in_array($userRole, ['admin', 'manager'], true)): ?>
+  <!-- Manual mode — manager/admin escape hatch when a booking can't be logged -->
+  <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
+    <label class="flex items-start gap-3 cursor-pointer">
+      <input type="checkbox" id="manual-mode-cb" class="mt-1 w-4 h-4 accent-amber-600"
+             onchange="toggleManualMode(this.checked)">
+      <span class="text-sm text-amber-900">
+        <b>Manual e-ticket — no linked booking</b> (manager/admin only)<br>
+        <span class="text-xs text-amber-700">For when the transaction can't be logged yet.
+        Every field below must be filled by hand; ticket numbers get an M-series.
+        The e-ticket's activity log will be marked as manually issued.</span>
+      </span>
+    </label>
+  </div>
+  <?php endif; ?>
+
   <form method="POST" action="/etickets/create" id="et-form">
     <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
     <input type="hidden" name="transaction_id" id="f-transaction_id" value="">
+    <input type="hidden" name="manual_mode" id="f-manual_mode" value="">
     <input type="hidden" name="flight_data_json" id="f-flight_data_json" value="">
     <input type="hidden" name="fare_breakdown_json" id="f-fare_breakdown_json" value="">
     <input type="hidden" name="extra_data_json" id="f-extra_data_json" value="">
@@ -418,6 +435,29 @@ function renderFlightDisplay(flightData) {
 }
 
 window.addEventListener('DOMContentLoaded', () => { addPax(); });
+
+// ── Manual mode (manager/admin) ─────────────────────────────────────────────
+// Ticking the box sets the flag the server checks (role re-verified there) and
+// clears + dims the transaction picker so it's obvious no booking is linked.
+function toggleManualMode(on) {
+  const flag = document.getElementById('f-manual_mode');
+  if (flag) flag.value = on ? '1' : '';
+  if (on) {
+    const sel = document.getElementById('txn-selector');
+    if (sel) sel.value = '';
+    const hid = document.getElementById('f-transaction_id');
+    if (hid) hid.value = '';
+  }
+  document.querySelectorAll('#txn-selector, #btn-autofill').forEach(el => {
+    el.disabled = on;
+    el.style.opacity = on ? '.45' : '';
+    el.style.pointerEvents = on ? 'none' : '';
+  });
+  const msg = document.getElementById('autofill-msg');
+  if (msg) msg.textContent = on
+    ? 'Manual mode — no booking will be linked. Fill every field by hand.'
+    : '';
+}
 </script>
 
 </body>

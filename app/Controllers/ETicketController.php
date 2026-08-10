@@ -141,8 +141,27 @@ class ETicketController
             $extraData = json_decode($body['extra_data_json'], true) ?: null;
         }
 
+        // ── Manual mode (no linked transaction) — manager/admin only ────────
+        // Escape hatch for when a transaction cannot be logged (e.g. the
+        // hosting layer blocking saves, Aug 2026) but the customer still needs
+        // their ticket. Requires BOTH the explicit checkbox AND the role, so an
+        // agent's form with a missing transaction fails loudly instead of
+        // quietly creating an unlinked ticket.
+        $txnId    = (int)($body['transaction_id'] ?? 0);
+        $isManual = !empty($body['manual_mode']);
+
+        if ($txnId === 0 && !$isManual) {
+            return $response->withHeader('Location', '/etickets/create?error='
+                . urlencode('Select a transaction to auto-fill, or tick "Manual e-ticket" (managers/admins only).'))->withStatus(302);
+        }
+        if ($isManual && !in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER], true)) {
+            return $response->withHeader('Location', '/etickets/create?error='
+                . urlencode('Manual e-tickets (no linked booking) can only be issued by a manager or admin.'))->withStatus(302);
+        }
+
         $data = [
-            'transaction_id' => (int)($body['transaction_id'] ?? 0),
+            'transaction_id' => $txnId,
+            'manual'         => $isManual && $txnId === 0,
             'customer_name'  => $body['customer_name']  ?? '',
             'customer_email' => $body['customer_email'] ?? '',
             'customer_phone' => $body['customer_phone'] ?? '',

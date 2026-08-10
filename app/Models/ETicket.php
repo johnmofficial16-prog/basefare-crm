@@ -307,11 +307,15 @@ class ETicket extends Model
 
     /**
      * Auto-generate a ticket number for a passenger if none was provided.
-     * Format: BF-{transaction_id}-{index+1}
+     * Format: BF-{transaction_id}-{index+1}; manual e-tickets (no linked
+     * transaction) fall back to the eticket's own id in an M-series.
      */
     public function autoTicketNumber(int $paxIndex): string
     {
-        return 'BF-' . str_pad($this->transaction_id, 6, '0', STR_PAD_LEFT) . '-' . ($paxIndex + 1);
+        $base = $this->transaction_id
+            ? str_pad($this->transaction_id, 6, '0', STR_PAD_LEFT)
+            : 'M' . str_pad((string) $this->id, 5, '0', STR_PAD_LEFT);
+        return 'BF-' . $base . '-' . ($paxIndex + 1);
     }
 
     /**
