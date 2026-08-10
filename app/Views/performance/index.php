@@ -34,6 +34,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
 <main class="ml-60 pt-8 pb-20 px-10">
 
+  <?php require __DIR__ . '/../partials/performance_hold_notice.php'; ?>
+
   <!-- Header -->
   <div class="flex items-start justify-between mb-6 gap-4 flex-wrap">
     <div>

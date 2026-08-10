@@ -9,6 +9,7 @@ use App\Models\Transaction;
 use App\Models\AcceptanceRequest;
 use App\Models\User;
 use App\Services\ShiftService;
+use App\Services\PerformanceHold;
 use Carbon\Carbon;
 
 /**
@@ -54,6 +55,7 @@ class PerformanceController
             $netTotals  = $this->agentNetTotals($start, $end);
             [$rank, $rankTotal, $myGross, $myNet] = $this->rankFor($userId, $netTotals);
             $myBookings = count($rows);
+            $holdNotice = PerformanceHold::notice();
 
             ob_start();
             require __DIR__ . '/../Views/performance/agent.php';
@@ -74,6 +76,8 @@ class PerformanceController
             'date_from' => $q['date_from'] ?? null,
             'date_to'   => $q['date_to']   ?? null,
         ], fn($v) => $v !== null && $v !== ''));
+
+        $holdNotice = PerformanceHold::notice();
 
         ob_start();
         require __DIR__ . '/../Views/performance/index.php';
@@ -121,7 +125,8 @@ class PerformanceController
         $selFrom  = $q['date_from'] ?? '';
         $selTo    = $q['date_to']   ?? '';
 
-        $rows = $this->bookingDetail([$targetId], $start, $end);
+        $rows       = $this->bookingDetail([$targetId], $start, $end);
+        $holdNotice = PerformanceHold::notice();
 
         ob_start();
         require __DIR__ . '/../Views/performance/detail.php';
@@ -143,10 +148,13 @@ class PerformanceController
         if (empty($agentIds)) {
             return [];
         }
-        $txns = Transaction::with('agent')
-            ->whereIn('agent_id', $agentIds)
-            ->where('status', Transaction::STATUS_APPROVED)
-            ->when($start, fn($qq) => $qq->whereBetween('created_at', [$start, $end]))
+        $txns = PerformanceHold::apply(
+                Transaction::with('agent')
+                    ->whereIn('agent_id', $agentIds)
+                    ->where('status', Transaction::STATUS_APPROVED)
+                    ->when($start, fn($qq) => $qq->whereBetween('created_at', [$start, $end])),
+                'created_at'
+            )
             ->orderByDesc('created_at')
             ->get();
 
@@ -180,9 +188,12 @@ class PerformanceController
             return [];
         }
 
-        $agg = Transaction::whereIn('agent_id', $agentIds)
-            ->where('status', Transaction::STATUS_APPROVED)
-            ->when($start, fn($qq) => $qq->whereBetween('created_at', [$start, $end]))
+        $agg = PerformanceHold::apply(
+                Transaction::whereIn('agent_id', $agentIds)
+                    ->where('status', Transaction::STATUS_APPROVED)
+                    ->when($start, fn($qq) => $qq->whereBetween('created_at', [$start, $end])),
+                'created_at'
+            )
             ->selectRaw('agent_id, SUM(profit_mco) AS gross, SUM(refund_mco_impact) AS impact')
             ->groupBy('agent_id')->get()->keyBy('agent_id');
 
@@ -234,10 +245,14 @@ class PerformanceController
 
         // ── Headers: names + scores + analysis only. No customer PII, no card data,
         //    no contact info, no PNRs, no per-booking amounts. ─────────────────────
+        // 'Net MCO' sits alongside the gross figure because the export previously
+        // shipped gross only — refunds were invisible to anyone analysing the CSV,
+        // even though the on-screen scoreboard shows both.
         $headers = [
             'Rank', 'Agent', 'Role',
             'Bookings', 'Approved', 'Pending', 'Voided',
-            'Acceptances', 'Revenue (Approved)', 'Profit MCO (Approved)', 'Avg Profit / Approved',
+            'Acceptances', 'Revenue (Approved)', 'Profit MCO (Approved)',
+            'Net MCO (After Refunds)', 'Avg Profit / Approved',
             'Currency',
         ];
 
@@ -255,6 +270,7 @@ class PerformanceController
                 $r['acceptances'],
                 number_format($r['revenue'], 2, '.', ''),
                 number_format($r['profit'], 2, '.', ''),
+                number_format($r['net'], 2, '.', ''),
                 number_format($r['avg_profit'], 2, '.', ''),
                 $r['currency'] ?? '',
             ];
@@ -377,8 +393,13 @@ class PerformanceController
         $ids = $agents->pluck('id')->all();
 
         // One grouped pass over transactions with conditional aggregates.
-        $txn = Transaction::whereIn('agent_id', $ids)
-            ->when($start, fn($qq) => $qq->whereBetween('created_at', [$start, $end]))
+        // PerformanceHold drops the merchant-held window for non-admin viewers —
+        // scoreboard only; the underlying records are untouched.
+        $txn = PerformanceHold::apply(
+                Transaction::whereIn('agent_id', $ids)
+                    ->when($start, fn($qq) => $qq->whereBetween('created_at', [$start, $end])),
+                'created_at'
+            )
             ->selectRaw(
                 "agent_id,
                  SUM(status <> 'voided')             AS bookings,
@@ -398,6 +419,9 @@ class PerformanceController
             ->keyBy('agent_id');
 
         // Approved (non-preauth) acceptances per agent.
+        // Acceptances are deliberately NOT held: the client's instruction is that
+        // only the performance score resets. Acceptance figures stay truthful here
+        // and everywhere else.
         $acc = AcceptanceRequest::whereIn('agent_id', $ids)
             ->where('status', AcceptanceRequest::STATUS_APPROVED)
             ->where('is_preauth', false)
