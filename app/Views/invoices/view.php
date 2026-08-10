@@ -74,8 +74,13 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <a href="/invoices" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:border-primary hover:text-primary transition-all text-sm shadow-sm">
         <span class="material-symbols-outlined text-base">arrow_back</span> Back
       </a>
-      <button type="button" onclick="downloadPdf()" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:border-primary hover:text-primary transition-all text-sm shadow-sm">
-        <span class="material-symbols-outlined text-base">download</span> PDF
+      <button type="button" onclick="window.printInvoice()" title="Opens the print dialog — choose &quot;Save as PDF&quot; for a sharp, selectable document"
+              class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary-container transition-all text-sm shadow-lg shadow-primary/20">
+        <span class="material-symbols-outlined text-base">print</span> Print / Save as PDF
+      </button>
+      <button type="button" onclick="downloadPdf()" title="Quick image-based download — lower quality, text not selectable"
+              class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:border-primary hover:text-primary transition-all text-sm shadow-sm">
+        <span class="material-symbols-outlined text-base">download</span> Quick PDF
       </button>
       <?php if ($isEditable): ?>
       <a href="/invoices/<?= $invoice->id ?>/edit" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:border-primary hover:text-primary transition-all text-sm shadow-sm">

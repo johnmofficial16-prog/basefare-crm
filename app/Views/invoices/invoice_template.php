@@ -56,8 +56,14 @@
 .inv-value { font-size: 13px; font-weight: 600; color: #1e293b; word-break: break-word; }
 .inv-value.mono { font-family: 'Courier New', monospace; letter-spacing: 1px; font-weight: 700; color: #0f1e3c; }
 
+/* Tables sit inside a wrapper that carries the border + radius.
+   border-radius is ignored on an element with border-collapse:collapse, so the
+   rounded corners declared directly on these tables never actually rendered —
+   they read as square boxes next to the rounded .inv-cell blocks. */
+.inv-table-wrap { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+
 /* Itinerary */
-.inv-itin { width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+.inv-itin { width: 100%; border-collapse: collapse; }
 .inv-itin th {
     background: #f8fafc; font-size: 9px; text-transform: uppercase; letter-spacing: .6px;
     color: #64748b; font-weight: 800; text-align: left; padding: 7px 12px;
@@ -66,7 +72,7 @@
 .inv-itin td.route { font-weight: 800; color: #0f1e3c; }
 
 /* Charges */
-.inv-fare { width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+.inv-fare { width: 100%; border-collapse: collapse; }
 .inv-fare td { padding: 10px 16px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #475569; }
 .inv-fare td:last-child { text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #1e293b; }
 .inv-fare tr.row-hide { display: none; }
@@ -82,6 +88,58 @@
     display: flex; align-items: center; justify-content: space-between; font-size: 10px; color: #94a3b8;
 }
 .inv-footer .brand { font-weight: 700; color: #0f1e3c; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PRINT
+   The document is produced as a real print (vector text, selectable and
+   sharp at any zoom) rather than a rasterised screenshot.
+   ───────────────────────────────────────────────────────────────────────── */
+@media print {
+    @page { size: A4 portrait; margin: 10mm; }
+
+    html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+    .no-print { display: none !important; }
+
+    #invoice-printable {
+        /* On paper this is the document, not a card floating on a page — the
+           shadow and rounded corners are screen affordances only. */
+        width: 100% !important;
+        max-width: 100% !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+    }
+
+    /* Browsers drop background colours when printing (including "Save as PDF"),
+       which would render the navy header and the dark total row white — with
+       their white text on top, i.e. invisible. Force them on so the output
+       doesn't depend on the user ticking "Background graphics". */
+    #invoice-printable,
+    #invoice-printable * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Keep logical blocks whole across a page boundary. */
+    .inv-section,
+    .inv-card-box,
+    .inv-footer      { page-break-inside: avoid; break-inside: avoid; }
+    .inv-itin tr,
+    .inv-fare tr     { page-break-inside: avoid; break-inside: avoid; }
+    .inv-section-title { page-break-after: avoid; break-after: avoid; }
+
+    /* Repeat the itinerary header when a long trip spills onto a second page. */
+    .inv-itin thead { display: table-header-group; }
+    .inv-fare tfoot { display: table-row-group; }
+
+    /* The muted greys read fine backlit on a screen but wash out on paper —
+       the footer contact details in particular were near-illegible at 10px. */
+    .inv-footer        { color: #475569 !important; font-size: 10.5px; }
+    .inv-section-title { color: #64748b !important; }
+    .inv-label         { color: #64748b !important; }
+    .inv-itin td       { color: #334155 !important; }
+    .inv-fare td       { color: #334155 !important; }
+    .inv-card-billing  { color: #475569 !important; }
+}
 </style>
 
 <div id="invoice-printable">
@@ -118,24 +176,28 @@
         <!-- Itinerary -->
         <div class="inv-section" id="sec_itinerary">
             <div class="inv-section-title">Itinerary</div>
-            <table class="inv-itin">
-                <thead><tr><th>Route</th><th>Flight</th><th>Date</th><th>Departs</th><th>Arrives</th></tr></thead>
-                <tbody id="inv_itin_rows"></tbody>
-            </table>
+            <div class="inv-table-wrap">
+                <table class="inv-itin">
+                    <thead><tr><th>Route</th><th>Flight</th><th>Date</th><th>Departs</th><th>Arrives</th></tr></thead>
+                    <tbody id="inv_itin_rows"></tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Charges -->
         <div class="inv-section">
             <div class="inv-section-title">Charges</div>
-            <table class="inv-fare">
-                <tbody>
-                    <tr id="row_airline"><td>Airline Charge</td><td id="inv_airline_charge">—</td></tr>
-                    <tr><td>Base Fare Service Charge</td><td id="inv_base_charge">—</td></tr>
-                </tbody>
-                <tfoot>
-                    <tr class="inv-fare-total"><td>Total Amount</td><td id="inv_total">—</td></tr>
-                </tfoot>
-            </table>
+            <div class="inv-table-wrap">
+                <table class="inv-fare">
+                    <tbody>
+                        <tr id="row_airline"><td>Airline Charge</td><td id="inv_airline_charge">—</td></tr>
+                        <tr><td>Base Fare Service Charge</td><td id="inv_base_charge">—</td></tr>
+                    </tbody>
+                    <tfoot>
+                        <tr class="inv-fare-total"><td>Total Amount</td><td id="inv_total">—</td></tr>
+                    </tfoot>
+                </table>
+            </div>
         </div>
 
         <!-- Payment card (holder + billing only) -->
@@ -230,43 +292,115 @@
     };
 
     /**
-     * Capture the full invoice document to an A4 PDF. Robust against the page
-     * being scrolled (the preview is sticky) and against the document being
-     * squeezed narrower than its natural width: we pin the element to 760px and
-     * scroll to top before handing a correctly-sized window to html2canvas, so
-     * no part of the document is clipped or rendered blank.
+     * PRIMARY OUTPUT — print the invoice as a real document.
+     *
+     * Renders into an isolated off-screen iframe rather than printing the page,
+     * so none of the app chrome (sidebar, toolbars, form) can leak in. Same
+     * approach as payroll/slip_maker.php, including the webfont wait: printing
+     * before fonts resolve produces fallback glyphs, and a hard timeout covers
+     * the case where fonts.ready never settles.
+     *
+     * Output is vector — sharp at any zoom, selectable and searchable — unlike
+     * the html2canvas path below, which can only ever produce a bitmap.
+     */
+    window.printInvoice = function () {
+        const el = document.getElementById('invoice-printable');
+        if (!el) { alert('Nothing to print yet.'); return; }
+
+        const styles = [...document.querySelectorAll('style')].map(s => s.outerHTML).join('');
+        const links  = [...document.querySelectorAll('link[rel="stylesheet"]')].map(l => l.outerHTML).join('');
+
+        const old = document.getElementById('__invPrintFrame');
+        if (old) old.remove();
+
+        const f = document.createElement('iframe');
+        f.id = '__invPrintFrame';
+        // Off-screen rather than display:none, so layout and fonts still resolve.
+        f.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;height:297mm;border:0';
+        document.body.appendChild(f);
+
+        const doc = f.contentWindow.document;
+        doc.open();
+        doc.write(
+            '<!DOCTYPE html><html><head><meta charset="utf-8">' + links + styles +
+            '<style>' +
+              '@page{size:A4 portrait;margin:10mm}' +
+              'html,body{margin:0;padding:0;background:#fff}' +
+              '#invoice-printable{width:100%!important;max-width:100%!important;' +
+                'box-shadow:none!important;border-radius:0!important}' +
+              '#invoice-printable,#invoice-printable *{' +
+                '-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}' +
+            '</style></head><body>' + el.outerHTML + '</body></html>'
+        );
+        doc.close();
+
+        const go = () => {
+            try { f.contentWindow.focus(); f.contentWindow.print(); }
+            catch (e) { console.error(e); }
+            setTimeout(() => f.remove(), 1000);
+        };
+        let done = false;
+        const fire = () => { if (done) return; done = true; go(); };
+        try {
+            doc.fonts && doc.fonts.ready
+                ? doc.fonts.ready.then(() => setTimeout(fire, 150))
+                : setTimeout(fire, 500);
+        } catch (e) { setTimeout(fire, 500); }
+        setTimeout(fire, 1500); // hard fallback
+    };
+
+    /**
+     * SECONDARY — one-click bitmap PDF via html2canvas.
+     *
+     * Kept for users who want a file without the print dialog, but it is
+     * inherently a photograph of the document: text is not selectable and
+     * sharpness is capped by the capture resolution. printInvoice() is better
+     * wherever the print dialog is acceptable.
+     *
+     * Tuned since the original: PNG instead of JPEG (JPEG rings badly around
+     * white text on the navy header), scale 3 rather than 2 (~300 DPI at A4
+     * instead of ~199), and the screen-only shadow and rounded corners are
+     * stripped during capture so they aren't baked into the page.
      */
     window.captureInvoicePdf = async function (filename) {
         const el = document.getElementById('invoice-printable');
         if (!el || typeof html2pdf === 'undefined') return;
 
         const prevScroll = window.scrollY;
-        const prevWidth  = el.style.width;
-        const prevMax    = el.style.maxWidth;
+        const prev = {
+            width: el.style.width, maxWidth: el.style.maxWidth,
+            shadow: el.style.boxShadow, radius: el.style.borderRadius
+        };
 
-        el.style.width    = '760px';
-        el.style.maxWidth = 'none';
+        el.style.width        = '760px';
+        el.style.maxWidth     = 'none';
+        el.style.boxShadow    = 'none';
+        el.style.borderRadius = '0';
         window.scrollTo(0, 0);
         // Let layout settle (web fonts / reflow) before snapshotting.
-        await new Promise(r => setTimeout(r, 80));
+        await new Promise(r => setTimeout(r, 120));
 
         try {
             await html2pdf().set({
-                margin:   8,
+                margin:   10,
                 filename: filename,
-                image:    { type: 'jpeg', quality: 0.98 },
+                image:    { type: 'png' },
                 html2canvas: {
-                    scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff',
+                    scale: 3, useCORS: true, logging: false, backgroundColor: '#ffffff',
                     scrollX: 0, scrollY: 0,
                     windowWidth: 820, width: 760,
                     windowHeight: el.scrollHeight + 40
                 },
-                jsPDF:     { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                jsPDF:     { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+                // 'avoid-all' fought against sensible breaks on long itineraries;
+                // css + legacy honours the page-break rules in the stylesheet.
+                pagebreak: { mode: ['css', 'legacy'] }
             }).from(el).save();
         } finally {
-            el.style.width    = prevWidth;
-            el.style.maxWidth = prevMax;
+            el.style.width        = prev.width;
+            el.style.maxWidth     = prev.maxWidth;
+            el.style.boxShadow    = prev.shadow;
+            el.style.borderRadius = prev.radius;
             window.scrollTo(0, prevScroll);
         }
     };
