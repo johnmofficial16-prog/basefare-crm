@@ -935,8 +935,15 @@ const formAssembly = {
       });
     })(document.getElementById('txnForm'));
 
-    // Submit
-    document.getElementById('txnForm').submit();
+    // Submit — via the resilient fetch wrapper, not a bare form navigation.
+    // A hosting-layer 403 on a normal submit throws the whole form away; the
+    // wrapper keeps the page alive, retries once, and reports blocks to
+    // /api/edge-log. Falls back to a plain submit if the partial didn't load.
+    if (window.resilientTxnSubmit) {
+      window.resilientTxnSubmit(document.getElementById('txnForm'));
+    } else {
+      document.getElementById('txnForm').submit();
+    }
   }
 };
 

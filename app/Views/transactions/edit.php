@@ -534,6 +534,18 @@ window.addEventListener('pageshow', function () {
     try { el.value = decodeURIComponent(escape(atob(el.value.slice(4)))); } catch (e) {}
   }
 });
+
+// Route the actual submission through the resilient fetch wrapper. Registered
+// LAST so the JSON-sync and b64-shield listeners above have already massaged
+// the field values by the time the wrapper snapshots the form.
+document.getElementById('txnForm').addEventListener('submit', function (e) {
+  if (window.resilientTxnSubmit) {
+    e.preventDefault();
+    window.resilientTxnSubmit(this);
+  }
+  // No wrapper (partial missing): fall through to the normal submit.
+});
 </script>
+<?php require __DIR__ . '/../partials/txn_resilient_submit.php'; ?>
 </body>
 </html>

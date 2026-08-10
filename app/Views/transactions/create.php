@@ -557,5 +557,6 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','Manr
 <script>
 <?php require __DIR__ . '/create_js.php'; ?>
 </script>
+<?php require __DIR__ . '/../partials/txn_resilient_submit.php'; ?>
 </body>
 </html>
