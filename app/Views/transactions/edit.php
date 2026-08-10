@@ -124,7 +124,7 @@ tailwind.config = {
   </div>
 
   <?php if ($flashError): ?>
-  <div style="margin-bottom:16px;padding:12px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;font-size:13px;font-weight:600;color:#dc2626;display:flex;align-items:center;gap:8px;">
+  <div data-flash-error style="margin-bottom:16px;padding:12px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;font-size:13px;font-weight:600;color:#dc2626;display:flex;align-items:center;gap:8px;">
     <span class="msym" style="font-size:18px;">error</span><?= htmlspecialchars($flashError) ?>
   </div>
   <?php endif; ?>

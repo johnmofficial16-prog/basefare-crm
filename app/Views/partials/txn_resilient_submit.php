@@ -64,8 +64,21 @@
   // touch — a plain input, or the upload's filename. Here EVERYTHING except the
   // CSRF token and file contents is JSON-packed into one opaque base64 field
   // (__wafpack), and each uploaded file is re-sent with a sterile name
-  // (proof-N.bin) so a Windows filename with odd characters can't trip a rule.
+  // (proof-N.<ext>) so a Windows filename with odd characters can't trip a rule.
   // TransactionController::decodeWafPack reverses it before any field is read.
+  //
+  // The ORIGINAL EXTENSION IS PRESERVED. saveProofFiles() whitelists proofs by
+  // extension (jpg/png/pdf/...), so a blanket ".bin" rename made every upload
+  // fail that check — the save bounced back to the form with only a session
+  // flash the create page doesn't render, i.e. silently. A bare extension like
+  // ".jpg" carries nothing a firewall matches, so keeping it is safe; only the
+  // filename stem (where odd characters live) is discarded.
+  function sterileFilename(orig, idx) {
+    const m = /\.([A-Za-z0-9]{1,8})$/.exec(orig || '');
+    const ext = m ? '.' + m[1].toLowerCase() : '';
+    return 'proof-' + idx + ext;
+  }
+
   function packForm(form) {
     const src = new FormData(form);
     const out = new FormData();
@@ -76,7 +89,7 @@
       const name = entry[0], value = entry[1];
       if (value instanceof File) {
         if (value.size === 0 && !value.name) continue;   // empty file input — skip
-        out.append(name, value, 'proof-' + (fileIdx++) + '.bin');
+        out.append(name, value, sterileFilename(value.name, fileIdx++));
         continue;
       }
       if (PLAIN[name]) { out.append(name, value); continue; }
@@ -121,8 +134,30 @@
         });
 
         if (r.ok || r.redirected) {
-          // Server processed it (success and validation-failure paths both end
-          // in a redirect). Follow to wherever it sent us.
+          // Both success and validation-failure end in a 302 that fetch follows
+          // to a 200 page. Tell them apart by the final URL: a failure bounces
+          // back to the SAME form action; success lands elsewhere (the new
+          // transaction's view). We must not just re-navigate on a bounce —
+          // fetch already consumed the one-shot session flash by following the
+          // redirect, so a second browser navigation would render a clean page
+          // with no error. That is exactly why a failed save looked silent.
+          const landed = new URL(r.url || form.action, location.href).pathname;
+          const posted = new URL(form.action, location.href).pathname;
+
+          if (landed === posted) {
+            // Validation bounce. The error is already rendered in the HTML we
+            // just fetched — lift it out and show it, keeping the filled form.
+            let msg = 'The form could not be saved. Please review your entries and try again.';
+            try {
+              const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
+              const el  = doc.querySelector('[data-flash-error]');
+              if (el && el.textContent.trim()) msg = el.textContent.trim();
+            } catch (e) {}
+            show('⚠ ' + msg, false);
+            setBusy(form, false);
+            return;
+          }
+
           hide();
           window.location.assign(r.url || form.action);
           return;
