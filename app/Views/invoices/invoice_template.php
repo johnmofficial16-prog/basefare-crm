@@ -32,7 +32,10 @@
 .inv-brand-dba  { color: #c9a84c; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
 .inv-meta { text-align: right; }
 .inv-meta-lbl { color: #93c5fd; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
-.inv-meta-no  { color: #fff; font-size: 22px; font-weight: 900; font-family: 'Manrope', sans-serif; letter-spacing: 1px; }
+/* 800, not 900: Manrope has no 900 face — it tops out at 800. Asking for 900
+   left the browser to substitute a heavy system font (Arial Black landed in the
+   printed PDF), which is why the invoice number and total looked wrong. */
+.inv-meta-no  { color: #fff; font-size: 22px; font-weight: 800; font-family: 'Manrope', sans-serif; letter-spacing: 1px; }
 .inv-meta-date { color: #cbd5e1; font-size: 11px; margin-top: 2px; }
 
 .inv-purpose-strip {
