@@ -95,10 +95,22 @@
    sharp at any zoom) rather than a rasterised screenshot.
    ───────────────────────────────────────────────────────────────────────── */
 @media print {
-    @page { size: A4 portrait; margin: 10mm; }
+    /* margin:0 is deliberate. Chrome draws its page header/footer — document
+       title, source URL, date, page number — into the @page margin, and there is
+       no CSS switch to disable it. With no margin there is nowhere to draw them,
+       so the URL disappears. The white space is restored as padding on the
+       document itself instead. */
+    @page { size: A4 portrait; margin: 0; }
 
     html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
     .no-print { display: none !important; }
+
+    /* printInvoice() lifts the document into #__invPrintHost at the top level and
+       sets .inv-printing, so everything else is removed from the page entirely.
+       display:none rather than visibility:hidden — hidden elements still occupy
+       layout and produce blank leading pages. */
+    html.inv-printing body > *:not(#__invPrintHost) { display: none !important; }
+    html.inv-printing #__invPrintHost { display: block !important; }
 
     #invoice-printable {
         /* On paper this is the document, not a card floating on a page — the
@@ -107,6 +119,7 @@
         max-width: 100% !important;
         box-shadow: none !important;
         border-radius: 0 !important;
+        padding: 14mm 12mm !important;
     }
 
     /* Browsers drop background colours when printing (including "Save as PDF"),
@@ -303,50 +316,58 @@
      * Output is vector — sharp at any zoom, selectable and searchable — unlike
      * the html2canvas path below, which can only ever produce a bitmap.
      */
+    /**
+     * Print by isolating the document inside THIS page, rather than cloning it
+     * into an iframe.
+     *
+     * An iframe built with document.write never fetches the Google Fonts
+     * stylesheet — measured in-browser, Inter and Manrope render at exactly the
+     * fallback metrics there and no face ever reaches 'loaded'. The PDF then
+     * embeds Arial instead of the brand faces. (FontFaceSet.check() is no help:
+     * with no @font-face registered it reports "available" and returns true.)
+     *
+     * The page we are already on has both families loaded and rendering, so we
+     * print it directly: lift #invoice-printable into a top-level host, flag the
+     * root, and let the print stylesheet drop everything else. A placeholder
+     * marks the original position so the DOM is restored exactly afterwards.
+     */
     window.printInvoice = function () {
         const el = document.getElementById('invoice-printable');
         if (!el) { alert('Nothing to print yet.'); return; }
+        if (document.getElementById('__invPrintHost')) return;   // already printing
 
-        const styles = [...document.querySelectorAll('style')].map(s => s.outerHTML).join('');
-        const links  = [...document.querySelectorAll('link[rel="stylesheet"]')].map(l => l.outerHTML).join('');
+        const placeholder = document.createComment('invoice-print-placeholder');
+        el.parentNode.insertBefore(placeholder, el);
 
-        const old = document.getElementById('__invPrintFrame');
-        if (old) old.remove();
+        const host = document.createElement('div');
+        host.id = '__invPrintHost';
+        host.appendChild(el);
+        document.body.appendChild(host);
+        document.documentElement.classList.add('inv-printing');
 
-        const f = document.createElement('iframe');
-        f.id = '__invPrintFrame';
-        // Off-screen rather than display:none, so layout and fonts still resolve.
-        f.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;height:297mm;border:0';
-        document.body.appendChild(f);
-
-        const doc = f.contentWindow.document;
-        doc.open();
-        doc.write(
-            '<!DOCTYPE html><html><head><meta charset="utf-8">' + links + styles +
-            '<style>' +
-              '@page{size:A4 portrait;margin:10mm}' +
-              'html,body{margin:0;padding:0;background:#fff}' +
-              '#invoice-printable{width:100%!important;max-width:100%!important;' +
-                'box-shadow:none!important;border-radius:0!important}' +
-              '#invoice-printable,#invoice-printable *{' +
-                '-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}' +
-            '</style></head><body>' + el.outerHTML + '</body></html>'
-        );
-        doc.close();
-
-        const go = () => {
-            try { f.contentWindow.focus(); f.contentWindow.print(); }
-            catch (e) { console.error(e); }
-            setTimeout(() => f.remove(), 1000);
+        let restored = false;
+        const restore = () => {
+            if (restored) return;
+            restored = true;
+            document.documentElement.classList.remove('inv-printing');
+            if (placeholder.parentNode) {
+                placeholder.parentNode.insertBefore(el, placeholder);
+                placeholder.remove();
+            }
+            host.remove();
         };
-        let done = false;
-        const fire = () => { if (done) return; done = true; go(); };
-        try {
-            doc.fonts && doc.fonts.ready
-                ? doc.fonts.ready.then(() => setTimeout(fire, 150))
-                : setTimeout(fire, 500);
-        } catch (e) { setTimeout(fire, 500); }
-        setTimeout(fire, 1500); // hard fallback
+
+        window.addEventListener('afterprint', restore, { once: true });
+
+        // Give the browser a frame to apply the print layout, then print.
+        // afterprint is well supported, but a timed fallback guarantees the page
+        // is never left in its stripped-down state if it doesn't fire.
+        setTimeout(() => {
+            try { window.print(); }
+            catch (e) { console.error('[invoice] print failed', e); }
+            setTimeout(restore, 500);
+        }, 60);
+        setTimeout(restore, 60000);
     };
 
     /**
