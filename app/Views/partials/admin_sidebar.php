@@ -24,6 +24,7 @@ $navItems = [
     ['href' => '/emails',                  'icon' => 'forward_to_inbox','label' => 'Customer Emails',  'key' => 'emails',        'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/invoices',                'icon' => 'request_quote',  'label' => 'Invoices',         'key' => 'invoices',      'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/payroll',                 'icon' => 'receipt_long',   'label' => 'Salary Slips',     'key' => 'payroll',       'roles' => ['admin', 'manager']],
+    ['href' => '/letters',                 'icon' => 'assignment_ind', 'label' => 'Letter of Intent', 'key' => 'letters',       'roles' => ['admin']],
     ['href' => '/vouchers',                'icon' => 'local_activity', 'label' => 'Vouchers',         'key' => 'vouchers',      'roles' => ['admin', 'manager']],
     ['href' => '/users',                   'icon' => 'manage_accounts','label' => 'Users',            'key' => 'users',         'roles' => ['admin', 'manager']],
     ['href' => '/attendance/admin/monthly',   'icon' => 'date_range',    'label' => 'Monthly Report',    'key' => 'monthly',       'roles' => ['admin', 'manager', 'supervisor']],

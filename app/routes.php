@@ -17,6 +17,7 @@ use App\Controllers\ReminderController;
 use App\Controllers\NotificationController;
 use App\Controllers\AdminController;
 use App\Controllers\MobileAdminController;
+use App\Controllers\LetterController;
 use App\Controllers\PayrollController;
 use App\Controllers\VoucherController;
 use App\Controllers\PerformanceController;
@@ -132,6 +133,15 @@ $app->group('/users', function ($group) {
 // Payroll / Salary Slip Maker (admin only)
 $app->group('/payroll', function ($group) {
     $group->get('', [PayrollController::class, 'slipMaker']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
+
+// Letters — Letter of Intent maker (admin only)
+$app->group('/letters', function ($group) {
+    $group->get('', [LetterController::class, 'loiMaker']);
+    $group->get('/loi', [LetterController::class, 'loiMaker']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
