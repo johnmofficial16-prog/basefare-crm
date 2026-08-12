@@ -105,11 +105,31 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 .terms tr.hi td.v{color:#163274;font-weight:800}
 .terms .words{display:block;font-weight:600;font-size:8pt;color:#64748b;margin-top:.8mm;font-style:italic}
 
-/* Conditions */
+/* Conditions.
+   list-style MUST be stated explicitly: Tailwind's Preflight resets
+   `ol,ul{list-style:none}`, which silently strips every marker. */
 .cond-t{margin-top:5.5mm;font-size:8pt;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#163274}
-.cond{margin:2.2mm 0 0;padding-left:5.5mm}
+.cond{margin:2.2mm 0 0;padding-left:6mm;list-style:disc outside}
+.cond.num{list-style:decimal outside}
 .cond li{margin-top:1.7mm;text-align:justify;line-height:1.6}
-.cond li::marker{color:#163274}
+.cond li::marker{color:#163274;font-weight:700}
+/* Tick variant — drawn with ::before rather than a list marker so the glyph
+   keeps its own font stack; not every face carries U+2713. */
+.cond.tick{list-style:none;padding-left:0}
+.cond.tick li{position:relative;padding-left:6mm}
+.cond.tick li::before{content:'\2713';position:absolute;left:0;top:0;color:#163274;font-weight:700;
+  font-family:'Noto Sans','Segoe UI Symbol','DejaVu Sans',sans-serif}
+
+/* Keep a section heading with the first line it introduces (print path; the
+   PDF path gets the same effect from avoidOrphanHeadings()). */
+.terms-t,.cond-t,.salut{page-break-after:avoid;break-after:avoid}
+.pg-spacer{flex-shrink:0}
+
+/* Editor marker picker */
+.mk-btn{flex:1;padding:6px 4px;border:1.5px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#64748b;
+  font-size:11px;font-weight:700;cursor:pointer;transition:all .12s;font-family:'Inter',sans-serif}
+.mk-btn:hover{border-color:#cbd5e1}
+.mk-btn.active{border-color:#163274;background:#163274;color:#fff}
 
 /* Signature */
 .sig-block{margin-top:7mm;display:flex;justify-content:space-between;align-items:flex-end;gap:10mm}
@@ -267,6 +287,11 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <!-- Conditions -->
       <div class="px-5 py-4 border-b border-slate-100">
         <p class="sec-hd"><span class="material-symbols-outlined text-sm text-primary">rule</span> Conditions Precedent</p>
+        <div class="flex items-center gap-1.5 mb-3">
+          <button type="button" id="mk-bullet" onclick="setCondMark('bullet')" class="mk-btn active">&bull;&nbsp; Bullet</button>
+          <button type="button" id="mk-tick"   onclick="setCondMark('tick')"   class="mk-btn">&#10003;&nbsp; Tick</button>
+          <button type="button" id="mk-num"    onclick="setCondMark('num')"    class="mk-btn">1.&nbsp; Numbered</button>
+        </div>
         <div id="cond-list" class="flex flex-col gap-1.5"></div>
         <button onclick="addCond()" class="mt-2 w-full inline-flex items-center justify-center gap-1 py-2 border border-dashed border-primary/40 text-primary text-xs font-bold rounded-lg hover:bg-primary/5 transition-all">
           <span class="material-symbols-outlined text-sm">add</span> Add Condition
@@ -360,6 +385,16 @@ const DEFAULT_EXTRAS = [];
 
 let extras = JSON.parse(JSON.stringify(DEFAULT_EXTRAS));
 let conds  = JSON.parse(JSON.stringify(DEFAULT_CONDS));
+
+/* Marker for the conditions list: 'bullet' | 'tick' | 'num'. */
+let condMark = 'bullet';
+function setCondMark(m){
+  if(!['bullet','tick','num'].includes(m)) return;
+  condMark = m;
+  ['bullet','tick','num'].forEach(k =>
+    document.getElementById('mk-' + k)?.classList.toggle('active', k === m));
+  render();
+}
 
 /* ── helpers ─────────────────────────────────────────────────────────────── */
 const v   = id => document.getElementById(id)?.value?.trim() ?? '';
@@ -493,6 +528,8 @@ function render(){
   /* Conditions ------------------------------------------------------------ */
   const condItems = conds.map(c => c.trim()).filter(Boolean)
     .map(c => `<li>${esc(c)}</li>`).join('');
+  const condTag = condMark === 'num' ? 'ol' : 'ul';
+  const condCls = condMark === 'num' ? 'cond num' : condMark === 'tick' ? 'cond tick' : 'cond';
 
   /* Footer ---------------------------------------------------------------- */
   const footBits = [];
@@ -562,7 +599,7 @@ function render(){
   </div>
 
   ${condItems ? `<div><div class="cond-t">Conditions Precedent</div>
-    <ol class="cond">${condItems}</ol></div>` : ''}
+    <${condTag} class="${condCls}">${condItems}</${condTag}></div>` : ''}
 
   ${paras(sub(v('w_bind')))}
   ${paras(sub(v('w_close')))}
@@ -586,8 +623,60 @@ function render(){
   ${foot}
 </div><div class="pg-guides"></div>`;
 
+  avoidOrphanHeadings();
   snapToPages();
   fitPreview();
+}
+
+/* A section heading stranded at the foot of a page with one line under it
+   reads as a mistake. html2pdf's 'css' mode honours page-break-inside but not
+   page-break-after:avoid, so measure instead: if a heading and the first row /
+   bullet it introduces land on opposite sides of a page boundary, insert a
+   spacer that carries the pair onto the next page. Preview, print and PDF all
+   consume the same .loi-content, so one spacer fixes all three.
+   Measured with getBoundingClientRect and the preview scale temporarily off:
+   offsetTop is useless here because a <tr>'s offsetParent is its <table>, not
+   the sheet, which silently yields negative positions for the terms heading. */
+function avoidOrphanHeadings(){
+  const sheet = document.getElementById('loi-sheet');
+  const content = sheet && sheet.querySelector('.loi-content');
+  if(!content) return;
+  const px = pxPerMm(), PAGE_MM = 297 - PAGE.top - PAGE.bottom;
+  content.querySelectorAll('.pg-spacer').forEach(s => s.remove());
+
+  const prevTransform = sheet.style.transform;
+  sheet.style.transform = 'none';        // rects must be unscaled to be in mm
+  content.style.minHeight = '0';
+
+  const groups = [
+    ['.terms-t', h => h.nextElementSibling && h.nextElementSibling.querySelector('tr')],
+    ['.cond-t',  h => h.nextElementSibling && h.nextElementSibling.querySelector('li')],
+  ];
+  // A spacer shifts everything below it, so re-check until stable.
+  for(let pass = 0; pass < 4; pass++){
+    let inserted = false;
+    const top0 = content.getBoundingClientRect().top;
+    for(const [sel, firstOf] of groups){
+      const head = content.querySelector(sel);
+      const first = head && firstOf(head);
+      if(!head || !first) continue;
+      const headTop  = (head.getBoundingClientRect().top - top0) / px;
+      const firstBot = (first.getBoundingClientRect().bottom - top0) / px;
+      const boundary = (Math.floor(headTop / PAGE_MM) + 1) * PAGE_MM;
+      if(firstBot > boundary){
+        const gap = boundary - headTop + 0.3;   // +0.3mm clears sub-pixel rounding
+        if(gap > 0.5 && gap < PAGE_MM){
+          const sp = document.createElement('div');
+          sp.className = 'pg-spacer';
+          sp.style.height = gap + 'mm';
+          head.parentNode.insertBefore(sp, head);
+          inserted = true;
+        }
+      }
+    }
+    if(!inserted) break;
+  }
+  sheet.style.transform = prevTransform;   // fitPreview() resets this properly
 }
 
 /* px-per-mm measured from the browser rather than assumed at 96dpi, so zoom
@@ -734,7 +823,6 @@ function printLetter(){
     + `html,body{margin:0;padding:0;background:#fff}`
     + `.loi-content{width:100%;box-shadow:none;border:none}`
     + `.blk,tr,li,.acc,.sig-block{page-break-inside:avoid;break-inside:avoid}`
-    + `.terms-t,.cond-t,.salut{page-break-after:avoid;break-after:avoid}`
     + `</style></head><body>${content.outerHTML}</body></html>`);
   doc.close();
 
@@ -767,6 +855,9 @@ function resetForm(){
   set('s_name','Paramjeet Singh'); set('s_title','Authorized Signatory'); set('s_place','Mumbai');
   set('w_open', DEFAULT_WORDING.open); set('w_bind', DEFAULT_WORDING.bind); set('w_close', DEFAULT_WORDING.close);
   ['o_accept','o_conf','o_foot','o_words'].forEach(id => { const el = document.getElementById(id); if(el) el.checked = true; });
+  condMark = 'bullet';
+  ['bullet','tick','num'].forEach(k =>
+    document.getElementById('mk-' + k)?.classList.toggle('active', k === 'bullet'));
   renderAll();
 }
 
