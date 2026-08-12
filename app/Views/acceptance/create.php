@@ -2082,7 +2082,9 @@ const flightMgr = {
     });
     if (segs.length) {
       state.segments[group] = segs;
-      if (statusEl) statusEl.innerHTML = '<span class="text-emerald-600 font-semibold">✓ Parsed ' + segs.length + ' segment' + (segs.length>1?'s':'') + '</span>';
+      const fixed = reconcileDayOffsets(group);
+      if (statusEl) statusEl.innerHTML = '<span class="text-emerald-600 font-semibold">✓ Parsed ' + segs.length + ' segment' + (segs.length>1?'s':'') + '</span>'
+        + (fixed ? ' <span class="text-indigo-600 font-semibold">· date-line arrival corrected</span>' : '');
     } else {
       state.segments[group] = [];
       if (statusEl) statusEl.innerHTML = '<span class="text-rose-600">⚠ Could not parse — check GDS format</span>';
@@ -2241,6 +2243,10 @@ const flightMgr = {
               </label>
               ${(function(){
                 const off = segDayOffset(seg);
+                if (seg._day_autocorrected) return `<span class="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-full">
+                    <span class="material-symbols-outlined text-xs">public</span>
+                    Crosses the date line — lands ${off === 0 ? 'same day' : off + 'd'}, corrected from the GDS stamp
+                   </span>`;
                 const src = seg._day_explicit ? 'from GDS' : 'auto-detected';
                 if (off > 0) return `<span class="inline-flex items-center gap-1 px-2 py-1 bg-rose-100 text-rose-700 text-[10px] font-bold rounded-full">
                     <span class="material-symbols-outlined text-xs">nightlight</span> Arrives +${off}d — ${src}
@@ -2329,12 +2335,53 @@ function autoNextDay(seg) {
   setDayOffset(seg, arr < dep ? 1 : 0, false);
 }
 
-// Agent override from the segment editor — always authoritative.
+// Agent override from the segment editor — always authoritative, and it clears
+// any auto-correction so the agent's choice sticks.
 function setSegDayOffset(group, idx, val) {
   const seg = (state.segments[group] || [])[idx];
   if (!seg) return;
   setDayOffset(seg, parseInt(val, 10) || 0, true);
+  seg._day_autocorrected = false;
+  seg._day_locked = true;
   flightMgr._render(group);
+}
+
+// GDS displays routinely stamp a "+1" on an eastbound date-line crossing even
+// though the aircraft lands the same calendar day: UA916 leaves AKL at 15:50
+// and touches down in SFO at 07:05 on the SAME date, because AKL is 21 hours
+// ahead. Taken literally, that "+1" puts the arrival after the next flight has
+// already left the same airport.
+//
+// Rather than trusting the stamp and dead-ending the agent, use the itinerary
+// itself as evidence: when a segment lands earlier on the clock than it
+// departed (the date-line signature) AND its stated arrival day makes a
+// same-airport connection impossible AND stepping the day back yields a sane
+// connection, the day stamp is the wrong part. Correct it and label it.
+//
+// Deliberately narrow — it will not touch an open jaw, a segment that lands
+// later than it departed, an agent's manual override, or a case where stepping
+// back fails to produce a real connection.
+function reconcileDayOffsets(group) {
+  const segs = state.segments[group] || [];
+  let changed = false;
+  for (let i = 0; i < segs.length - 1; i++) {
+    const a = segs[i], b = segs[i + 1];
+    if (!a || !b || a._day_locked) continue;
+    if (!isConnection(a, b) || !a.arr_time || !b.dep_time || !a.dep_time) continue;
+    if (calcLayoverMins(a, b) >= 0) continue;                       // already fine
+    if (timeToMins(a.arr_time) >= timeToMins(a.dep_time)) continue; // not a date-line shape
+
+    for (let cand = segDayOffset(a) - 1; cand >= -1; cand--) {
+      const mins = calcLayoverMins(Object.assign({}, a, { arr_day_offset: cand }), b);
+      if (mins !== null && mins >= 0 && mins < 1440) {   // a genuine sub-24h connection
+        setDayOffset(a, cand, true);
+        a._day_autocorrected = true;
+        changed = true;
+        break;
+      }
+    }
+  }
+  return changed;
 }
 
 const _GDS_MON = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
@@ -2436,8 +2483,10 @@ function confirmItinerary(group) {
   const segs = state.segments[group] || [];
   if (!segs.length) return;
 
-  // Step 1: auto-compute next-day for all segments
+  // Step 1: infer arrival days where nothing is known, then reconcile any
+  // stated day that contradicts the rest of the itinerary (date-line crossings)
   segs.forEach(s => autoNextDay(s));
+  reconcileDayOffsets(group);
 
   // Step 2: validate required fields
   const missingFields = [];
