@@ -1902,19 +1902,95 @@ function mapCabin(c) {
   return 'Economy';
 }
 
+// ── Arrival-day resolution ──────────────────────────────────────────────────
+// A segment's arrival can land on a different calendar day than its departure.
+// Three signals, in descending order of authority:
+//   1. the trailing arrival date ("... 0905+2 01JAN") — absolute, and the only
+//      one that can express an arrival EARLIER than departure (eastbound over
+//      the dateline, e.g. AKL->SFO departs 1550, arrives 0705 the SAME day)
+//   2. the ±N marker ("0905+2", "0705-1")
+//   3. nothing — return null so the caller can fall back to inference rather
+//      than pretending the line said "same day"
+function _resolveDayOffset(depDate, marker, arrDate) {
+  if (arrDate) {
+    const d = _segDayDiff(depDate, arrDate);
+    if (d !== null) return d;
+  }
+  if (marker) {
+    const n = parseInt(marker, 10);
+    if (!isNaN(n)) return n;
+  }
+  return null;
+}
+
+// Days between a single segment's departure and arrival date. parseGDSDate
+// resolves each date's year independently, so a 30DEC->01JAN pair can come back
+// ~365 days apart; a single flight never spans months, so unwrap that.
+function _segDayDiff(depDate, arrDate) {
+  const a = parseGDSDate(depDate), b = parseGDSDate(arrDate);
+  if (!a || !b) return null;
+  let d = Math.round((b - a) / 86400000);
+  if (d >  300) d -= 365;
+  if (d < -300) d += 365;
+  return d;
+}
+
+// Single writer for the day fields, so arr_next_day (which ~15 downstream views
+// and both e-mail services truthy-check) always stays in step with the numeric
+// offset. It must remain a plain boolean: PHP's !empty(-1) is TRUE, so storing a
+// signed number in that field would render a dateline arrival as "+1".
+function setDayOffset(seg, off, explicit) {
+  seg.arr_day_offset = off;
+  seg.arr_next_day   = off > 0;
+  if (explicit) seg._day_explicit = true;
+  return seg;
+}
+
+// Offset for a segment, tolerating legacy records that only have the boolean.
+function segDayOffset(seg) {
+  if (seg && typeof seg.arr_day_offset === 'number') return seg.arr_day_offset;
+  return (seg && seg.arr_next_day) ? 1 : 0;
+}
+
+// Small chip next to an arrival time. Shows the real offset — the old markup
+// printed a flat "+1d" for every non-zero value, so a +2 read as +1.
+function _dayChip(off) {
+  if (!off) return '';
+  const cls = off > 0 ? 'bg-rose-100 text-rose-700' : 'bg-indigo-100 text-indigo-700';
+  return `<span class="px-1 py-0.5 ${cls} text-[9px] font-bold rounded">${off > 0 ? '+' : ''}${off}d</span>`;
+}
+
+// Two segments only form a connection when the second departs where the first
+// landed. Anything else is a surface segment (open jaw) — the traveller gets
+// themselves between the two cities, so there is no layover to measure.
+function isConnection(segA, segB) {
+  if (!segA || !segB || !segA.to || !segB.from) return false;
+  return String(segA.to).toUpperCase() === String(segB.from).toUpperCase();
+}
+
 const flightMgr = {
 
   // ── Multi-format GDS segment parser ──────────────────────────────────────
   // Supports: Amadeus, Sabre, Galileo/Travelport, Worldspan, Apollo
+  //
+  // Every strategy resolves the arrival day through _mkSeg. Strategies 4 and 5
+  // used to hard-code arr_next_day:false and drop the ±N marker outright, which
+  // silently discarded the day offset for any line without a status code —
+  // the exact shape agents paste most often.
+  _mkSeg(o, marker, arrDate) {
+    const off = _resolveDayOffset(o.date, marker, arrDate);
+    return setDayOffset(o, off === null ? 0 : off, off !== null);
+  },
+
   _parseOneLine(ln) {
     ln = ln.replace(/\r/g, '').trim();
     if (!ln) return null;
 
     // Strategy 1: 6-char airport pair (JFKFRA, JFKMIA) — Amadeus & Sabre compact
     // e.g. "1  AA1758 Y 21APR JFKMIA DK1  0530 0842  21APR"
-    const re6 = /^\s*\d{0,2}\s*\.?\s*([A-Z0-9]{2})\s*(\d{1,4}[A-Z]?)\s+([A-Z])\s+(\d{2}[A-Z]{3})(?:\s+\d)?\s+([A-Z]{3})([A-Z]{3})\s+[A-Z]{2,3}\d{0,2}\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)(?:\+(\d))?(?:\s+(\d{2}[A-Z]{3}))?/i;
+    const re6 = /^\s*\d{0,2}\s*\.?\s*([A-Z0-9]{2})\s*(\d{1,4}[A-Z]?)\s+([A-Z])\s+(\d{2}[A-Z]{3})(?:\s+\d)?\s+([A-Z]{3})([A-Z]{3})\s+[A-Z]{2,3}\d{0,2}\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)(?:\s*([+-]\d))?(?:\s+(\d{2}[A-Z]{3}))?/i;
     let m = re6.exec(ln);
-    if (m) return {
+    if (m) return this._mkSeg({
       airline_iata: m[1].toUpperCase(),
       flight_no:    m[1].toUpperCase() + m[2].toUpperCase(),
       cabin_class:  mapCabin(m[3]),
@@ -1923,14 +1999,13 @@ const flightMgr = {
       to:           m[6].toUpperCase(),
       dep_time:     fmtTime(m[7]),
       arr_time:     fmtTime(m[8]),
-      arr_next_day: !!(m[9] && parseInt(m[9]) > 0) || !!(m[10] && m[10].toUpperCase() !== m[4].toUpperCase()),
-    };
+    }, m[9], m[10]);
 
     // Strategy 2: Space-separated airports — Galileo/Travelport & Apollo
     // e.g. "1. UA  826 B 15MAR MO JFK ORD HK1 0800 0951"
-    const re3 = /^\s*\d{0,2}\s*\.?\s*([A-Z0-9]{2})\s+(\d{1,4}[A-Z]?)\s+([A-Z])\s+(\d{2}[A-Z]{3})(?:\s+[A-Z]{2})?\s+([A-Z]{3})\s+([A-Z]{3})\s+[A-Z]{2,3}\s*\d{0,2}\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)(?:\+(\d))?/i;
+    const re3 = /^\s*\d{0,2}\s*\.?\s*([A-Z0-9]{2})\s+(\d{1,4}[A-Z]?)\s+([A-Z])\s+(\d{2}[A-Z]{3})(?:\s+[A-Z]{2})?\s+([A-Z]{3})\s+([A-Z]{3})\s+[A-Z]{2,3}\s*\d{0,2}\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)(?:\s*([+-]\d))?(?:\s+(\d{2}[A-Z]{3}))?/i;
     m = re3.exec(ln);
-    if (m) return {
+    if (m) return this._mkSeg({
       airline_iata: m[1].toUpperCase(),
       flight_no:    m[1].toUpperCase() + m[2].toUpperCase(),
       cabin_class:  mapCabin(m[3]),
@@ -1939,14 +2014,13 @@ const flightMgr = {
       to:           m[6].toUpperCase(),
       dep_time:     fmtTime(m[7]),
       arr_time:     fmtTime(m[8]),
-      arr_next_day: !!(m[9] && parseInt(m[9]) > 0),
-    };
+    }, m[9], m[10]);
 
     // Strategy 3: Worldspan slash format
     // e.g. "AA1081/Y21APR MIAJFK HK1 0945 1158"
-    const reWS = /^\s*([A-Z]{2})(\d{1,4}[A-Z]?)\/([A-Z])(\d{2}[A-Z]{3})\s+([A-Z]{3})([A-Z]{3})\s+[A-Z0-9]+\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)(?:\+(\d))?/i;
+    const reWS = /^\s*([A-Z]{2})(\d{1,4}[A-Z]?)\/([A-Z])(\d{2}[A-Z]{3})\s+([A-Z]{3})([A-Z]{3})\s+[A-Z0-9]+\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)(?:\s*([+-]\d))?(?:\s+(\d{2}[A-Z]{3}))?/i;
     m = reWS.exec(ln);
-    if (m) return {
+    if (m) return this._mkSeg({
       airline_iata: m[1].toUpperCase(),
       flight_no:    m[1].toUpperCase() + m[2].toUpperCase(),
       cabin_class:  mapCabin(m[3]),
@@ -1955,13 +2029,15 @@ const flightMgr = {
       to:           m[6].toUpperCase(),
       dep_time:     fmtTime(m[7]),
       arr_time:     fmtTime(m[8]),
-      arr_next_day: !!(m[9] && parseInt(m[9]) > 0),
-    };
+    }, m[9], m[10]);
 
-    // Strategy 4: Bare minimal last-resort
-    const reMin = /([A-Z0-9]{2})\s*(\d{1,4}[A-Z]?)\s+([A-Z])\s+(\d{2}[A-Z]{3})\s+([A-Z]{3})\s*([A-Z]{3})\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)/i;
+    // Strategy 4: Bare minimal last-resort — no status code (HK1/DK2).
+    // This is what "1 UA 292 Y 30DEC CMHLAX 1908 2129 30DEC" falls through to,
+    // so it MUST read the ±N marker and trailing arrival date; it previously
+    // discarded both.
+    const reMin = /([A-Z0-9]{2})\s*(\d{1,4}[A-Z]?)\s+([A-Z])\s+(\d{2}[A-Z]{3})\s+([A-Z]{3})\s*([A-Z]{3})\s+(\d{3,4}[APap]?)\s+(\d{3,4}[APap]?)(?:\s*([+-]\d))?(?:\s+(\d{2}[A-Z]{3}))?/i;
     m = reMin.exec(ln);
-    if (m) return {
+    if (m) return this._mkSeg({
       airline_iata: m[1].toUpperCase(),
       flight_no:    m[1].toUpperCase() + m[2].toUpperCase(),
       cabin_class:  mapCabin(m[3]),
@@ -1970,13 +2046,12 @@ const flightMgr = {
       to:           m[6].toUpperCase(),
       dep_time:     fmtTime(m[7]),
       arr_time:     fmtTime(m[8]),
-      arr_next_day: false,
-    };
+    }, m[9], m[10]);
 
     // Strategy 5: Missing cabin class and spaces between airports (e.g. user pasted: LH419 12MAY 10:40 JFK 06:10 FRA)
     const re5 = /^\s*\d{0,2}\s*\.?\s*([A-Z0-9]{2})\s*(\d{1,4}[A-Z]?)(?:\s+([A-Z]))?\s+(\d{2}[A-Z]{3})\s+(\d{1,2}:?\d{2}[APap]?)\s+([A-Z]{3})\s+(\d{1,2}:?\d{2}[APap]?)\s+([A-Z]{3})/i;
     m = re5.exec(ln);
-    if (m) return {
+    if (m) return this._mkSeg({
       airline_iata: m[1].toUpperCase(),
       flight_no:    m[1].toUpperCase() + m[2].toUpperCase(),
       cabin_class:  mapCabin(m[3]),
@@ -1985,8 +2060,7 @@ const flightMgr = {
       to:           m[8].toUpperCase(),
       dep_time:     fmtTime(m[5]),
       arr_time:     fmtTime(m[7]),
-      arr_next_day: false,
-    };
+    }, null, null);   // this shape carries no day information
 
     return null;
   },
@@ -2019,7 +2093,7 @@ const flightMgr = {
   addManual: function(group) {
     state.segments[group].push({
       airline_iata:'', flight_no:'', cabin_class:'Economy', date:'', from:'', to:'',
-      dep_time:'', arr_time:'', arr_next_day:false, seat:'', _confirmed:false
+      dep_time:'', arr_time:'', arr_next_day:false, arr_day_offset:0, seat:'', _confirmed:false
     });
     this._render(group);
   },
@@ -2082,7 +2156,7 @@ const flightMgr = {
               <div>
                 <div class="flex items-baseline gap-1">
                   <span class="text-lg font-black text-slate-900">${_esc(seg.arr_time)}</span>
-                  ${seg.arr_next_day ? '<span class="px-1 py-0.5 bg-rose-100 text-rose-700 text-[9px] font-bold rounded">+1d</span>' : ''}
+                  ${_dayChip(segDayOffset(seg))}
                 </div>
                 <div class="text-sm font-bold text-blue-700">${_esc(seg.to)}</div>
                 <div class="text-[10px] text-slate-400">${_esc(tCity)}</div>
@@ -2155,14 +2229,29 @@ const flightMgr = {
               </div>
             </div>
             <div class="flex items-center gap-3 flex-wrap">
-              ${seg.arr_next_day
-                ? `<span class="inline-flex items-center gap-1 px-2 py-1 bg-rose-100 text-rose-700 text-[10px] font-bold rounded-full">
-                    <span class="material-symbols-outlined text-xs">nightlight</span> Arrives next day (+1d) — auto-detected
-                   </span>`
-                : (seg.dep_time && seg.arr_time
-                    ? `<span class="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full">✓ Same day arrival</span>`
-                    : '')
-              }
+              <label class="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase">
+                Arrival day
+                <select class="border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-mono bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  onchange="setSegDayOffset('${group}',${i},this.value)">
+                  ${[-1,0,1,2].map(function(o){
+                    const lbl = o === 0 ? 'Same day' : (o > 0 ? '+' + o + ' day' + (o>1?'s':'') : o + ' day');
+                    return `<option value="${o}" ${segDayOffset(seg)===o?'selected':''}>${lbl}</option>`;
+                  }).join('')}
+                </select>
+              </label>
+              ${(function(){
+                const off = segDayOffset(seg);
+                const src = seg._day_explicit ? 'from GDS' : 'auto-detected';
+                if (off > 0) return `<span class="inline-flex items-center gap-1 px-2 py-1 bg-rose-100 text-rose-700 text-[10px] font-bold rounded-full">
+                    <span class="material-symbols-outlined text-xs">nightlight</span> Arrives +${off}d — ${src}
+                   </span>`;
+                if (off < 0) return `<span class="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-full">
+                    <span class="material-symbols-outlined text-xs">schedule</span> Arrives ${off}d (crosses the date line) — ${src}
+                   </span>`;
+                return (seg.dep_time && seg.arr_time)
+                  ? `<span class="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full">✓ Same day arrival — ${src}</span>`
+                  : '';
+              })()}
             </div>
           </div>`;
 
@@ -2172,17 +2261,28 @@ const flightMgr = {
         const nextSeg   = segs[i+1];
         const layMins   = calcLayoverMins(seg, nextSeg);
         const layStr    = fmtLayover(layMins);
-        const isTight   = layMins !== null && layMins >= 0 && layMins < 45;
-        const isImposs  = layMins !== null && layMins < 0;
-        const layColor  = isImposs ? 'bg-rose-50 border-rose-400 text-rose-700' : isTight ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-amber-50 border-amber-200 text-amber-700';
-        const layLabel  = isImposs
-          ? `⛔ Impossible — segment ${i+2} departs before segment ${i+1} arrives`
-          : (layStr ? `${layStr} connection in ${_esc(CITIES[seg.to]||seg.to)}` : `Connection in ${_esc(CITIES[seg.to]||seg.to)}`);
-        layover = `<div class="flex items-center gap-2 px-3 py-1.5 ${layColor} border rounded-lg text-xs font-semibold">
-          <span class="material-symbols-outlined text-sm">connecting_airports</span>
-          ${layLabel}
-          ${isTight && !isImposs ? '<span class="ml-1 font-bold">⚠ Very tight!</span>' : ''}
-        </div>`;
+        const connects  = isConnection(seg, nextSeg);
+        const isTight   = connects && layMins !== null && layMins >= 0 && layMins < TIGHT_CONNECTION_MINS;
+        const isImposs  = connects && layMins !== null && layMins < 0;
+
+        if (!connects) {
+          // Open jaw — not a connection, so don't quote a layover for it.
+          layover = `<div class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-slate-200 text-slate-600 border rounded-lg text-xs font-semibold">
+            <span class="material-symbols-outlined text-sm">directions</span>
+            Surface segment — arrives ${_esc(CITIES[seg.to]||seg.to)}, next departs ${_esc(CITIES[nextSeg.from]||nextSeg.from)}
+            ${layStr ? `<span class="ml-1 font-normal text-slate-400">(${layStr} apart)</span>` : ''}
+          </div>`;
+        } else {
+          const layColor  = isImposs ? 'bg-rose-50 border-rose-400 text-rose-700' : isTight ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-amber-50 border-amber-200 text-amber-700';
+          const layLabel  = isImposs
+            ? `⛔ Impossible — segment ${i+2} departs before segment ${i+1} arrives`
+            : (layStr ? `${layStr} connection in ${_esc(CITIES[seg.to]||seg.to)}` : `Connection in ${_esc(CITIES[seg.to]||seg.to)}`);
+          layover = `<div class="flex items-center gap-2 px-3 py-1.5 ${layColor} border rounded-lg text-xs font-semibold">
+            <span class="material-symbols-outlined text-sm">connecting_airports</span>
+            ${layLabel}
+            ${isTight && !isImposs ? '<span class="ml-1 font-bold">⚠ Very tight!</span>' : ''}
+          </div>`;
+        }
       }
 
       return card + layover;
@@ -2215,11 +2315,26 @@ function timeToMins(t) {
   return h * 60 + m;
 }
 
+// Infer the arrival day ONLY when nothing authoritative is known. The old
+// version ran unconditionally and set arr_next_day = (arr < dep), which is
+// wrong for any eastbound dateline crossing: UA916 AKL->SFO leaves at 15:50 and
+// lands at 07:05 the SAME day. Because confirmItinerary() re-ran it over every
+// segment, it overwrote the parsed value at confirm time and turned a valid
+// 7h15m connection into "departs before the previous segment arrives".
 function autoNextDay(seg) {
+  if (!seg || seg._day_explicit) return;      // GDS or agent already said so
   const dep = timeToMins(seg.dep_time);
   const arr = timeToMins(seg.arr_time);
   if (dep < 0 || arr < 0) return;
-  seg.arr_next_day = (arr < dep);
+  setDayOffset(seg, arr < dep ? 1 : 0, false);
+}
+
+// Agent override from the segment editor — always authoritative.
+function setSegDayOffset(group, idx, val) {
+  const seg = (state.segments[group] || [])[idx];
+  if (!seg) return;
+  setDayOffset(seg, parseInt(val, 10) || 0, true);
+  flightMgr._render(group);
 }
 
 const _GDS_MON = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
@@ -2234,24 +2349,36 @@ function parseGDSDate(d) {
   return dt;
 }
 
+// parseGDSDate resolves each date's year on its own, so an itinerary crossing
+// New Year (30DEC -> 17JAN) can come back ~360 days apart or even negative,
+// depending on today's date. No itinerary leg is ~a year long, so unwrap it.
 function getDateDiffDays(dateA, dateB) {
   const a = parseGDSDate(dateA), b = parseGDSDate(dateB);
   if (!a || !b) return 0;
-  return Math.round((b - a) / 86400000);
+  let d = Math.round((b - a) / 86400000);
+  if (d >  300) d -= 365;
+  if (d < -300) d += 365;
+  return d;
 }
 
 function calcLayoverMins(segA, segB) {
   const arrM = timeToMins(segA.arr_time);
   const depM = timeToMins(segB.dep_time);
   if (arrM < 0 || depM < 0) return null;
-  const arrNextDay = segA.arr_next_day ? 1440 : 0;
-  const dateDiff   = getDateDiffDays(segA.date, segB.date) * 1440;
-  return depM + dateDiff - (arrM + arrNextDay);
+  const arrOffset = segDayOffset(segA) * 1440;   // signed: -1, 0, +1, +2 …
+  const dateDiff  = getDateDiffDays(segA.date, segB.date) * 1440;
+  return depM + dateDiff - (arrM + arrOffset);
 }
+
+// Anything under this counts as a tight connection. Previously the card used
+// 45 and the validator used 30, so a 35-minute connection was flagged orange in
+// one place and silently accepted in the other.
+const TIGHT_CONNECTION_MINS = 45;
 
 function fmtLayover(mins) {
   if (mins === null || mins === undefined || mins < 0) return null;
-  const h = Math.floor(mins / 60), m = mins % 60;
+  const d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60), m = mins % 60;
+  if (d > 0) return d + 'd' + (h ? ' ' + h + 'h' : '') + (m ? ' ' + m + 'm' : '');
   if (h === 0) return m + 'm';
   return m === 0 ? h + 'h' : h + 'h ' + m + 'm';
 }
@@ -2272,9 +2399,30 @@ function _validateItinerary(group) {
     if (!a.arr_time || !b.dep_time) continue;
     const mins = calcLayoverMins(a, b);
     if (mins === null) continue;
+
+    // Open jaw: the next segment leaves from a different city, so the traveller
+    // makes their own way there. Only the ordering matters, never the gap —
+    // this used to be reported as e.g. "438h 45m connection in Sydney" and
+    // could even block confirmation as an "impossible connection".
+    if (!isConnection(a, b)) {
+      if (mins < 0) {
+        errors.push({ idx: i, msg: `Segment ${i+2} departs ${a.to}→${b.from} before segment ${i+1} lands — check the dates` });
+      }
+      continue;
+    }
+
     if (mins < 0) {
-      errors.push({ idx: i, msg: `Segment ${i+2} departs before segment ${i+1} arrives — impossible connection` });
-    } else if (mins < 30 && mins >= 0) {
+      // If dropping the arrival by one day would make this work, the stated
+      // offset is the likely culprit — an eastbound date-line crossing lands
+      // on the clock earlier than it departed. Say so; the segment card has a
+      // one-click "Arrival day" override.
+      const asSameDay = calcLayoverMins(
+        Object.assign({}, a, { arr_day_offset: segDayOffset(a) - 1 }), b);
+      const hint = (asSameDay !== null && asSameDay >= 0)
+        ? ` — ${a.flight_no || 'it'} lands at ${a.arr_time}, earlier than its ${a.dep_time} departure. If it crosses the date line, set its Arrival day to "Same day".`
+        : '';
+      errors.push({ idx: i, msg: `Segment ${i+2} departs before segment ${i+1} arrives — impossible connection${hint}` });
+    } else if (mins < TIGHT_CONNECTION_MINS) {
       errors.push({ idx: i, msg: `Only ${fmtLayover(mins)} between segments ${i+1} and ${i+2} — very tight` });
     }
   }
@@ -2346,17 +2494,24 @@ function confirmItinerary(group) {
           const tCity   = CITIES[s.to]   || s.to;
           const logoUrl = s.airline_iata ? `https://www.gstatic.com/flights/airline_logos/70px/${s.airline_iata}.png` : '';
           const bgColor = airlineInitialsBg(s.airline_iata);
-          const layMins = i < segs.length-1 ? calcLayoverMins(s, segs[i+1]) : null;
-          const layStr  = fmtLayover(layMins);
-          const layWarn = layMins !== null && layMins < 45;
           const nextSeg = segs[i+1];
+          const layMins = i < segs.length-1 ? calcLayoverMins(s, nextSeg) : null;
+          const layStr  = fmtLayover(layMins);
+          const connects = i < segs.length-1 && isConnection(s, nextSeg);
+          const layWarn = connects && layMins !== null && layMins < TIGHT_CONNECTION_MINS;
 
-          const layoverBadge = i < segs.length-1 && nextSeg ? `
-            <div class="flex items-center gap-2 px-3 py-1.5 ${layWarn?'bg-rose-50 border-rose-300 text-rose-700':'bg-amber-50 border-amber-200 text-amber-700'} border rounded-lg text-xs font-semibold">
+          const layoverBadge = i < segs.length-1 && nextSeg
+            ? (connects
+              ? `<div class="flex items-center gap-2 px-3 py-1.5 ${layWarn?'bg-rose-50 border-rose-300 text-rose-700':'bg-amber-50 border-amber-200 text-amber-700'} border rounded-lg text-xs font-semibold">
               <span class="material-symbols-outlined text-sm">connecting_airports</span>
               ${layStr ? layStr + ' connection in ' : 'Connection in '} ${_esc(CITIES[s.to] || s.to)}
               ${layWarn ? '<span class="ml-1 text-rose-600 font-bold">⚠ Tight!</span>' : ''}
-            </div>` : '';
+            </div>`
+              : `<div class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-slate-200 text-slate-600 border rounded-lg text-xs font-semibold">
+              <span class="material-symbols-outlined text-sm">directions</span>
+              Surface segment — arrives ${_esc(CITIES[s.to] || s.to)}, next departs ${_esc(CITIES[nextSeg.from] || nextSeg.from)}
+            </div>`)
+            : '';
 
           return `
             <div class="flex items-stretch bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -2383,7 +2538,7 @@ function confirmItinerary(group) {
                 <div>
                   <div class="flex items-baseline gap-1">
                     <span class="text-lg font-black text-slate-900">${_esc(s.arr_time)}</span>
-                    ${s.arr_next_day ? '<span class="px-1 py-0.5 bg-rose-100 text-rose-700 text-[9px] font-bold rounded">+1d</span>' : ''}
+                    ${_dayChip(segDayOffset(s))}
                   </div>
                   <div class="text-sm font-bold text-blue-700">${_esc(s.to)}</div>
                   <div class="text-[10px] text-slate-400">${_esc(tCity)}</div>
@@ -2625,7 +2780,7 @@ const preview = {
           <span class="text-xs font-bold font-mono text-slate-900">${_esc(seg.flight_no)}</span>
           <span class="text-xs text-slate-500">${_esc(seg.date)}</span>
           <span class="text-xs font-semibold text-slate-700">${_esc(seg.from)} → ${_esc(seg.to)}</span>
-          <span class="text-xs text-slate-400">${_esc(seg.dep_time)} → ${_esc(seg.arr_time)}${seg.arr_next_day?' (+1)':''}</span>
+          <span class="text-xs text-slate-400">${_esc(seg.dep_time)} → ${_esc(seg.arr_time)}${segDayOffset(seg)?' ('+(segDayOffset(seg)>0?'+':'')+segDayOffset(seg)+'d)':''}</span>
         </div>`;
       }).join('');
     } else flightsSec.classList.add('hidden');
@@ -2828,6 +2983,14 @@ document.addEventListener('DOMContentLoaded', () => {
      if (preFlightData.flights) state.segments.main = preFlightData.flights;
      if (preFlightData.old_flights) state.segments.old = preFlightData.old_flights;
      if (preFlightData.new_flights) state.segments.new = preFlightData.new_flights;
+     // A stored segment already has a settled arrival day — whether it came
+     // from the GDS or an agent's correction. Adopt it as explicit so the
+     // inference never re-guesses (and possibly overwrites) saved data.
+     ['main','old','new','other'].forEach(function(g){
+       (state.segments[g] || []).forEach(function(s){
+         if (s && s.dep_time && s.arr_time) setDayOffset(s, segDayOffset(s), true);
+       });
+     });
      if (typeof flightMgr !== 'undefined') {
          flightMgr._render('main');
          flightMgr._render('old');
