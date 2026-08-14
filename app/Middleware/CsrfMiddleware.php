@@ -27,6 +27,15 @@ class CsrfMiddleware
             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         }
 
+        // Exempt: client error beacon. navigator.sendBeacon() cannot attach
+        // custom headers, and the login page (pre-auth) must be able to report
+        // failures too. The endpoint is a write-only, length-capped, per-IP
+        // rate-limited log sink (see ClientErrorController) — CSRF adds
+        // nothing there but would silence every report.
+        if ($request->getUri()->getPath() === '/api/client-error') {
+            return $handler->handle($request);
+        }
+
         // 2. Only validate on state-changing methods
         $method = strtoupper($request->getMethod());
         if (in_array($method, ['POST', 'PUT', 'DELETE', 'PATCH'])) {

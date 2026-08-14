@@ -196,7 +196,7 @@ class ShiftService
             return [
                 'success' => false,
                 'message' => 'A database error occurred. All changes have been rolled back.',
-                'errors'  => ['db' => $_ENV['APP_ENV'] === 'local' ? $e->getMessage() : 'Internal server error.'],
+                'errors'  => ['db' => ($_ENV['APP_ENV'] ?? 'production') === 'local' ? $e->getMessage() : 'Internal server error.'],
             ];
         }
     }
@@ -326,7 +326,7 @@ class ShiftService
             return [
                 'success' => false,
                 'message' => 'A database error occurred.',
-                'errors'  => ['db' => $_ENV['APP_ENV'] === 'local' ? $e->getMessage() : 'Internal server error.'],
+                'errors'  => ['db' => ($_ENV['APP_ENV'] ?? 'production') === 'local' ? $e->getMessage() : 'Internal server error.'],
             ];
         }
     }

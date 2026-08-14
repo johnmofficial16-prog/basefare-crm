@@ -9,6 +9,8 @@ Thumbs.db
 .env.local
 .env.production
 .env.*
+# ...but the placeholder template IS tracked
+!.env.example
 
 # Dependencies
 vendor/
@@ -18,6 +20,10 @@ node_modules/
 storage/logs/*.log
 storage/payroll/*.pdf
 storage/cache/
+
+# Database backups (nightly cron + pre-migration snapshots — never commit)
+storage/backups/*
+!storage/backups/.gitkeep
 
 # Acceptance module — uploaded customer PII (NEVER commit these)
 storage/acceptance/signatures/*

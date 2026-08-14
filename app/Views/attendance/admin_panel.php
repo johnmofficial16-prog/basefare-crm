@@ -27,6 +27,7 @@ $_wcSingleMax  = (int)($_wcRow->value ?? 15);
 <title>Attendance Panel - Base Fare CRM</title>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="/assets/js/error-beacon.js"></script>
 <script src="/assets/js/tailwind.js"></script>
 <script>
 tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","primary-container":"#314a8d",background:"#f8f9fa",surface:"#f8f9fa","surface-container-lowest":"#ffffff","surface-container-low":"#f3f4f5","surface-container":"#edeeef","on-surface":"#191c1d","on-surface-variant":"#434653","outline-variant":"#c3c6d5",error:"#ba1a1a","error-container":"#ffdad6","secondary-container":"#c6e4f4","on-secondary-container":"#4a6774"},fontFamily:{headline:["Manrope"],body:["Inter"],label:["Inter"]}}}}

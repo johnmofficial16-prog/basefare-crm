@@ -40,6 +40,12 @@ $app->get('/liveboard/score', [\App\Controllers\LiveBoardController::class, 'pag
 $app->post('/liveboard/score/auth', [\App\Controllers\LiveBoardController::class, 'auth']);
 $app->get('/api/liveboard/feed', [\App\Controllers\LiveBoardController::class, 'feed']);
 
+// ==========================================================================
+// Client error beacon (public — pre-auth pages must report too; CSRF-exempt
+// in CsrfMiddleware; rate-limited + length-capped in the controller)
+// ==========================================================================
+$app->post('/api/client-error', [\App\Controllers\ClientErrorController::class, 'report']);
+
 // NOTE: an unauthenticated GET /api/test-shift debug route lived here. It sat
 // outside every middleware group and leaked live transaction volume plus the
 // 10 most recent transaction IDs to anonymous callers. Removed 2026-07-27.

@@ -49,6 +49,7 @@ function userStatusBadge(string $status): string {
 <title>User Management — Base Fare CRM</title>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap" rel="stylesheet"/>
+<script src="/assets/js/error-beacon.js"></script>
 <script src="/assets/js/tailwind.js"></script>
 <script>
 tailwind.config = {
