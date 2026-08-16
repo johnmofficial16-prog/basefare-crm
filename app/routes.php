@@ -144,6 +144,20 @@ $app->group('/payroll', function ($group) {
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN]));
 
+// ==========================================================================
+// AI Buddy — maintenance surface (admin OR users.is_dev; the role list here
+// admits any authed user because AuthMiddleware cannot express the dev flag —
+// BuddyController::allowed() is the real gate, re-reading is_dev per request)
+// ==========================================================================
+$app->group('/buddy', function ($group) {
+    $group->get('/maintenance',          [\App\Controllers\BuddyController::class, 'maintenancePage']);
+    $group->get('/maintenance/digest',   [\App\Controllers\BuddyController::class, 'maintenanceDigest']);
+    $group->get('/maintenance/history',  [\App\Controllers\BuddyController::class, 'maintenanceHistory']);
+    $group->post('/maintenance/chat',    [\App\Controllers\BuddyController::class, 'maintenanceChat']);
+})
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware());
+
 // Letters — Letter of Intent maker (admin only)
 $app->group('/letters', function ($group) {
     $group->get('', [LetterController::class, 'loiMaker']);

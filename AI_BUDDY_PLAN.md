@@ -335,12 +335,51 @@ Every future jailbreak found in the wild gets added here first, then fixed.
 
 | Phase | Contents | Est. |
 |---|---|---|
-| **P0 — plumbing** | migration; `BuddyService` + function-calling loop on `GeminiService`; `BuddyToolRegistry` (role-scoped, whitelists); `BuddyPromptBuilder` + scrubber; quotas; chat UI panel; **red-team suite green** | 3–4 days |
-| **P1 — agent buddy v1** | agent tool pack; trigger cron + nudges→bell; login greeting; onboarding interview; persona; TTS out | 3–4 days |
+| **P0 — plumbing** ✅ 16 Aug | migration (`2026_08_16_buddy_tables.sql` + `users.is_dev`); `BuddyGeminiClient` (function-calling loop, injectable transport, offline-tested); `BuddyToolRegistry` (role-scoped, audited, fail-soft); `BuddyPromptBuilder` (history caps + PII scrubber); `BuddyService` (quotas, persistence, deterministic fallback) | done |
+| **P0.5 — maintenance buddy** ✅ 16 Aug | first live surface, shipped BEFORE the agent buddy: zero customer PII, proves the machinery on a low-stakes audience. `MaintenanceTools` (6 read-only tools over error_log/ledger/backups/cron traces), `/buddy/maintenance` page (status cards + chat), admin-or-`is_dev` gate | done |
+| **P1 — agent buddy v1** | agent tool pack; trigger cron + nudges→bell; login greeting; onboarding interview; persona; TTS out (needs Cloud TTS enablement — after the billing card lands) | 3–4 days |
 | **P2 — super buddy** | admin tool pack; voice UI (Web Speech, auto-listen); action tools + confirm gate; chat-reading UI | 3–4 days |
 | **P3 — hardening** | consolidator cron; cost dashboard tile; budget alert; tier upgrade request; red-team round 2 | 1–2 days |
-| **P4 — gated** | attendance/productivity coaching — **only after** the attendance bugs (`HANDOFF.md` §4) are fixed; then Vertex-AI-Search knowledge tool if docs corpus appears | after bug fixes |
+| **P4 — gated** | attendance/productivity coaching — see §13 gate status; then Vertex-AI-Search knowledge tool if docs corpus appears | after gate clears |
 
 Each phase ends with its tests green before the next starts (house
 convention). P0's red-team suite is the definition of done for the security
 model — **no user-facing launch before it passes.**
+
+---
+
+## 13. Plan audit — 16 Aug 2026 (drift found & resolved before build)
+
+The plan pre-dated the bug audit, the error pipeline, and several client
+decisions. Corrections now baked in:
+
+1. **Maintenance buddy inserted as P0.5, ships FIRST.** Internal-facing, zero
+   customer PII, reuses all P0 plumbing — proves the machinery before any
+   agent sees it. Client decision (12 Aug).
+2. **Supervisor role is dormant** (client, 16 Aug). Supervisors are OUT of all
+   buddy role matrices until the role is revived. The code keeps its guards.
+3. **Dev mode = `users.is_dev` boolean**, not a 6th role enum value (174
+   role-check sites; enum has a history of migration warnings). Gates the
+   maintenance buddy alongside admins; re-read from DB per request.
+4. **Time-window rule for buddy stats** (new, binds every stats tool):
+   *daily* figures use `ShiftService::businessDayBounds()` (matches the
+   dashboard the agents watch); *monthly* figures use calendar months
+   (matches the Performance tab). The buddy must NEVER disagree with the
+   screen the user is looking at — trust dies on the first mismatch.
+5. **Attendance-coaching gate (P4) partially cleared** by the 12 Aug fix
+   batches: monthly-report hour loss, future-days-as-absent, auto-clockout
+   overnight math and the liveboard window are fixed. STILL GATING:
+   `attendance_sessions.date` splits overnight shifts (rewrites history —
+   needs client sign-off) and the dead break tracking. Buddy stays silent on
+   attendance until both are resolved.
+6. **Error pipeline integration** (didn't exist when the plan was written):
+   every buddy failure logs through `ErrorLogService` (visible in the
+   console, and to the maintenance buddy itself); the scrubber logs each PII
+   hit as a tool bug; tool audits live in `buddy_tool_calls`.
+7. **Red-team suite split**: pure-logic set runs offline in CI-style local
+   tests (scrubber/registry/loop — 25 green at P0); the live-session set
+   (`scripts/buddy_redteam.php`) runs on the server once the agent surface
+   exists (P1 definition-of-done, unchanged).
+8. **TTS deferred until the billing card lands** (Cloud TTS is a separate API
+   with real cost). Chat-only until then; the buddy plan's voice design is
+   unchanged.
