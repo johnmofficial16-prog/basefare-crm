@@ -52,15 +52,35 @@ echo "[" . date('Y-m-d H:i:s') . "] Auto clock-out cron starting...\n";
  */
 function getScheduledEndTimestamp(AttendanceSession $session): int
 {
-    $date         = is_string($session->date) ? $session->date : $session->date->format('Y-m-d');
-    $schedStart   = $session->scheduled_start ?? '09:00:00';
-    $schedEnd     = $session->scheduled_end   ?? '18:00:00';
+    $schedEnd = $session->scheduled_end ?? '18:00:00';
 
-    $startTs = strtotime($date . ' ' . $schedStart);
-    $endTs   = strtotime($date . ' ' . $schedEnd);
+    // Anchor to the ACTUAL clock-in instant, not session->date.
+    //
+    // session->date is stamped date('Y-m-d') at clock-in, so an agent who starts a
+    // 21:00→06:00 shift after midnight gets tomorrow's date. Building the window
+    // from that date put scheduled end a full day in the future, so if they forgot
+    // to clock out the cron never saw them as merely stale — by the time the window
+    // passed they were >24h old and fell into the "no pay computed" branch.
+    //
+    // Deriving the end from the clock-in timestamp is correct for every case:
+    //   09:05 on a 09:00–18:00 shift → 18:00 same day
+    //   21:10 on a 21:00–06:00 shift → 06:00 next day (end <= clock-in → +24h)
+    //   00:30 on a 21:00–06:00 shift → 06:00 SAME day (previously a day late)
+    $clockInTs = strtotime((string) $session->clock_in);
 
-    // Overnight shift: end time is on the next calendar day
-    if ($endTs <= $startTs) {
+    if ($clockInTs === false) {
+        // Defensive fallback: keep the old date-anchored behaviour.
+        $date       = is_string($session->date) ? $session->date : $session->date->format('Y-m-d');
+        $schedStart = $session->scheduled_start ?? '09:00:00';
+        $startTs    = strtotime($date . ' ' . $schedStart);
+        $endTs      = strtotime($date . ' ' . $schedEnd);
+        return $endTs <= $startTs ? $endTs + 86400 : $endTs;
+    }
+
+    $endTs = strtotime(date('Y-m-d', $clockInTs) . ' ' . $schedEnd);
+
+    // Shift ends after midnight relative to when they clocked in.
+    if ($endTs <= $clockInTs) {
         $endTs += 86400;
     }
 
@@ -111,13 +131,28 @@ foreach ($activeSessions as $session) {
         $grossMins   = (int) round(($scheduledEndTs - $clockInTs) / 60);
         $netWorkMins = max(0, $grossMins - $totalBreakMins);
 
-        $session->update([
-            'clock_out'           => $clockOutTime,
-            'total_work_mins'     => $netWorkMins,
-            'total_break_mins'    => $totalBreakMins,
-            'status'              => AttendanceSession::STATUS_AUTO_CLOSED,
-            'resolution_required' => 1,
-        ]);
+        // Conditional write: only close it if it is STILL active.
+        //
+        // $activeSessions was fetched at the top of the run, so an agent who clocks
+        // out normally while the cron is mid-loop had their real clock_out (and any
+        // overtime) overwritten with scheduled_end by this stale model — silently
+        // shrinking paid hours. Guarding on status makes the update a no-op in that
+        // race instead of a data loss.
+        $affected = Capsule::table('attendance_sessions')
+            ->where('id', $session->id)
+            ->where('status', AttendanceSession::STATUS_ACTIVE)
+            ->update([
+                'clock_out'           => $clockOutTime,
+                'total_work_mins'     => $netWorkMins,
+                'total_break_mins'    => $totalBreakMins,
+                'status'              => AttendanceSession::STATUS_AUTO_CLOSED,
+                'resolution_required' => 1,
+            ]);
+
+        if ($affected === 0) {
+            echo "  [Skip] Session #{$session->id} was closed by the agent mid-run — left untouched\n";
+            continue;
+        }
 
         echo "  [Auto-close] Session #{$session->id} for user #{$session->user_id}"
             . " — scheduled_end: {$clockOutTime}, net {$netWorkMins} mins\n";
@@ -133,10 +168,19 @@ foreach ($activeSessions as $session) {
                 'flagged'       => 1,
             ]);
 
-        $session->update([
-            'status'              => AttendanceSession::STATUS_AUTO_CLOSED,
-            'resolution_required' => 1,
-        ]);
+        // Same still-active guard as the normal branch above.
+        $affected = Capsule::table('attendance_sessions')
+            ->where('id', $session->id)
+            ->where('status', AttendanceSession::STATUS_ACTIVE)
+            ->update([
+                'status'              => AttendanceSession::STATUS_AUTO_CLOSED,
+                'resolution_required' => 1,
+            ]);
+
+        if ($affected === 0) {
+            echo "  [Skip] Session #{$session->id} was closed by the agent mid-run — left untouched\n";
+            continue;
+        }
 
         echo "  [STALE >24h] Session #{$session->id} for user #{$session->user_id}"
             . " — flagged for admin, NO pay computed\n";

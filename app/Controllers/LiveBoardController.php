@@ -108,9 +108,16 @@ class LiveBoardController
             $shiftEnd   = $now->copy()->startOfDay()->addHours(18)->subSecond(); // Today 5:59:59 PM
         }
 
-        // DB strings need to be in UTC because Hostinger MySQL runs in UTC by default
-        $shiftStartDb = $shiftStart->copy()->setTimezone('UTC');
-        $shiftEndDb   = $shiftEnd->copy()->setTimezone('UTC');
+        // NO timezone conversion here. The old code shifted these bounds to UTC on
+        // the theory that "Hostinger MySQL runs in UTC", but the app never writes
+        // UTC: public/index.php sets date_default_timezone_set('Asia/Kolkata') and
+        // every timestamp is written with PHP's date()/Carbon::now(), i.e. IST wall
+        // clock. Converting the WINDOW but not the DATA moved the leaderboard by
+        // 5.5 hours — the board silently covered 12:30 PM→12:30 PM instead of the
+        // 6 PM→6 PM shift. DashboardController queries these same columns with
+        // unconverted ShiftService::businessDayBounds() values; this is now consistent.
+        $shiftStartDb = $shiftStart;
+        $shiftEndDb   = $shiftEnd;
 
         // ── Leaderboard: approved transactions today ──────────────────────────
         $txnRows = Transaction::whereBetween('created_at', [$shiftStartDb, $shiftEndDb])
@@ -173,8 +180,10 @@ class LiveBoardController
                 'label'      => $this->typeLabel($t->type),
                 'profit'     => (int) round($t->netMco()),
                 'currency'   => $t->currency ?? 'USD',
-                // convert UTC back to IST for frontend display
-                'time'       => $t->updated_at ? Carbon::parse($t->updated_at, 'UTC')->setTimezone('Asia/Kolkata')->toIso8601String() : null,
+                // updated_at is already IST wall-clock (see the window note above) —
+                // parsing it as UTC and converting added a spurious +5.5h to every
+                // ticker timestamp.
+                'time'       => $t->updated_at ? Carbon::parse($t->updated_at, 'Asia/Kolkata')->toIso8601String() : null,
             ]);
         }
 

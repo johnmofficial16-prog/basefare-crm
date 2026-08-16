@@ -836,15 +836,71 @@ class AttendanceService
             ->get();
 
         // Build map: [agent_id][date] => session
-        $sessionMap = [];
+        //
+        // An agent can legitimately have MORE THAN ONE session on a date (a shift
+        // edit auto-unlocks the day, an admin re-clocks them in, a split shift).
+        // This used to be a bare `$sessionMap[$user_id][$date] = $s`, so the later
+        // session silently overwrote the earlier one and its hours vanished — JSR
+        // alone was understated by 91.7 hours in July, and PAYROLL READS THESE
+        // FIGURES. Same-day sessions are now collapsed into one representative row
+        // whose totals cover the whole day, which keeps the calendar grid at one
+        // cell per date while making the numbers complete.
+        //
+        // The collapsed model is mutated IN MEMORY ONLY (never ->save()d) — it is a
+        // display/aggregation vehicle, not a record to persist.
+        $grouped = [];
         foreach ($sessions as $s) {
-            $sessionMap[$s->user_id][$s->date] = $s;
+            $grouped[$s->user_id][$s->date][] = $s;
+        }
+
+        $sessionMap = [];
+        foreach ($grouped as $uid => $byDate) {
+            foreach ($byDate as $date => $daySessions) {
+                if (count($daySessions) === 1) {
+                    $sessionMap[$uid][$date] = $daySessions[0];
+                    continue;
+                }
+
+                // Earliest clock-in first: that session carries the day's real
+                // lateness (you arrive late once, not once per session).
+                usort($daySessions, fn($a, $b) => strcmp((string) $a->clock_in, (string) $b->clock_in));
+
+                $merged = $daySessions[0];
+                $breaks = $merged->breaks;
+                $work   = 0;
+                $break  = 0;
+
+                foreach ($daySessions as $i => $ds) {
+                    $work  += (int) ($ds->total_work_mins ?? 0);
+                    $break += (int) ($ds->total_break_mins ?? 0);
+                    if ($i > 0) {
+                        $breaks = $breaks->concat($ds->breaks);
+                    }
+                }
+
+                $merged->total_work_mins  = $work;
+                $merged->total_break_mins = $break;
+                // late_minutes deliberately left as the earliest session's value.
+                $merged->setRelation('breaks', $breaks);
+
+                $sessionMap[$uid][$date] = $merged;
+            }
         }
 
         // Build all calendar dates
         $dates = [];
         for ($d = 1; $d <= $daysInMonth; $d++) {
             $dates[] = sprintf('%s-%s-%02d', $year, $month, $d);
+        }
+
+        // How many days of this month have actually happened yet (see days_absent).
+        $today = date('Y-m-d');
+        if ($dateFrom > $today) {
+            $elapsedDays = 0;                       // month entirely in the future
+        } elseif ($dateTo >= $today) {
+            $elapsedDays = (int) date('j');         // current month → days so far
+        } else {
+            $elapsedDays = $daysInMonth;            // fully elapsed month
         }
 
         // Build per-agent summary
@@ -869,12 +925,17 @@ class AttendanceService
                 }
             }
 
+            // days_absent counted every remaining day of the month as an absence,
+            // so on the 5th of a 31-day month every agent showed 26 days absent in
+            // the payroll CSV. Only count days that have actually elapsed.
+            // (Refinement still open: days the agent was not rostered at all should
+            // not count as absent either — that needs the shift_schedules join.)
             $summary[$agent->id] = [
                 'work_mins'    => $workMins,
                 'break_mins'   => $breakMins,
                 'late_mins'    => $lateMins,
                 'days_present' => $daysPresent,
-                'days_absent'  => $daysInMonth - $daysPresent,
+                'days_absent'  => max(0, $elapsedDays - $daysPresent),
                 'late_count'   => $lateCount,
                 'flagged_count'=> $flaggedCount,
             ];
