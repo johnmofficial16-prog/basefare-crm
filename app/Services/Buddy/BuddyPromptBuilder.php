@@ -56,6 +56,16 @@ class BuddyPromptBuilder
         }
         $kept = array_reverse($kept);
 
+        // Gemini requires the FIRST content to have role 'user'. Our history
+        // legitimately starts with a model message whenever the business-day
+        // greeting opened the conversation — sending that verbatim made every
+        // post-greeting turn 400 while a fresh conversation worked (found live
+        // on production, 16 Aug). Drop leading model messages; their substance
+        // (the agent's numbers) is always re-derivable through tools.
+        while ($kept !== [] && $kept[0]['role'] === 'model') {
+            array_shift($kept);
+        }
+
         return array_map(static fn(array $m) => [
             'role'  => $m['role'] === 'model' ? 'model' : 'user',
             'parts' => [['text' => $m['content']]],
