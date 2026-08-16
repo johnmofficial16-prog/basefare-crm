@@ -219,7 +219,15 @@ class AcceptanceController
         ]);
 
         // ── Create record ─────────────────────────────────────────────────
-        $acceptance = $this->service->create($data, $agentId);
+        // create() now throws rather than saving a record whose card details failed
+        // to encrypt. Catch it here so the agent gets a clear message instead of an
+        // error page, and so nothing half-written is reported as success.
+        try {
+            $acceptance = $this->service->create($data, $agentId);
+        } catch (\Throwable $e) {
+            $_SESSION['flash_error'] = $e->getMessage();
+            return $response->withHeader('Location', '/acceptance/create')->withStatus(302);
+        }
 
         // ── If this was a pre-auth promotion, mark original as PROMOTED ───
         // The hidden field preauth_id was submitted and is_preauth is 0 (full acceptance)
@@ -478,6 +486,22 @@ class AcceptanceController
         // Resend email
         $result = $this->emailService->send($acceptance);
 
+        // Only claim (and record) a resend if the send actually succeeded.
+        // This used to ignore $result['success'] entirely: it stamped
+        // email_status = EMAIL_RESENT and returned success:true even when SMTP had
+        // rejected the message, so the agent watched the RESENT badge appear and
+        // waited for a customer who never got the link — while the 12-hour expiry,
+        // already reset just above, ran out. The create path (see store()) has
+        // always branched on this correctly. Note that $result['note'] was the only
+        // key read here and the service never sets it.
+        if (empty($result['success'])) {
+            return $this->jsonResponse($response, [
+                'success' => false,
+                'error'   => $result['error'] ?? 'Email delivery failed. Copy the link and send it manually.',
+                'link'    => $acceptance->publicUrl(),
+            ], 502);
+        }
+
         // Update email status
         $acceptance->update(['email_status' => AcceptanceRequest::EMAIL_RESENT]);
 
@@ -485,7 +509,6 @@ class AcceptanceController
             'success'    => true,
             'link'       => $acceptance->publicUrl(),
             'expires_at' => $acceptance->expires_at->format('M j, Y g:i A'),
-            'note'       => $result['note'] ?? null,
         ]);
     }
 

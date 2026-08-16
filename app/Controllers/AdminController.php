@@ -234,7 +234,9 @@ class AdminController
             $query->where('severity', $filters['severity']);
         }
         if ($filters['search']) {
-            $query->where('message', 'like', '%' . $filters['search'] . '%');
+            // Escape LIKE metacharacters — otherwise a search for "50%" or "user_1"
+            // is silently interpreted as a wildcard pattern and returns the wrong rows.
+            $query->where('message', 'like', '%' . addcslashes($filters['search'], '%_\\') . '%');
         }
         if ($filters['date_from']) {
             $query->where('created_at', '>=', $filters['date_from'] . ' 00:00:00');

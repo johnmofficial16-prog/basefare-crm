@@ -1250,10 +1250,17 @@ async function doResend() {
   try {
     const res = await fetch(`/acceptance/<?= $acceptance->id ?>/resend`, { method: 'POST', headers: { 'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>' } });
     const data = await res.json();
-    if (data.success) location.reload();
-    else alert('Error: ' + data.error);
+    if (data.success) { location.reload(); return; }
+    alert('Error: ' + (data.error || 'Email delivery failed.'));
   } catch (err) {
     alert('Server error.');
+  }
+  // Restore the button on any failure — the resend endpoint can now genuinely
+  // report failure (it used to always claim success), so this path is reachable
+  // and must not leave a permanently disabled "Sending..." button.
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<span class="material-symbols-outlined text-sm">outgoing_mail</span> Resend';
   }
 }
 

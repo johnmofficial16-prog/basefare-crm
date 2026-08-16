@@ -405,7 +405,10 @@ class PerformanceController
                  SUM(status <> 'voided')             AS bookings,
                  SUM(status =  'approved')           AS approved,
                  SUM(status =  'pending_review')     AS pending,
-                 SUM(status =  'voided')             AS voided,
+                 -- Only the ORIGINAL counts as a void. Voiding creates a paired
+                 -- negative reversal row that is itself 'voided', so counting both
+                 -- reported every void twice on the scoreboard.
+                 SUM(status = 'voided' AND void_of_transaction_id IS NULL) AS voided,
                  -- Money is counted on APPROVED transactions only (realized), so
                  -- pending bookings don't inflate an agent's revenue/profit score.
                  SUM(CASE WHEN status = 'approved' THEN total_amount ELSE 0 END) AS revenue,

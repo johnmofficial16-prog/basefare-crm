@@ -113,10 +113,31 @@ class ReminderService
             return 0;
         }
 
+        // ATOMIC CLAIM. dispatchDue() is called by the cron AND lazily by every
+        // user's 30-second notification poll, so a dozen requests can reach the same
+        // due reminder in the same second. The "is it still scheduled?" check above
+        // is a read — all of them passed it, all of them fanned out notifications,
+        // and every recipient's bell rang several times for one reminder.
+        //
+        // This UPDATE is the real gate: exactly one caller can flip
+        // scheduled -> fired, and only that caller proceeds. Marking it fired up
+        // front also means a crash mid-fan-out cannot cause a re-send storm.
+        $claimed = BookingReminder::where('id', $reminder->id)
+            ->where('status', BookingReminder::STATUS_SCHEDULED)
+            ->update([
+                'status'   => BookingReminder::STATUS_FIRED,
+                'fired_at' => Carbon::now()->format('Y-m-d H:i:s'),
+            ]);
+
+        if ($claimed === 0) {
+            return 0;   // someone else got there first
+        }
+
         $txn = $reminder->transaction()->with('agent')->first();
         if (!$txn) {
             // Booking vanished — cancel the orphan so it stops being "due".
-            $reminder->update(['status' => BookingReminder::STATUS_CANCELLED]);
+            // (Overrides the FIRED status set by the claim above; nothing was sent.)
+            $reminder->update(['status' => BookingReminder::STATUS_CANCELLED, 'fired_at' => null]);
             return 0;
         }
 
@@ -149,10 +170,7 @@ class ReminderService
             $created++;
         }
 
-        $reminder->update([
-            'status'    => BookingReminder::STATUS_FIRED,
-            'fired_at'  => $now,
-        ]);
+        // (status/fired_at were already set by the atomic claim at the top.)
 
         // Activity log for admin visibility (mirrors shift_gap_alert pattern).
         try {

@@ -61,17 +61,27 @@ if (empty($gaps)) {
 } else {
     echo "\n  TOTAL GAPS: " . count($gaps) . " agent(s) without shifts.\n";
     
-    // Log to activity_log for admin visibility
+    // Log to activity_log for admin visibility.
+    // user_id was 0 for "system", but no user row has id 0, so activity_log's
+    // foreign key rejected every insert — the first gap threw and killed the whole
+    // cron, meaning this alert has never actually been recorded. NULL is the
+    // established convention for system-generated rows (see ReminderService).
+    // Each insert is isolated so one bad row cannot abort the rest.
     foreach ($gaps as $agent) {
-        \Illuminate\Database\Capsule\Manager::table('activity_log')->insert([
-            'user_id'     => 0, // system
-            'action'      => 'shift_gap_alert',
-            'entity_type' => 'shift_schedules',
-            'entity_id'   => $agent->id,
-            'details'     => json_encode(['agent_name' => $agent->name, 'missing_date' => $tomorrow]),
-            'ip_address'  => '127.0.0.1',
-            'created_at'  => date('Y-m-d H:i:s'),
-        ]);
+        try {
+            \Illuminate\Database\Capsule\Manager::table('activity_log')->insert([
+                'user_id'     => null, // system
+                'action'      => 'shift_gap_alert',
+                'entity_type' => 'shift_schedules',
+                'entity_id'   => $agent->id,
+                'details'     => json_encode(['agent_name' => $agent->name, 'missing_date' => $tomorrow]),
+                'ip_address'  => '127.0.0.1',
+                'created_at'  => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[shift_gap_alert] activity_log insert failed for agent '
+                . $agent->id . ': ' . $e->getMessage());
+        }
     }
 }
 

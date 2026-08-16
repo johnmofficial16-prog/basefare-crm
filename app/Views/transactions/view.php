@@ -1162,7 +1162,12 @@ $currentRole   = $_SESSION['role'] ?? 'agent';
       The sale stays approved; a “Refund −$X” line is recorded and Net MCO is reduced.
       Remaining refundable: <strong class="text-slate-700"><?= $txn->currency ?> <?= number_format($txn->refundRemaining(), 2) ?></strong>.
     </p>
-    <form method="POST" action="/transactions/<?= $txn->id ?>/refund">
+    <?php // Guard against double-submit: a refund posted twice used to be recorded
+          // twice. TransactionService::refund() now dedupes identical refunds
+          // seconds apart as a backstop, but stopping the second POST at source is
+          // cheaper and gives the admin immediate feedback. ?>
+    <form method="POST" action="/transactions/<?= $txn->id ?>/refund"
+          onsubmit="const b=this.querySelector('button[type=submit]'); if(this.dataset.submitted){return false;} this.dataset.submitted='1'; if(b){b.disabled=true;b.textContent='Processing…';} return true;">
       <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
       <div class="grid grid-cols-2 gap-2 mb-3">
         <label class="flex items-center justify-center gap-1.5 py-2 border border-slate-200 rounded-lg text-sm font-semibold cursor-pointer has-[:checked]:bg-orange-50 has-[:checked]:border-orange-400 has-[:checked]:text-orange-700">

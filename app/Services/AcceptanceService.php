@@ -79,8 +79,25 @@ class AcceptanceService
                     $cardCvvEnc = $enc->encrypt($rawCvv);
                 }
             } catch (\Throwable $e) {
-                // If encryption fails, still store last-4 but log the error
+                // DO NOT swallow this. The agent has just typed the customer's full
+                // card number; if encryption fails (missing/unreadable
+                // ENCRYPTION_KEY_A/B — a failure mode this project has already had
+                // after a key rotation) the old code logged and carried on, saving
+                // the acceptance with card_number_enc/expiry/cvv all NULL while
+                // flashing success. The customer then signed, and at charge time the
+                // card was simply gone: autofill returned empty and "reveal" 422'd.
+                // Unrecoverable, and invisible until someone tried to take payment.
                 error_log('AcceptanceService CC encryption failure: ' . $e->getMessage());
+                \App\Services\ErrorLogService::log(
+                    'critical',
+                    '[acceptance] Card encryption FAILED — creation aborted: ' . $e->getMessage()
+                );
+                throw new \RuntimeException(
+                    'Card details could not be secured, so nothing was saved. '
+                    . 'This is a server configuration problem — tell an admin before retrying.',
+                    0,
+                    $e
+                );
             }
         }
 
@@ -343,7 +360,12 @@ class AcceptanceService
                 return null;
             }
             $filename = $token . '_esign.json';
-            file_put_contents($dir . $filename, $payload);
+            // Signatures are chargeback evidence — a failed write (full disk, bad
+            // permissions on storage/acceptance/signatures) must report failure, not
+            // return a filename the DB will then reference to a file that isn't there.
+            if (!self::writeFile($dir . $filename, $payload)) {
+                return null;
+            }
             return $filename;
         }
 
@@ -356,9 +378,34 @@ class AcceptanceService
         }
 
         $filename = $token . '_sig.png';
-        file_put_contents($dir . $filename, $data);
+        if (!self::writeFile($dir . $filename, $data)) {
+            return null;
+        }
 
         return $filename;
+    }
+
+    /**
+     * Write a file and actually verify it landed.
+     *
+     * file_put_contents() returns false (or a short count) on failure, and both
+     * call sites above ignored it — so a signature that never reached disk was
+     * still recorded against the acceptance and only surfaced much later, when the
+     * evidence was needed for a chargeback.
+     */
+    private static function writeFile(string $path, string $contents): bool
+    {
+        $written = @file_put_contents($path, $contents);
+        if ($written === false || $written !== strlen($contents)) {
+            @unlink($path);   // don't leave a truncated artefact behind
+            error_log('[AcceptanceService] signature write FAILED: ' . $path);
+            \App\Services\ErrorLogService::log(
+                'error',
+                '[acceptance] Signature/evidence write failed: ' . basename($path)
+            );
+            return false;
+        }
+        return true;
     }
 
     /**
