@@ -806,5 +806,12 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
   </div>
 
 </main>
+
+<!-- AI Buddy launcher (P1) — floating, links to the buddy chat -->
+<a href="/buddy" title="Your Buddy"
+   class="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-lg
+          flex items-center justify-center hover:bg-primary-container hover:scale-105 transition-transform">
+  <span class="material-symbols-outlined text-2xl">emoji_people</span>
+</a>
 </body>
 </html>

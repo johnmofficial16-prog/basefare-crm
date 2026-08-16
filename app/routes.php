@@ -158,6 +158,18 @@ $app->group('/buddy', function ($group) {
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
 
+// Agent buddy — self-scoped tools, any authed role, agents behind the
+// AttendanceGate (buddy is a work tool; admins/managers are gate-exempt).
+$app->group('/buddy', function ($group) {
+    $group->get('',           [\App\Controllers\BuddyController::class, 'agentPage']);
+    $group->get('/history',   [\App\Controllers\BuddyController::class, 'agentHistory']);
+    $group->post('/greeting', [\App\Controllers\BuddyController::class, 'agentGreeting']);
+    $group->post('/chat',     [\App\Controllers\BuddyController::class, 'agentChat']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware());
+
 // Letters — Letter of Intent maker (admin only)
 $app->group('/letters', function ($group) {
     $group->get('', [LetterController::class, 'loiMaker']);

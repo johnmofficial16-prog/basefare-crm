@@ -96,6 +96,81 @@ class BuddyController
     }
 
     // =========================================================================
+    // AGENT BUDDY (P1) — every tool is self-scoped, so any authed role may use
+    // it; each user only ever sees their own numbers. Agents pass through the
+    // AttendanceGate (must be clocked in), admins/managers are gate-exempt.
+    // =========================================================================
+
+    public function agentPage(Request $request, Response $response): Response
+    {
+        $csrfToken  = $_SESSION['csrf_token'] ?? '';
+        $userName   = $_SESSION['name'] ?? 'there';
+        $activePage = 'buddy';
+
+        ob_start();
+        require __DIR__ . '/../Views/buddy/chat.php';
+        $html = ob_get_clean();
+
+        $response->getBody()->write($html);
+        return $response;
+    }
+
+    public function agentHistory(Request $request, Response $response): Response
+    {
+        $userId = (int) $_SESSION['user_id'];
+        $convId = DB::table('buddy_conversations')
+            ->where('user_id', $userId)->where('kind', 'agent')
+            ->orderByDesc('id')->value('id');
+
+        $messages = [];
+        if ($convId !== null) {
+            $messages = DB::table('buddy_messages')
+                ->where('conversation_id', $convId)
+                ->whereIn('role', ['user', 'model'])
+                ->orderByDesc('id')->limit(30)->get()->reverse()->values()
+                ->map(fn($m) => ['role' => $m->role, 'content' => $m->content, 'at' => $m->created_at])
+                ->all();
+        }
+
+        $nudges = DB::table('buddy_nudges')
+            ->where('user_id', $userId)
+            ->whereIn('status', ['pending', 'delivered'])
+            ->orderByDesc('id')->limit(6)
+            ->get(['type', 'payload_json', 'created_at'])
+            ->map(fn($n) => ['type' => $n->type, 'payload' => json_decode((string) $n->payload_json, true) ?: [], 'at' => $n->created_at])
+            ->all();
+
+        return $this->json($response, ['success' => true, 'messages' => $messages, 'nudges' => $nudges]);
+    }
+
+    /** POST — generates the once-per-business-day greeting if it is due. */
+    public function agentGreeting(Request $request, Response $response): Response
+    {
+        $result = $this->service->agentGreeting(
+            (int) $_SESSION['user_id'],
+            (string) ($_SESSION['role'] ?? 'agent')
+        );
+        return $this->json($response, ['success' => true] + $result);
+    }
+
+    public function agentChat(Request $request, Response $response): Response
+    {
+        $body    = $request->getParsedBody() ?? [];
+        $message = (string) ($body['message'] ?? '');
+
+        $result = $this->service->agentChat(
+            (int) $_SESSION['user_id'],
+            (string) ($_SESSION['role'] ?? 'agent'),
+            $message
+        );
+
+        if (!$result['success']) {
+            return $this->json($response, ['success' => false, 'error' => $result['error'] ?? 'Failed.'], 422);
+        }
+        return $this->json($response, ['success' => true, 'reply' => $result['reply'], 'ai' => $result['ai']]);
+    }
+
+    // =========================================================================
     // GATE + HELPERS
     // =========================================================================
 

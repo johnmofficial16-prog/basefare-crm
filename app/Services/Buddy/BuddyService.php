@@ -25,6 +25,11 @@ class BuddyService
     private const MAINT_PER_MINUTE_LIMIT = 10;
     private const MAX_INPUT_CHARS        = 2000;
 
+    // Agent surface quotas (plan §1: over-quota costs zero API money).
+    private const AGENT_DAILY_LIMIT      = 40;
+    private const AGENT_PER_MINUTE_LIMIT = 6;
+    private const AGENT_MAX_INPUT_CHARS  = 500;
+
     /** Reuse a conversation if its last message is younger than this. */
     private const CONVERSATION_REUSE_HOURS = 24;
 
@@ -89,6 +94,188 @@ class BuddyService
                   . self::renderDigestText(self::digest());
         $this->storeMessage($convId, 'model', $fallback);
         return ['success' => true, 'reply' => $fallback, 'ai' => false];
+    }
+
+    // =========================================================================
+    // AGENT CHAT (P1)
+    // =========================================================================
+
+    /**
+     * One agent chat turn. Same shape as maintenanceChat, agent quotas/persona.
+     */
+    public function agentChat(int $userId, string $role, string $message): array
+    {
+        $message = trim($message);
+        if ($message === '') {
+            return ['success' => false, 'reply' => '', 'ai' => false, 'error' => 'Empty message.'];
+        }
+        if (mb_strlen($message) > self::AGENT_MAX_INPUT_CHARS) {
+            return ['success' => false, 'reply' => '', 'ai' => false,
+                    'error' => 'Message too long (max ' . self::AGENT_MAX_INPUT_CHARS . ' characters).'];
+        }
+
+        $quota = $this->quotaCheck($userId, 'agent', self::AGENT_DAILY_LIMIT, self::AGENT_PER_MINUTE_LIMIT);
+        if ($quota !== null) {
+            return ['success' => false, 'reply' => '', 'ai' => false, 'error' => $quota];
+        }
+
+        [$message] = BuddyPromptBuilder::scrub($message);
+
+        $convId  = $this->openConversation($userId, 'agent');
+        $history = $this->loadHistory($convId);
+        $this->storeMessage($convId, 'user', $message);
+
+        $contents   = BuddyPromptBuilder::buildContents($history);
+        $contents[] = ['role' => 'user', 'parts' => [['text' => $message]]];
+
+        $registry = AgentTools::registry($userId, $role);
+        $registry->setConversation($convId);
+
+        $result = $this->client->chat(self::agentPersona($userId), $contents, $registry);
+
+        if ($result['success']) {
+            $this->storeMessage($convId, 'model', $result['text']);
+            $this->markNudgesDelivered($userId);
+            return ['success' => true, 'reply' => $result['text'], 'ai' => true];
+        }
+
+        ErrorLogService::log('warning', '[buddy] agent AI turn failed: ' . ($result['error'] ?? '?'));
+        $fallback = "I can't reach my AI brain right now, but your numbers still work:\n\n"
+                  . self::renderAgentFallback($userId, $role);
+        $this->storeMessage($convId, 'model', $fallback);
+        return ['success' => true, 'reply' => $fallback, 'ai' => false];
+    }
+
+    /**
+     * Business-day greeting: generated once per business day, on first open of
+     * the buddy page. Deterministic digest → Gemini phrases it in persona →
+     * stored as a model message. Falls back to the plain digest.
+     *
+     * @return array {greeted: bool, reply?: string, ai?: bool}
+     */
+    public function agentGreeting(int $userId, string $role): array
+    {
+        [$dayStart] = \App\Services\ShiftService::businessDayBounds();
+
+        $convId = $this->openConversation($userId, 'agent');
+
+        // Already greeted this business day? (any model message since day start)
+        $already = DB::table('buddy_messages')
+            ->where('conversation_id', $convId)
+            ->where('role', 'model')
+            ->where('created_at', '>=', (string) $dayStart)
+            ->exists();
+        if ($already) {
+            return ['greeted' => false];
+        }
+
+        $digest = self::renderAgentFallback($userId, $role);
+
+        $registry = AgentTools::registry($userId, $role);   // greeting may call tools too
+        $registry->setConversation($convId);
+
+        $prompt = "It is the start of the agent's business day. Greet them warmly by name, "
+                . "give a 3–5 sentence summary of where they stand using ONLY this digest and "
+                . "any tools you need, and end with one concrete, encouraging focus for today. "
+                . "Mention open nudges if any.\n\nDIGEST:\n" . $digest;
+
+        $result = $this->client->chat(
+            self::agentPersona($userId),
+            [['role' => 'user', 'parts' => [['text' => $prompt]]]],
+            $registry
+        );
+
+        $reply = $result['success'] ? $result['text'] : "Good to see you! Here's where you stand:\n\n" . $digest;
+        $this->storeMessage($convId, 'model', $reply);
+        $this->markNudgesDelivered($userId);
+
+        return ['greeted' => true, 'reply' => $reply, 'ai' => $result['success']];
+    }
+
+    /** Deterministic agent digest — fallback text and greeting raw material. */
+    private static function renderAgentFallback(int $userId, string $role): string
+    {
+        $reg   = AgentTools::registry($userId, $role);
+        $today = $reg->execute('get_my_today', []);
+        $month = $reg->execute('get_my_month_summary', []);
+        $pipe  = $reg->execute('get_my_pipeline', []);
+        $nudge = $reg->execute('get_my_nudges', []);
+
+        $lines = [];
+        if (!isset($today['error'])) {
+            $lines[] = sprintf('Today so far: %d sales, %s %s revenue, %s net MCO.',
+                $today['sales'], $today['currency'], number_format($today['revenue'], 2),
+                number_format($today['net_mco'], 2));
+        }
+        if (!isset($month['error'])) {
+            $tm = $month['this_month'];
+            $lines[] = sprintf('This month: %d sales, %s revenue, %s net MCO, %d refunds.',
+                $tm['sales'], number_format($tm['revenue'], 2), number_format($tm['net_mco'], 2), $tm['refunds']);
+            if (isset($month['hold_notice'])) {
+                $lines[] = 'Note: ' . $month['hold_notice'];
+            }
+        }
+        if (!isset($pipe['error'])) {
+            $na = count($pipe['acceptances_awaiting_transaction']);
+            $ne = count($pipe['transactions_awaiting_eticket']);
+            if ($na + $ne > 0) {
+                $lines[] = "Open flow steps: {$na} acceptance(s) awaiting a transaction, {$ne} sale(s) awaiting an e-ticket.";
+            }
+        }
+        if (!isset($nudge['error']) && count($nudge['nudges']) > 0) {
+            $lines[] = count($nudge['nudges']) . ' open nudge(s) — ask me about them.';
+        }
+        return $lines === [] ? 'No activity recorded yet today.' : implode("\n", $lines);
+    }
+
+    private function markNudgesDelivered(int $userId): void
+    {
+        try {
+            DB::table('buddy_nudges')
+                ->where('user_id', $userId)->where('status', 'pending')
+                ->update(['status' => 'delivered', 'delivered_at' => date('Y-m-d H:i:s')]);
+        } catch (Throwable $e) {
+            // non-fatal
+        }
+    }
+
+    private static function agentPersona(int $userId): string
+    {
+        $facts = AgentTools::facts($userId);
+        $factBlock = $facts === []
+            ? "You know nothing personal about this agent yet. Early in the conversation (not all at once), "
+              . "ask what name they like to be called, what monthly goal they have, and what keeps them "
+              . "motivated — save each answer with remember_fact."
+            : "WHAT YOU REMEMBER ABOUT THIS AGENT:\n- " . implode("\n- ", array_slice($facts, 0, 20));
+
+        return <<<PROMPT
+You are the agent's work buddy inside the Base Fare CRM — a warm, upbeat
+friend and sales coach for a travel-agency sales agent. You are NOT management.
+
+{$factBlock}
+
+HARD RULES (non-negotiable):
+- Every number you state comes from a tool call in THIS conversation. Never
+  estimate, never remember numbers from earlier chats, never invent.
+- You only know about THIS agent. If asked about other agents, comparisons,
+  salaries, HR matters, company finances, or system internals: decline warmly
+  in one sentence ("I only keep track of you!") and move on.
+- NEVER promise, imply, or speculate about bonuses, incentives, targets set by
+  management, or consequences. If asked, say that's for their manager.
+- If a tool result includes a hold_notice, repeat it honestly rather than
+  guessing at hidden numbers.
+- No customer personal details ever — you don't have them and must not ask
+  for them. Booking references (PNR) are fine.
+- Off-topic requests (essays, homework, general chatbot use): one friendly
+  sentence of banter maximum, then steer back to work.
+
+STYLE:
+- Friendly, concrete, brief: 2–5 sentences unless the agent asks for detail.
+- Celebrate real wins with specifics ("that \$1,240 booking — nice!").
+- Encourage without guilt-tripping. Slumps get practical next steps, not shame.
+- Nudge on open flow steps (acceptances without transactions, sales without
+  e-tickets, upcoming departures) — that is your reminder job.
+PROMPT;
     }
 
     // =========================================================================
@@ -213,8 +400,12 @@ PROMPT;
     }
 
     /** @return string|null Error message when over quota, null when fine. */
-    private function quotaCheck(int $userId, string $kind): ?string
-    {
+    private function quotaCheck(
+        int $userId,
+        string $kind,
+        int $dailyLimit = self::MAINT_DAILY_LIMIT,
+        int $perMinuteLimit = self::MAINT_PER_MINUTE_LIMIT
+    ): ?string {
         $base = DB::table('buddy_messages')
             ->join('buddy_conversations', 'buddy_conversations.id', '=', 'buddy_messages.conversation_id')
             ->where('buddy_conversations.user_id', $userId)
@@ -222,12 +413,12 @@ PROMPT;
             ->where('buddy_messages.role', 'user');
 
         $today = (clone $base)->where('buddy_messages.created_at', '>=', date('Y-m-d 00:00:00'))->count();
-        if ($today >= self::MAINT_DAILY_LIMIT) {
-            return 'Daily message limit reached (' . self::MAINT_DAILY_LIMIT . '). Resets at midnight.';
+        if ($today >= $dailyLimit) {
+            return "Daily message limit reached ({$dailyLimit}). Resets at midnight.";
         }
 
         $lastMinute = (clone $base)->where('buddy_messages.created_at', '>=', date('Y-m-d H:i:s', time() - 60))->count();
-        if ($lastMinute >= self::MAINT_PER_MINUTE_LIMIT) {
+        if ($lastMinute >= $perMinuteLimit) {
             return 'Slow down — too many messages this minute.';
         }
 
