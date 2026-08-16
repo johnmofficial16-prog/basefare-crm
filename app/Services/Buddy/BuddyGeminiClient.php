@@ -92,6 +92,14 @@ class BuddyGeminiClient
                 }
                 error_log('[BuddyGemini] HTTP ' . ($resp['code'] ?? '???') . ': '
                     . ($apiMsg ?: substr((string) ($resp['body'] ?? ''), 0, 300)));
+                // Also into the Error Console — shared hosting hides the PHP
+                // error log, and the REAL Google error (429 quota? 400 schema?
+                // 403 billing?) is the difference between four unrelated fixes.
+                \App\Services\ErrorLogService::log(
+                    'warning',
+                    '[BuddyGemini] HTTP ' . ($resp['code'] ?? '?') . ' on hop ' . $hop . ': '
+                    . mb_substr($apiMsg ?: (string) ($resp['body'] ?? ''), 0, 400)
+                );
                 return [
                     'success' => false,
                     'error'   => 'The AI service returned an error.',
