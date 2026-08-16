@@ -132,7 +132,27 @@ class BuddyGeminiClient
 
             // Echo the model turn (with its functionCall parts) into history,
             // then answer every call with a functionResponse part.
-            $contents[] = ['role' => 'model', 'parts' => $parts];
+            //
+            // REBUILT, not echoed verbatim: json_decode gives PHP arrays, and an
+            // empty args {} re-encodes as [] — a JSON *array* where Google's
+            // proto wants a Struct *object*. Every parameterless tool call
+            // (get_backup_status etc.) therefore 400'd on hop 1 with
+            // "Unknown name args at contents[N].parts[0].function_call" —
+            // found live via the Error Console, invisible to the fake
+            // transport. (object) casts force {} for empty args; unknown
+            // response-only part fields are dropped for the same reason.
+            $echoParts = [];
+            foreach ($parts as $part) {
+                if (isset($part['functionCall']['name'])) {
+                    $echoParts[] = ['functionCall' => [
+                        'name' => $part['functionCall']['name'],
+                        'args' => (object) ($part['functionCall']['args'] ?? []),
+                    ]];
+                } elseif (isset($part['text'])) {
+                    $echoParts[] = ['text' => $part['text']];
+                }
+            }
+            $contents[] = ['role' => 'model', 'parts' => $echoParts];
 
             $responseParts = [];
             foreach ($functionCalls as $call) {
@@ -147,7 +167,8 @@ class BuddyGeminiClient
                 $responseParts[] = [
                     'functionResponse' => [
                         'name'     => $name,
-                        'response' => ['result' => $result],
+                        // (object) for the same empty-array-vs-object reason.
+                        'response' => (object) ['result' => $result],
                     ],
                 ];
             }
