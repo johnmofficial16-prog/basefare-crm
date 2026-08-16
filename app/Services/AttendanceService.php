@@ -779,11 +779,23 @@ class AttendanceService
     /**
      * P2 #12 — Get historical attendance data for admin panel.
      */
-    public function getHistoricalData(string $date, ?int $agentId = null): array
+    /**
+     * @param  string     $date
+     * @param  int|null   $agentId   Optional single-agent filter (from the UI)
+     * @param  array|null $agentIds  Optional hard scope — when non-null the result
+     *                               is restricted to these user ids regardless of
+     *                               $agentId. Used to keep managers/supervisors
+     *                               inside their own team (see AttendanceController).
+     */
+    public function getHistoricalData(string $date, ?int $agentId = null, ?array $agentIds = null): array
     {
         $query = AttendanceSession::forDate($date)
             ->with(['breaks', 'user'])
             ->orderBy('clock_in', 'asc');
+
+        if ($agentIds !== null) {
+            $query->whereIn('user_id', count($agentIds) ? $agentIds : [-1]);
+        }
 
         if ($agentId) {
             $query->forUser($agentId);

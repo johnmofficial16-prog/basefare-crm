@@ -423,11 +423,28 @@ class AttendanceController
         $date    = $params['date'] ?? date('Y-m-d');
         $agentId = isset($params['agent_id']) ? (int)$params['agent_id'] : null;
 
-        $sessions = $this->service->getHistoricalData($date, $agentId);
-        $agents   = \App\Models\User::whereIn('role', [\App\Models\User::ROLE_AGENT, \App\Models\User::ROLE_MANAGER, \App\Models\User::ROLE_SUPERVISOR, \App\Models\User::ROLE_CSA])
-            ->where('status', 'active')
-            ->orderBy('name')
-            ->get();
+        // Scope managers/supervisors to their own team, matching adminMonthly().
+        // Until 2026-08-12 this page (and the CSV export) ignored team membership,
+        // so any manager could read every agent's attendance — including other
+        // centres' — by picking them from the dropdown or passing ?agent_id=N.
+        $actorId   = (int)$_SESSION['user_id'];
+        $actorRole = $_SESSION['role'] ?? 'agent';
+
+        $agentIds = null;
+        if ($actorRole === User::ROLE_SUPERVISOR || $actorRole === User::ROLE_MANAGER) {
+            $actor    = User::find($actorId);
+            $teamIds  = $actor ? $actor->getTeamAgentIds() : [];
+            $agentIds = count($teamIds) ? $teamIds : [-1];
+        }
+
+        $sessions = $this->service->getHistoricalData($date, $agentId, $agentIds);
+
+        $agentQuery = \App\Models\User::whereIn('role', [\App\Models\User::ROLE_AGENT, \App\Models\User::ROLE_MANAGER, \App\Models\User::ROLE_SUPERVISOR, \App\Models\User::ROLE_CSA])
+            ->where('status', 'active');
+        if ($agentIds !== null) {
+            $agentQuery->whereIn('id', $agentIds);
+        }
+        $agents = $agentQuery->orderBy('name')->get();
 
         ob_start();
         require __DIR__ . '/../Views/attendance/admin_history.php';
@@ -534,24 +551,41 @@ class AttendanceController
         $date    = $params['date'] ?? date('Y-m-d');
         $agentId = isset($params['agent_id']) ? (int)$params['agent_id'] : null;
 
-        $sessions = $this->service->getHistoricalData($date, $agentId);
+        // Same team scoping as adminHistory()/adminMonthly() — an export must never
+        // return rows the requester cannot see on screen.
+        $actorId   = (int)$_SESSION['user_id'];
+        $actorRole = $_SESSION['role'] ?? 'agent';
+
+        $agentIds = null;
+        if ($actorRole === User::ROLE_SUPERVISOR || $actorRole === User::ROLE_MANAGER) {
+            $actor    = User::find($actorId);
+            $teamIds  = $actor ? $actor->getTeamAgentIds() : [];
+            $agentIds = count($teamIds) ? $teamIds : [-1];
+        }
+
+        $sessions = $this->service->getHistoricalData($date, $agentId, $agentIds);
 
         $headers = [
             'Date', 'Agent', 'Clock In', 'Clock Out',
             'Work (mins)', 'Break (mins)', 'Late (mins)', 'Status',
         ];
 
+        // getHistoricalData() returns ARRAYS (->toArray()), not models. This loop used
+        // object syntax ($s->agent->name, $s->work_minutes), which PHP's null-coalescing
+        // silently swallowed — so every exported row was "date, —, , , 0, 0, 0, ".
+        // Keys and names below match app/Views/attendance/admin_history.php, which
+        // renders the same dataset correctly.
         $rows = [];
         foreach ($sessions as $s) {
             $rows[] = [
-                $date,
-                $s->agent->name ?? '—',
-                $s->clock_in ?? '',
-                $s->clock_out ?? '',
-                $s->work_minutes ?? 0,
-                $s->total_break_mins ?? 0,
-                $s->late_minutes ?? 0,
-                $s->status ?? '',
+                $s['date'] ?? $date,
+                $s['user']['name'] ?? '—',
+                $s['clock_in'] ?? '',
+                $s['clock_out'] ?? '',
+                $s['total_work_mins'] ?? 0,
+                $s['total_break_mins'] ?? 0,
+                $s['late_minutes'] ?? 0,
+                $s['status'] ?? '',
             ];
         }
 

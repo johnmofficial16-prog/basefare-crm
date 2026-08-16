@@ -50,6 +50,18 @@ class TransactionController
         $agentIds = null;
         $agentFilter = null;
 
+        // "Universal search" is a DELIBERATE feature: an agent taking a call must be
+        // able to find a customer's booking that another agent created (read-only —
+        // view() still blocks opening someone else's record).
+        //
+        // The defect (fixed 2026-08-12) was that ANY non-empty term unlocked the whole
+        // company: `?search=a` matched nearly every customer and dumped names, phones,
+        // emails, PNRs and amounts as a browsable list. Cross-scope search now requires
+        // a term specific enough to be a genuine customer lookup, so the feature keeps
+        // working while bulk enumeration does not.
+        $searchTerm     = trim((string) ($filters['search'] ?? ''));
+        $isTargetedLookup = self::isTargetedLookup($searchTerm);
+
         if ($isAdmin || $isCsa) {
             // unrestricted
         } elseif ($isManager) {
@@ -57,18 +69,22 @@ class TransactionController
             $teamIds  = $this->getManagerTeamIds((int)$userId);
             // Include the manager's own records
             $teamIds  = array_unique(array_merge($teamIds, [(int)$userId]));
-            if (empty($filters['search'])) {
+            if (!$isTargetedLookup) {
                 $agentIds = $teamIds;
             }
         } elseif ($isSupervisor) {
-            $actor = \App\Models\User::find($userId);
+            $actor   = \App\Models\User::find($userId);
             $teamIds = $actor ? $actor->getTeamAgentIds() : [];
-            if (empty($filters['search'])) {
+            if (!$isTargetedLookup) {
                 $agentIds = count($teamIds) ? $teamIds : [-1];
             }
         } else {
-            $agentFilter = !empty($filters['search']) ? null : $userId;
+            $agentFilter = $isTargetedLookup ? null : $userId;
         }
+
+        // Drives the "Showing results across all agents" banner so the UI never
+        // claims a wider scope than was actually applied.
+        $crossAgentSearch = $isTargetedLookup && !$isAdmin;
 
         $data = $this->service->list($page, 25, $filters, $agentFilter, $agentIds);
 
@@ -849,8 +865,18 @@ class TransactionController
 
         $userRole = $_SESSION['role'] ?? 'agent';
 
+        // Note scope must mirror view(): an agent only annotates their own records,
+        // a manager only their team's. Previously only ROLE_AGENT was checked, so a
+        // manager could attach notes to any transaction in the company, including
+        // other centres' — notes are part of the audit trail and surface to admins.
         if ($userRole === User::ROLE_AGENT && $txn->agent_id !== $userId) {
             return $this->jsonResponse($response, ['error' => 'Access denied.'], 403);
+        }
+        if ($userRole === User::ROLE_MANAGER) {
+            $teamIds = array_unique(array_merge($this->getManagerTeamIds($userId), [$userId]));
+            if (!in_array((int)$txn->agent_id, array_map('intval', $teamIds), true)) {
+                return $this->jsonResponse($response, ['error' => 'Access denied.'], 403);
+            }
         }
 
         $rn = \App\Models\RecordNote::log('transaction', $id, $userId, $note, $action);
@@ -962,6 +988,55 @@ class TransactionController
      * Returns the IDs of agents directly reporting to the given manager.
      * Returns [-1] if the manager has no assigned agents.
      */
+    /**
+     * Is this search term specific enough to be a real customer lookup?
+     *
+     * Gate for the cross-agent "universal search" (see index()). The service
+     * matches the term with LIKE %term% against customer_name, customer_phone,
+     * customer_email and pnr, so a short fragment like "a" or "gmail" would
+     * return effectively the whole customer base. A targeted lookup is one of:
+     *
+     *   - an email fragment with a domain      (contains "@" and 5+ chars)
+     *   - a phone number                       (7+ digits, ignoring formatting)
+     *   - a PNR / booking reference            (5+ chars, letters AND digits)
+     *   - a name                               (5+ chars, and not a bare
+     *                                           common-domain word like "gmail")
+     *
+     * Anything less falls back to the caller's own scope — the search still
+     * works, it just doesn't reach beyond their records.
+     */
+    private static function isTargetedLookup(string $term): bool
+    {
+        $term = trim($term);
+        if ($term === '') {
+            return false;
+        }
+
+        // Email: needs a local part and something after the "@"
+        if (str_contains($term, '@') && strlen($term) >= 5) {
+            return true;
+        }
+
+        // Phone: 7+ digits once separators are stripped
+        $digits = preg_replace('/\D/', '', $term);
+        if (strlen($digits) >= 7) {
+            return true;
+        }
+
+        if (strlen($term) < 5) {
+            return false;
+        }
+
+        // Block bare high-frequency fragments that would match huge swathes of
+        // the customer base while technically clearing the length bar.
+        $generic = ['gmail', 'yahoo', 'hotmail', 'outlook', 'email', '.com', 'admin', 'test'];
+        if (in_array(strtolower($term), $generic, true)) {
+            return false;
+        }
+
+        return true;
+    }
+
     private function getManagerTeamIds(int $managerId): array
     {
         $manager = \App\Models\User::find($managerId);

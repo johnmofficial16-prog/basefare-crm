@@ -20,7 +20,11 @@ $userRole = $_SESSION['role'] ?? 'agent';
 $isAdmin = ($userRole === 'admin');
 $isManager = ($userRole === 'manager');
 // Universal search: agents can search all records (read-only). Only used for display column logic.
-$isSearchingAll = !$isAdmin && !$isManager && !empty($filters['search']);
+// $crossAgentSearch is computed in the controller and is true only when the term was
+// specific enough to actually widen the scope (see TransactionController::isTargetedLookup),
+// so this never claims a wider result set than was really queried.
+$crossAgentSearch = $crossAgentSearch ?? false;
+$isSearchingAll = !$isAdmin && !$isManager && $crossAgentSearch;
 
 // Quick stats — computed in the controller over the full dataset using the
 // operations business day (6 PM → 6 PM), scoped to this role. Excludes voided.
@@ -126,8 +130,10 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           placeholder="Search by customer name, phone, email or PNR…"
           class="w-full border border-slate-200 rounded-lg pl-9 pr-4 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary/40 focus:border-primary">
       </div>
-      <?php if (!$isAdmin && !empty($filters['search'])): ?>
+      <?php if (!$isAdmin && $crossAgentSearch): ?>
       <p class="text-[10px] text-slate-400 mt-1 ml-1">Showing results across all agents — read-only view for customer assistance.</p>
+      <?php elseif (!$isAdmin && !empty($filters['search'])): ?>
+      <p class="text-[10px] text-slate-400 mt-1 ml-1">Searching your own records. To look up another agent's customer, enter a full email, phone number, or PNR.</p>
       <?php endif; ?>
     </div>
     <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">

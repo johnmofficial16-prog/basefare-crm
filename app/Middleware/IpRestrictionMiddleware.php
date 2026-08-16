@@ -32,17 +32,7 @@ class IpRestrictionMiddleware
             return $handler->handle($request);
         }
 
-        // Get the client's real IP address (accounting for Cloudflare/Proxies)
-        $clientIp = $_SERVER['HTTP_CF_CONNECTING_IP'] 
-                 ?? $_SERVER['HTTP_X_FORWARDED_FOR'] 
-                 ?? $_SERVER['REMOTE_ADDR'] 
-                 ?? '';
-        
-        // Handle comma-separated list in X-Forwarded-For
-        if (strpos($clientIp, ',') !== false) {
-            $parts = explode(',', $clientIp);
-            $clientIp = trim($parts[0]);
-        }
+        $clientIp = self::resolveClientIp();
 
         // Check if IP is in the whitelist table
         // Also support dynamic DNS by checking if the DB holds hostnames,
@@ -98,6 +88,58 @@ class IpRestrictionMiddleware
         }
 
         return $handler->handle($request);
+    }
+
+    /**
+     * Resolve the client IP used for the office-network access decision.
+     *
+     * REMOTE_ADDR is authoritative: the web server sets it from the real TCP peer
+     * and a client cannot forge it. Forwarding headers (CF-Connecting-IP,
+     * X-Forwarded-For) are just request headers — attacker-controlled unless the
+     * connection demonstrably came from a proxy we trust — so they are consulted
+     * ONLY when REMOTE_ADDR is listed in the TRUSTED_PROXIES env var.
+     *
+     * Before 2026-08-12 the headers were preferred unconditionally, so the entire
+     * restriction was defeated by one header:
+     *     curl -H 'CF-Connecting-IP: <an allowlisted office IP>' https://crm…
+     * Everything else in this codebase (login throttling, activity_log, attendance
+     * records) already reads REMOTE_ADDR directly, which is what confirms it holds
+     * the true client address on this host — so this change tightens security
+     * without altering who gets in today.
+     *
+     * TRUSTED_PROXIES: comma-separated IPs. Set this ONLY if a real reverse proxy
+     * (e.g. Cloudflare) is ever put in front; leaving it empty is the safe default.
+     */
+    private static function resolveClientIp(): string
+    {
+        $remote = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+
+        $trusted = array_filter(array_map(
+            'trim',
+            explode(',', (string) ($_ENV['TRUSTED_PROXIES'] ?? ''))
+        ));
+
+        if ($remote === '' || !in_array($remote, $trusted, true)) {
+            return $remote;
+        }
+
+        // Behind a trusted proxy: take the right-most hop that the proxy itself
+        // appended, i.e. the address the trusted proxy actually saw. Reading the
+        // left-most element would take whatever the client injected.
+        $cf = trim((string) ($_SERVER['HTTP_CF_CONNECTING_IP'] ?? ''));
+        if ($cf !== '') {
+            return $cf;
+        }
+
+        $xff = trim((string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
+        if ($xff !== '') {
+            $parts = array_values(array_filter(array_map('trim', explode(',', $xff))));
+            if ($parts) {
+                return end($parts);
+            }
+        }
+
+        return $remote;
     }
 
     /**

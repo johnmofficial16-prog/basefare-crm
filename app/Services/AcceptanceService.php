@@ -448,14 +448,32 @@ class AcceptanceService
      */
     public function collectForensicData(string $fingerprint = ''): array
     {
-        $ip = $_SERVER['HTTP_X_FORWARDED_FOR']
-            ?? $_SERVER['HTTP_X_REAL_IP']
-            ?? $_SERVER['REMOTE_ADDR']
-            ?? 'unknown';
+        // This IP is CHARGEBACK EVIDENCE — it is presented to the acquirer as proof
+        // of where the cardholder signed from, so it must not be client-controlled.
+        // Until 2026-08-12 X-Forwarded-For was preferred over REMOTE_ADDR, meaning
+        // the signer could stamp any address they liked onto their own authorization
+        // record with a single request header, destroying its evidentiary value.
+        // REMOTE_ADDR is set by the web server from the real TCP peer and cannot be
+        // forged; forwarding headers are only honoured from a configured proxy.
+        $remote  = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+        $trusted = array_filter(array_map(
+            'trim',
+            explode(',', (string) ($_ENV['TRUSTED_PROXIES'] ?? ''))
+        ));
 
-        // Handle comma-separated IPs (proxy chains) — take first (original client)
-        if (str_contains($ip, ',')) {
-            $ip = trim(explode(',', $ip)[0]);
+        $ip = $remote !== '' ? $remote : 'unknown';
+
+        if ($remote !== '' && in_array($remote, $trusted, true)) {
+            // Behind a trusted proxy: use the right-most (proxy-appended) hop.
+            $forwarded = trim((string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
+            if ($forwarded !== '') {
+                $parts = array_values(array_filter(array_map('trim', explode(',', $forwarded))));
+                if ($parts) {
+                    $ip = end($parts);
+                }
+            } elseif (!empty($_SERVER['HTTP_X_REAL_IP'])) {
+                $ip = trim((string) $_SERVER['HTTP_X_REAL_IP']);
+            }
         }
 
         // Call ip-api.com to get geolocation data (free tier, no key required)
