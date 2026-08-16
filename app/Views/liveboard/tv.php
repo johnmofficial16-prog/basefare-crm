@@ -247,25 +247,41 @@ function launchConfetti() {
 }
 
 // ── VOICE ──────────────────────────────────────────────────────
+// Many TV / set-top browsers do not implement the Web Speech API. This page used
+// window.speechSynthesis unguarded, and the error console caught the consequence
+// in production: getVoices() threw on unlock, and because voiceReady was set to
+// true BEFORE that line, every later sale ran the speak path, threw on
+// synth.cancel() inside a .then(), and never reached hideBanner() — leaving the
+// celebration banner stuck on the TV forever with confetti stacking behind it.
+const ttsAvailable = ('speechSynthesis' in window)
+                  && typeof window.SpeechSynthesisUtterance === 'function';
+
 document.getElementById('audio-unlock').addEventListener('click', function () {
   this.style.display = 'none';
-  voiceReady = true;
+  voiceReady = true;              // jingle + confetti work with or without TTS
   // warm up audio context on click
   new Audio('/ipl_horn.mp3').load();
-  const synth = window.speechSynthesis;
-  const pick = () => {
-    const v = synth.getVoices();
-    selectedVoice = v.find(x => x.name.includes('Natural') && x.lang.startsWith('en'))
-                 || v.find(x => (x.name.includes('Aria') || x.name.includes('Jenny') || x.name.includes('Samantha')) && x.lang.startsWith('en'))
-                 || v.find(x => /zira|female|google uk english female/i.test(x.name) && x.lang.startsWith('en'))
-                 || v.find(x => x.lang.startsWith('en'))
-                 || v[0];
-  };
-  pick();
-  if ('onvoiceschanged' in speechSynthesis) speechSynthesis.onvoiceschanged = pick;
-  // silent utterance to wake up TTS engine
-  const u = new SpeechSynthesisUtterance(' ');
-  synth.speak(u);
+
+  if (!ttsAvailable) return;      // no speech engine — announcements stay silent
+
+  try {
+    const synth = window.speechSynthesis;
+    const pick = () => {
+      const v = synth.getVoices() || [];
+      selectedVoice = v.find(x => x.name.includes('Natural') && x.lang.startsWith('en'))
+                   || v.find(x => (x.name.includes('Aria') || x.name.includes('Jenny') || x.name.includes('Samantha')) && x.lang.startsWith('en'))
+                   || v.find(x => /zira|female|google uk english female/i.test(x.name) && x.lang.startsWith('en'))
+                   || v.find(x => x.lang.startsWith('en'))
+                   || v[0];
+    };
+    pick();
+    if ('onvoiceschanged' in synth) synth.onvoiceschanged = pick;
+    // silent utterance to wake up TTS engine
+    synth.speak(new SpeechSynthesisUtterance(' '));
+  } catch (e) {
+    // Engine present but unusable — fall back to the silent path.
+    selectedVoice = null;
+  }
 });
 
 function hideBanner(banner) {
@@ -293,7 +309,10 @@ function announce(msg, typeLabel, emoji) {
   // Launch confetti
   launchConfetti();
 
-  if (voiceReady) {
+  // The banner MUST always be taken down. Anything that can throw is contained,
+  // and every path ends in a hideBanner() — a stuck banner blanks the scoreboard
+  // for the whole floor until someone reloads the TV.
+  if (voiceReady && ttsAvailable) {
     // 1. Play jingle first, THEN speak
     playJingle().then(() => {
       const synth = window.speechSynthesis;
@@ -302,8 +321,19 @@ function announce(msg, typeLabel, emoji) {
       if (selectedVoice) u.voice = selectedVoice;
       u.rate = 1.05; u.pitch = 1.25;
       u.onend = () => setTimeout(() => hideBanner(banner), 2000);
+      // onerror fires when the utterance is cut short or the engine refuses it,
+      // in which case onend never comes and the banner would linger.
+      u.onerror = () => setTimeout(() => hideBanner(banner), 2000);
       synth.speak(u);
-    });
+    }).catch(() => setTimeout(() => hideBanner(banner), 5000));
+    // Belt and braces: if the engine never fires onend/onerror at all.
+    setTimeout(() => hideBanner(banner), 15000);
+  } else if (voiceReady) {
+    // Audio unlocked but no speech engine (typical on TV browsers): still play
+    // the jingle, then take the banner down on a timer.
+    playJingle()
+      .then(() => setTimeout(() => hideBanner(banner), 5000))
+      .catch(() => setTimeout(() => hideBanner(banner), 5000));
   } else {
     setTimeout(() => hideBanner(banner), 7000);
   }
