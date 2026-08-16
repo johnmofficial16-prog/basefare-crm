@@ -927,9 +927,14 @@ class TransactionController
         $all   = $this->service->list(1, 99999, $filters, null, $agentIds);
         $items = $all['items'];
 
+        // Profit/MCO is the GROSS figure. Without the refund columns beside it a
+        // finance sheet built from this export overstates profit on every refunded
+        // booking — the refund loss lives in refund_mco_impact and only Net MCO
+        // (profit_mco − refund_mco_impact) reflects reality.
         $headers = [
             'ID', 'Date', 'Type', 'Customer Name', 'Phone', 'Email',
             'PNR', 'Amount', 'Currency', 'Cost', 'Profit/MCO',
+            'Refund Status', 'Refunded Amount', 'Refund MCO Impact', 'Net MCO (After Refunds)',
             'Payment Method', 'Payment Status', 'Status', 'Agent',
         ];
 
@@ -945,6 +950,10 @@ class TransactionController
             $t->currency,
             $t->cost_amount,
             $t->profit_mco,
+            $t->refund_status ?? 'none',
+            $t->refunded_amount ?? 0,
+            $t->refund_mco_impact ?? 0,
+            $t->netMco(),
             $t->payment_method,
             $t->payment_status,
             $t->status,

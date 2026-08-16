@@ -366,7 +366,10 @@ class Transaction extends Model
     /** Remaining charge that has not yet been refunded. */
     public function refundRemaining(): float
     {
-        return round((float) $this->total_amount - (float) $this->refunded_amount, 2);
+        // Floored at 0: if total_amount is later edited BELOW refunded_amount the
+        // raw subtraction goes negative, which read as "negative balance left to
+        // refund" in the refund modal and validation messages.
+        return max(0.0, round((float) $this->total_amount - (float) $this->refunded_amount, 2));
     }
 
     /** Refund badge [label, tailwind classes] for list/detail display. */

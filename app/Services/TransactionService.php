@@ -23,6 +23,12 @@ use Illuminate\Database\Capsule\Manager as DB;
  */
 class TransactionService
 {
+    /**
+     * Window in which an identical refund from the same admin is treated as a
+     * double-submitted click rather than a second, deliberate refund.
+     */
+    private const REFUND_DEDUPE_SECONDS = 10;
+
     private EncryptionService $encryption;
 
     public function __construct()
@@ -188,6 +194,32 @@ class TransactionService
                 'proof_of_sale_path' => $proofPath,
             ]);
 
+            // Keep the refund-loss invariant true after an edit.
+            //
+            // refund() freezes  impact = profit_mco + refundedGross + fee  so that
+            // everywhere  Net MCO = profit_mco − refund_mco_impact = −(gross + fee).
+            // Editing total_amount or profit_mco afterwards changed one side of that
+            // equation only, so every consumer of netMco() (dashboard KPIs,
+            // performance scores and CSV, centre analytics, mobile admin, live board)
+            // reported a wrong refund loss until the record was refunded again.
+            // Recompute with refund()'s own formula whenever a refunded record is edited.
+            if ($txn->refresh()->isRefunded()) {
+                $total    = max(0.01, (float) $txn->total_amount);
+                $refunded = (float) $txn->refunded_amount;
+                $isFull   = $txn->refund_status === Transaction::REFUND_FULL
+                            || $refunded >= round($total, 2) - 0.001;
+                $fraction = $isFull ? 1.0 : min(1.0, $refunded / $total);
+
+                $txn->update([
+                    'refund_mco_impact' => round(
+                        (float) $txn->profit_mco
+                        + round($fraction * $txn->actualMco(), 2)
+                        + $txn->merchantFee(),
+                        2
+                    ),
+                ]);
+            }
+
             // Re-save passengers (delete + re-insert)
             if (isset($data['passengers'])) {
                 TransactionPassenger::where('transaction_id', $txn->id)->delete();
@@ -326,13 +358,19 @@ class TransactionService
             throw new \RuntimeException('Void reason must be at least 10 characters.');
         }
 
-        $txn = Transaction::findOrFail($id);
-
-        if ($txn->isVoided()) {
-            throw new \RuntimeException('Transaction #' . $id . ' is already voided.');
-        }
-
-        return DB::connection()->transaction(function () use ($txn, $reason, $adminId) {
+        // CONCURRENCY: the already-voided check must run under the same row lock as
+        // the write. Checking outside the transaction let two admins (or a
+        // double-click) both pass the guard and each create a reversal record, so a
+        // single void produced two negative transactions and double-counted the
+        // reversal in every revenue figure.
+        return DB::connection()->transaction(function () use ($id, $reason, $adminId) {
+            $txn = Transaction::whereKey($id)->lockForUpdate()->first();
+            if (!$txn) {
+                throw new \RuntimeException('Transaction #' . $id . ' not found.');
+            }
+            if ($txn->isVoided()) {
+                throw new \RuntimeException('Transaction #' . $id . ' is already voided.');
+            }
 
             // Mark original as voided
             $txn->update([
@@ -399,37 +437,63 @@ class TransactionService
             throw new \RuntimeException('Refund reason must be at least 5 characters.');
         }
 
-        $txn = Transaction::findOrFail($id);
-
-        if ($txn->status !== Transaction::STATUS_APPROVED) {
-            throw new \RuntimeException('Only an approved transaction can be refunded.');
-        }
-        if ($txn->isFullyRefunded()) {
-            throw new \RuntimeException('This transaction is already fully refunded.');
-        }
-
-        $remaining = $txn->refundRemaining();
-        if ($remaining <= 0) {
-            throw new \RuntimeException('Nothing left to refund on this transaction.');
-        }
-
-        // Determine this refund's amount.
-        if ($isFull) {
-            $thisRefund = $remaining;
-        } else {
-            $thisRefund = round($amount, 2);
-            if ($thisRefund <= 0) {
-                throw new \RuntimeException('Refund amount must be greater than 0.');
+        // CONCURRENCY: read, validate and write must all happen under a row lock.
+        // Previously the transaction was loaded and validated OUTSIDE the DB
+        // transaction, so two admins refunding at once both read refunded_amount=0
+        // and the second UPDATE overwrote the first — real refunded money silently
+        // disappeared from the ledger. lockForUpdate() serialises them, so the
+        // second caller sees the first one's committed value and either refunds the
+        // true remaining balance or is correctly rejected.
+        return DB::connection()->transaction(function () use ($id, $isFull, $amount, $reason, $adminId) {
+            $txn = Transaction::whereKey($id)->lockForUpdate()->first();
+            if (!$txn) {
+                throw new \RuntimeException('Transaction not found.');
             }
-            if ($thisRefund > $remaining + 0.001) {
-                throw new \RuntimeException(
-                    'Refund amount exceeds the remaining balance (' .
-                    $txn->currency . ' ' . number_format($remaining, 2) . ').'
-                );
-            }
-        }
 
-        return DB::connection()->transaction(function () use ($txn, $thisRefund, $reason, $adminId) {
+            if ($txn->status !== Transaction::STATUS_APPROVED) {
+                throw new \RuntimeException('Only an approved transaction can be refunded.');
+            }
+            if ($txn->isFullyRefunded()) {
+                throw new \RuntimeException('This transaction is already fully refunded.');
+            }
+
+            $remaining = $txn->refundRemaining();
+            if ($remaining <= 0) {
+                throw new \RuntimeException('Nothing left to refund on this transaction.');
+            }
+
+            // Determine this refund's amount.
+            if ($isFull) {
+                $thisRefund = $remaining;
+            } else {
+                $thisRefund = round($amount, 2);
+                if ($thisRefund <= 0) {
+                    throw new \RuntimeException('Refund amount must be greater than 0.');
+                }
+                if ($thisRefund > $remaining + 0.001) {
+                    throw new \RuntimeException(
+                        'Refund amount exceeds the remaining balance (' .
+                        $txn->currency . ' ' . number_format($remaining, 2) . ').'
+                    );
+                }
+            }
+
+            // IDEMPOTENCY: a double-clicked form posts twice and each pass is
+            // individually valid, so the lock alone would happily record the refund
+            // twice. If the same admin applied a refund of exactly this size to this
+            // transaction seconds ago, and that refund is the only one on the record
+            // (refunded_amount === this amount), it is the same click — return the
+            // existing state instead of doubling it. Deliberately narrow: it cannot
+            // misfire on a genuine second refund of a *different* amount, and the
+            // window is seconds. The submit button is also disabled client-side, so
+            // this is the backstop rather than the only defence.
+            if ($txn->refunded_at !== null
+                && (int) $txn->refunded_by === (int) $adminId
+                && abs((float) $txn->refunded_amount - $thisRefund) < 0.001
+                && (time() - strtotime((string) $txn->refunded_at)) <= self::REFUND_DEDUPE_SECONDS) {
+                return $txn;
+            }
+
             $newRefunded = round((float) $txn->refunded_amount + $thisRefund, 2);
             $isNowFull   = $newRefunded >= round((float) $txn->total_amount, 2) - 0.001;
 

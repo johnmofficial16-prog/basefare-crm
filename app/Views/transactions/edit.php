@@ -288,8 +288,14 @@ tailwind.config = {
           <div>
             <label class="fl">Payment Status</label>
             <select name="payment_status" class="fi">
-              <?php foreach (['pending','captured','refunded','failed'] as $v): ?>
-              <option value="<?= $v ?>" <?= $prefill['payment_status'] === $v ? 'selected' : '' ?>><?= ucfirst($v) ?></option>
+              <?php // Was a hardcoded ['pending','captured','refunded','failed'].
+                    // 'captured' and 'failed' are not in the DB enum at all, and
+                    // 'paid'/'partial'/'credited' were missing — so opening the edit
+                    // page on a paid booking showed "Pending" selected and saving
+                    // any unrelated change silently reset payment_status to pending.
+                    // Transaction::paymentStatusOptions() is the single source of truth. ?>
+              <?php foreach (Transaction::paymentStatusOptions() as $v => $l): ?>
+              <option value="<?= $v ?>" <?= $prefill['payment_status'] === $v ? 'selected' : '' ?>><?= $l ?></option>
               <?php endforeach; ?>
             </select>
           </div>
@@ -494,7 +500,11 @@ function toggleProofRemoval(cb) {
 (function () {
   const t = document.getElementById('field_type').value;
   if (t) selectType(t);
-  calcMco();
+  // NOTE: a calcMco() call sat here until 2026-08-12. That function does not exist
+  // anywhere in the codebase (leftover from a refactor), so this IIFE threw a
+  // ReferenceError on every page load — which aborted the whole script block:
+  // the passenger list never rendered AND the submit handler below never attached,
+  // so edits posted without the synced passenger / type-specific payload.
   if (paxMgr.list.length === 0) paxMgr.add(); else paxMgr._render();
 })();
 
@@ -506,7 +516,17 @@ document.getElementById('txnForm').addEventListener('submit', function () {
     typeData.other_title = (document.getElementById('other_title_field') || {}).value || '';
     typeData.other_notes = (document.getElementById('other_notes_field') || {}).value || '';
   }
-  document.getElementById('type_specific_data_json').value = JSON.stringify(typeData);
+  // This form has no #type_specific_data_json input (create.php does, edit.php never
+  // did), so this used to throw "Cannot set properties of null" on every submit.
+  // Only write it when the field is actually present AND the type owns extra data —
+  // posting "{}" for a flight would make the controller overwrite the stored `data`
+  // blob (fare items) with an empty array and break MCO maths. When nothing is
+  // posted the controller falls back to the existing value, which is the behaviour
+  // this page has always had.
+  const typeDataField = document.getElementById('type_specific_data_json');
+  if (typeDataField && typeVal === 'other') {
+    typeDataField.value = JSON.stringify(typeData);
+  }
 });
 </script>
 </body>
