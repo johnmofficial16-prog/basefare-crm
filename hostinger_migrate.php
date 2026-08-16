@@ -92,16 +92,76 @@ if ($res) {
     $res->free();
 }
 
-// ── First run: baseline everything, execute nothing ─────────────────────────
+/**
+ * Files that already existed in production when the ledger was introduced
+ * (2026-08-12). ONLY these are baselined on an empty ledger — the schema they
+ * describe is known-live, so re-running them is pointless and risky.
+ *
+ * Anything NOT in this list is a genuinely new migration and RUNS NORMALLY, even
+ * on the very first ledger run. That distinction matters: baselining "everything
+ * present on disk" meant a migration authored before the first run would be
+ * silently marked applied and never executed, leaving the code referencing tables
+ * or columns that do not exist. Do not add new filenames to this list.
+ */
+const BASELINE_FILES = [
+    'migrate_four_tier_rbac.sql',
+    '2026_03_22_add_attendance_tables.sql',
+    '2026_03_22_add_shift_tables.sql',
+    '2026_04_14_add_cc_columns.sql',
+    '2026_04_14_add_supervisor_role.sql',
+    '2026_04_14_create_error_log.sql',
+    '2026_04_15_add_preauth_columns.sql',
+    '2026_04_20_add_proof_of_sale.sql',
+    '2026_04_23_multiple_proofs.sql',
+    '2026_04_27_add_csa_role.sql',
+    '2026_04_29_add_travel_vouchers_table.sql',
+    '2026_05_23_eticket_ack_replies.sql',
+    '2026_05_23_make_user_id_nullable_in_notes.sql',
+    '2026_05_29_add_message_id_to_eticket_replies.sql',
+    '2026_06_10_customer_emails.sql',
+    '2026_06_22_invoices.sql',
+    '2026_06_24_marketing_spend.sql',
+    '2026_06_24_refunds_mco.sql',
+    '2026_06_26_chargeback_refunds.sql',
+    '2026_07_24_booking_reminders.sql',
+    '2026_08_03_clockin_source.sql',
+    '2026_08_10_manual_etickets.sql',
+    'acceptance_requests.sql',
+    'add_dispute_gateway_columns.sql',
+    'add_ip_location.sql',
+    'add_miles_booking.sql',
+    'add_preauth_columns.sql',
+    'etickets.sql',
+    'ip_whitelist.sql',
+    'login_attempts.sql',
+    'record_notes.sql',
+    'transactions.sql',
+];
+
+// ── First run: baseline the pre-ledger schema, run anything newer ────────────
 if (count($ledgered) === 0) {
+    $toBaseline = [];
+    $toRun      = [];
+    foreach ($files as $file) {
+        if (in_array(basename($file), BASELINE_FILES, true)) {
+            $toBaseline[] = $file;
+        } else {
+            $toRun[] = $file;
+        }
+    }
+
     echo "\nEmpty ledger → BASELINE MODE.\n";
-    echo "Marking all " . count($files) . " existing migration files as applied\n";
-    echo "(schema is known-live in production; nothing is executed).\n\n";
+    echo "Marking " . count($toBaseline) . " pre-existing migration files as applied\n";
+    echo "(schema is known-live in production; nothing is executed).\n";
+    if ($toRun) {
+        echo "Then running " . count($toRun) . " migration(s) added since the ledger shipped.\n";
+    }
+    echo "\n";
     $stmt = $mysqli->prepare(
         "INSERT INTO schema_migrations (filename, checksum, status, detail)
          VALUES (?, ?, 'baseline', 'Baselined 2026-08-12: schema pre-dates the ledger')"
     );
-    foreach ($files as $file) {
+    foreach ($toBaseline as $file) {
         $name = basename($file);
         $sum  = hash_file('sha256', $file);
         $stmt->bind_param('ss', $name, $sum);
@@ -109,11 +169,20 @@ if (count($ledgered) === 0) {
             fwrite(STDERR, "❌ Ledger insert failed for {$name}: {$stmt->error}\n");
             exit(1);
         }
+        $ledgered[$name] = 'baseline';
         echo "  baseline  {$name}\n";
     }
     $stmt->close();
-    echo "\n🎉 Baseline complete. Future files in database/migrations/ will run normally.\n";
-    exit(0);
+
+    if (!$toRun) {
+        echo "\n🎉 Baseline complete. Future files in database/migrations/ will run normally.\n";
+        exit(0);
+    }
+
+    // Fall through: $ledgered now holds the baselined names, so the pending
+    // computation below resolves to exactly the newer files — which are backed up
+    // and executed for real, like any other migration.
+    echo "\nBaseline complete — continuing with the newer migration(s).\n";
 }
 
 // ── Determine pending files ──────────────────────────────────────────────────
