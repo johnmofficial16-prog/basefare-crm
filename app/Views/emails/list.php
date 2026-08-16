@@ -37,6 +37,7 @@ function ceThreadBadge(CustomerEmailThread $t): string {
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <script src="/assets/js/error-beacon.js"></script>
 <script src="/assets/js/tailwind.js"></script>
+<script src="/assets/js/buddy-widget.js" defer></script>
 <script>
 tailwind.config = { darkMode: "class", theme: { extend: {
   fontFamily: { sans: ['Inter', 'Manrope', 'sans-serif'] },

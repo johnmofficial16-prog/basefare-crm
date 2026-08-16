@@ -101,6 +101,35 @@ class BuddyController
     // AttendanceGate (must be clocked in), admins/managers are gate-exempt.
     // =========================================================================
 
+    /**
+     * Widget bootstrap. The embedded widget on every page calls this first and
+     * renders NOTHING unless it gets ok:true + a CSRF token — which is what
+     * keeps the widget harmless on any page without a valid session.
+     */
+    public function boot(Request $request, Response $response): Response
+    {
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0 || empty($_SESSION['csrf_token'])) {
+            return $this->json($response, ['ok' => false], 401);
+        }
+
+        $nudges = 0;
+        try {
+            $nudges = (int) DB::table('buddy_nudges')
+                ->where('user_id', $userId)->where('status', 'pending')->count();
+        } catch (\Throwable $e) {
+            // badge is cosmetic — never block boot on it
+        }
+
+        return $this->json($response, [
+            'ok'     => true,
+            'csrf'   => $_SESSION['csrf_token'],
+            'name'   => $_SESSION['name'] ?? '',
+            'admin'  => (($_SESSION['role'] ?? '') === User::ROLE_ADMIN),
+            'nudges' => $nudges,
+        ]);
+    }
+
     public function agentPage(Request $request, Response $response): Response
     {
         $csrfToken  = $_SESSION['csrf_token'] ?? '';

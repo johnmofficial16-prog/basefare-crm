@@ -65,6 +65,7 @@ $stepLabels = ['Type','Customer & Passengers','Flight Itinerary','Fare & Payment
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap" rel="stylesheet"/>
 <script src="/assets/js/error-beacon.js"></script>
 <script src="/assets/js/tailwind.js"></script>
+<script src="/assets/js/buddy-widget.js" defer></script>
 <script>
 tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','Manrope','sans-serif']},colors:{primary:{DEFAULT:'#0f1e3c','50':'#f0f4ff','100':'#dde8ff','500':'#1a3a6b','600':'#0f1e3c'},gold:{DEFAULT:'#c9a84c',light:'#f5e6c0'}}}}}
 </script>

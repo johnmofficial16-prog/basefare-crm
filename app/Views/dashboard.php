@@ -64,6 +64,7 @@ function dbAttBadge(string $state, int $lateMins = 0): string {
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <script src="/assets/js/error-beacon.js"></script>
 <script src="/assets/js/tailwind.js"></script>
+<script src="/assets/js/buddy-widget.js" defer></script>
 <script>
 tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","primary-container":"#314a8d",background:"#f8f9fa","surface-container-low":"#f3f4f5","on-surface":"#191c1d","on-surface-variant":"#434653"},fontFamily:{headline:["Manrope"],body:["Inter"]}}}}
 </script>
@@ -807,11 +808,6 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
 </main>
 
-<!-- AI Buddy launcher (P1) — floating, links to the buddy chat -->
-<a href="/buddy" title="Your Buddy"
-   class="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-lg
-          flex items-center justify-center hover:bg-primary-container hover:scale-105 transition-transform">
-  <span class="material-symbols-outlined text-2xl">emoji_people</span>
-</a>
+<!-- AI Buddy lives in the floating widget (buddy-widget.js) on every page -->
 </body>
 </html>

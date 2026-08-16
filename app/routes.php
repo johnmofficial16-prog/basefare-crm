@@ -162,6 +162,7 @@ $app->group('/buddy', function ($group) {
 // AttendanceGate (buddy is a work tool; admins/managers are gate-exempt).
 $app->group('/buddy', function ($group) {
     $group->get('',           [\App\Controllers\BuddyController::class, 'agentPage']);
+    $group->get('/boot',      [\App\Controllers\BuddyController::class, 'boot']);
     $group->get('/history',   [\App\Controllers\BuddyController::class, 'agentHistory']);
     $group->post('/greeting', [\App\Controllers\BuddyController::class, 'agentGreeting']);
     $group->post('/chat',     [\App\Controllers\BuddyController::class, 'agentChat']);
