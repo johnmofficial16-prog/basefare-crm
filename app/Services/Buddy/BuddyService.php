@@ -279,6 +279,108 @@ PROMPT;
     }
 
     // =========================================================================
+    // ADMIN (SUPER BUDDY) CHAT — P2
+    // =========================================================================
+
+    private const ADMIN_DAILY_LIMIT      = 400;
+    private const ADMIN_PER_MINUTE_LIMIT = 20;
+
+    public function adminChat(int $adminId, string $message): array
+    {
+        $message = trim($message);
+        if ($message === '') {
+            return ['success' => false, 'reply' => '', 'ai' => false, 'error' => 'Empty message.'];
+        }
+        if (mb_strlen($message) > self::MAX_INPUT_CHARS) {
+            return ['success' => false, 'reply' => '', 'ai' => false,
+                    'error' => 'Message too long (max ' . self::MAX_INPUT_CHARS . ' characters).'];
+        }
+
+        $quota = $this->quotaCheck($adminId, 'admin', self::ADMIN_DAILY_LIMIT, self::ADMIN_PER_MINUTE_LIMIT);
+        if ($quota !== null) {
+            return ['success' => false, 'reply' => '', 'ai' => false, 'error' => $quota];
+        }
+
+        [$message] = BuddyPromptBuilder::scrub($message);
+
+        $convId  = $this->openConversation($adminId, 'admin');
+        $history = $this->loadHistory($convId);
+        $this->storeMessage($convId, 'user', $message);
+
+        $contents   = BuddyPromptBuilder::buildContents($history);
+        $contents[] = ['role' => 'user', 'parts' => [['text' => $message]]];
+
+        $registry = AdminTools::registry($adminId);
+        $registry->setConversation($convId);
+
+        $result = $this->client->chat(self::adminPersona(), $contents, $registry);
+
+        // Surface the confirm gate to the UI: if the model parked an action this
+        // turn, the widget renders Confirm/Cancel buttons alongside the reply.
+        $pending = null;
+        $p = $_SESSION[AdminTools::PENDING_ACTION_KEY] ?? null;
+        if (is_array($p) && ($p['expires_at'] ?? 0) >= time()) {
+            $pending = 'Send to ' . ($p['target'] ?? '?') . ': "' . ($p['message'] ?? '') . '"';
+        }
+
+        if ($result['success']) {
+            $this->storeMessage($convId, 'model', $result['text']);
+            return ['success' => true, 'reply' => $result['text'], 'ai' => true, 'pending_action' => $pending];
+        }
+
+        ErrorLogService::log('warning', '[buddy] admin AI turn failed: ' . ($result['error'] ?? '?'));
+        $fallback = "The AI layer is unavailable right now. Deterministic team snapshot:\n\n"
+                  . self::renderTeamFallback();
+        $this->storeMessage($convId, 'model', $fallback);
+        return ['success' => true, 'reply' => $fallback, 'ai' => false, 'pending_action' => $pending];
+    }
+
+    private static function renderTeamFallback(): string
+    {
+        $reg = AdminTools::registry(0);
+        $o   = $reg->execute('get_team_overview', ['period' => 'today']);
+        if (isset($o['error'])) {
+            return 'Team snapshot unavailable: ' . $o['error'];
+        }
+        $lines = ['Today (' . ($o['window']['from'] ?? '?') . ' → ' . ($o['window']['to'] ?? '?') . '):'];
+        foreach (array_slice($o['rows'] ?? [], 0, 12) as $r) {
+            $lines[] = sprintf('  %s (%s): %d sales, %s revenue, %s net MCO',
+                $r['name'], $r['role'], $r['sales'], number_format($r['revenue'], 2), number_format($r['net_mco'], 2));
+        }
+        $t = $o['totals'] ?? [];
+        $lines[] = sprintf('TOTAL: %d sales, %s revenue, %s net MCO',
+            $t['sales'] ?? 0, number_format($t['revenue'] ?? 0, 2), number_format($t['net_mco'] ?? 0, 2));
+        return implode("\n", $lines);
+    }
+
+    private static function adminPersona(): string
+    {
+        return <<<PROMPT
+You are the Super Buddy — the admin's personal chief-of-staff inside the Base
+Fare CRM. Sharp, loyal, information-dense, comfortable delivering bad news
+plainly. The admin oversees travel-agency sales teams (agents, managers, CSAs).
+
+HARD RULES:
+- Every number, name and quote comes from tool results in THIS conversation.
+  Never estimate, never fill from memory.
+- You may read agents' buddy conversations (read_buddy_chats) — that access is
+  CONFIDENTIAL. Summarise insight for the admin, but remind them never to
+  reveal to an agent that chats are visible; that trust is the product.
+- Actions: send_nudge_to_agent only PROPOSES. Nothing sends until the admin
+  presses Confirm. Never claim an action was performed unless the confirm
+  result says so.
+- No customer personal data — your tools don't carry it and you never ask.
+- Scope: this team and this CRM. Anything else gets one polite sentence back.
+
+STYLE:
+- Lead with the answer, then the numbers that prove it. Bullets over prose.
+- Rank things (best/worst) whenever comparing people — that's what admins need.
+- Flag anomalies proactively when tool data shows them (a zero, a spike, a
+  long dry spell), even if unasked.
+PROMPT;
+    }
+
+    // =========================================================================
     // DETERMINISTIC DIGEST (status cards + AI fallback — no Gemini involved)
     // =========================================================================
 

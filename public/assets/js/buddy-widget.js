@@ -46,6 +46,22 @@
   function mount(boot) {
     injectCss();
 
+    // ── Mode: admins get the Super Buddy (cross-team tools + voice), everyone
+    //    else the personal agent buddy. Server decides via /buddy/boot.
+    var MODE = boot.mode === 'admin' ? 'admin' : 'agent';
+    var EP = MODE === 'admin'
+      ? { history: '/buddy/admin/history', chat: '/buddy/admin/chat', greeting: null,
+          confirm: '/buddy/admin/confirm-action', cancel: '/buddy/admin/cancel-action' }
+      : { history: '/buddy/history', chat: '/buddy/chat', greeting: '/buddy/greeting',
+          confirm: null, cancel: null };
+
+    // Web Speech — BOTH halves feature-detected; absence degrades silently
+    // (the liveboard TV taught us what unguarded speech APIs do in production).
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+    var ttsOk = ('speechSynthesis' in window) && typeof window.SpeechSynthesisUtterance === 'function';
+    var voiceOn = false;
+    try { voiceOn = localStorage.getItem('bwVoiceOn') === '1'; } catch (e) { /* private mode */ }
+
     // ── Orb ────────────────────────────────────────────────────────────────
     var orb = el('button', 'bw-orb');
     orb.type = 'button';
@@ -62,18 +78,27 @@
 
     // ── Panel ──────────────────────────────────────────────────────────────
     var panel = el('div', 'bw-panel');
+    var title = MODE === 'admin' ? 'Super Buddy' : 'Buddy';
+    var sub   = MODE === 'admin'
+      ? 'your chief of staff · sees the whole team'
+      : 'knows your numbers · never your customers’ data';
     panel.innerHTML =
       '<div class="bw-head">' +
         '<div class="bw-ava"><span class="bw-ava-ring"></span><span class="bw-ava-dot"></span></div>' +
-        '<div class="bw-head-txt"><div class="bw-title">Buddy</div>' +
-        '<div class="bw-sub"><span class="bw-live"></span>knows your numbers · never your customers’ data</div></div>' +
+        '<div class="bw-head-txt"><div class="bw-title">' + title + '</div>' +
+        '<div class="bw-sub"><span class="bw-live"></span>' + sub + '</div></div>' +
+        (MODE === 'admin' && ttsOk ? '<button type="button" class="bw-voice" title="Spoken replies on/off">' + (voiceOn ? '🔊' : '🔇') + '</button>' : '') +
         (boot.admin ? '<a class="bw-maint" href="/buddy/maintenance" title="Maintenance buddy">SYS</a>' : '') +
         '<button type="button" class="bw-close" aria-label="Close">×</button>' +
       '</div>' +
       '<div class="bw-chips"></div>' +
       '<div class="bw-log"></div>' +
-      '<form class="bw-form"><input class="bw-in" maxlength="500" autocomplete="off" ' +
-        'placeholder="Ask about your day, month, bookings…">' +
+      '<form class="bw-form">' +
+        (MODE === 'admin' && SR ? '<button type="button" class="bw-mic" title="Hold to talk" aria-label="Voice input">' +
+          '<svg viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>' +
+          '</button>' : '') +
+        '<input class="bw-in" maxlength="500" autocomplete="off" ' +
+        'placeholder="' + (MODE === 'admin' ? 'Ask about anyone, or press the mic…' : 'Ask about your day, month, bookings…') + '">' +
         '<button type="submit" class="bw-send" aria-label="Send">' +
         '<svg viewBox="0 0 24 24" fill="none"><path d="M4 12 20 4l-4 8 4 8-16-8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>' +
         '</button></form>';
@@ -103,8 +128,92 @@
       orb.classList.remove('bw-orb-hidden');
     });
 
+    // Voice toggle + speech (admin): pick a female English voice, per the
+    // client spec, with graceful fallback to any English voice.
+    var voiceBtn = panel.querySelector('.bw-voice');
+    var chosenVoice = null;
+    function pickVoice() {
+      try {
+        var v = window.speechSynthesis.getVoices() || [];
+        chosenVoice =
+          v.find(function (x) { return /female|zira|aria|jenny|samantha|google uk english female/i.test(x.name) && x.lang.indexOf('en') === 0; }) ||
+          v.find(function (x) { return x.lang.indexOf('en') === 0; }) || v[0] || null;
+      } catch (e) { chosenVoice = null; }
+    }
+    if (ttsOk) {
+      pickVoice();
+      if ('onvoiceschanged' in window.speechSynthesis) window.speechSynthesis.onvoiceschanged = pickVoice;
+    }
+    function speak(text) {
+      if (!ttsOk || !voiceOn || MODE !== 'admin') return;
+      try {
+        window.speechSynthesis.cancel();
+        var u = new SpeechSynthesisUtterance(String(text).slice(0, 600));
+        if (chosenVoice) u.voice = chosenVoice;
+        u.rate = 1.04;
+        window.speechSynthesis.speak(u);
+      } catch (e) { /* never break chat over audio */ }
+    }
+    if (voiceBtn) {
+      voiceBtn.addEventListener('click', function () {
+        voiceOn = !voiceOn;
+        voiceBtn.textContent = voiceOn ? '🔊' : '🔇';
+        try { localStorage.setItem('bwVoiceOn', voiceOn ? '1' : '0'); } catch (e) {}
+        if (!voiceOn && ttsOk) { try { window.speechSynthesis.cancel(); } catch (e) {} }
+      });
+    }
+
+    // Mic (admin): push-to-toggle SpeechRecognition → transcript → normal send.
+    var micBtn = panel.querySelector('.bw-mic');
+    var rec = null, listening = false;
+    if (micBtn && SR) {
+      micBtn.addEventListener('click', function () {
+        if (listening) { try { rec.stop(); } catch (e) {} return; }
+        try {
+          rec = new SR();
+          rec.lang = 'en-IN';
+          rec.interimResults = false;
+          rec.maxAlternatives = 1;
+          rec.onresult = function (ev) {
+            var text = (((ev.results || [])[0] || [])[0] || {}).transcript || '';
+            if (text.trim()) { input.value = text.trim(); sendCurrent(); }
+          };
+          rec.onend = function () { listening = false; micBtn.classList.remove('bw-mic-on'); };
+          rec.onerror = function () { listening = false; micBtn.classList.remove('bw-mic-on'); };
+          rec.start();
+          listening = true;
+          micBtn.classList.add('bw-mic-on');
+        } catch (e) { listening = false; micBtn.classList.remove('bw-mic-on'); }
+      });
+    }
+
+    // Confirm gate UI: the model can only PARK an action; these buttons are the
+    // human click that executes or discards it.
+    function renderConfirm(summary) {
+      var row = el('div', 'bw-row bw-row-ai');
+      var box = el('div', 'bw-msg bw-msg-ai');
+      var txt = el('div', '');
+      txt.textContent = '⚡ Pending action: ' + summary;
+      var btns = el('div', 'bw-confirm-btns');
+      var yes = el('button', 'bw-btn bw-btn-yes'); yes.type = 'button'; yes.textContent = 'Confirm & send';
+      var no  = el('button', 'bw-btn bw-btn-no');  no.type = 'button';  no.textContent = 'Cancel';
+      btns.appendChild(yes); btns.appendChild(no);
+      box.appendChild(txt); box.appendChild(btns);
+      row.appendChild(box); log.appendChild(row); log.scrollTop = log.scrollHeight;
+
+      function finish(url) {
+        yes.disabled = no.disabled = true;
+        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF }, body: '{}' })
+          .then(function (r) { return r.json(); })
+          .then(function (d) { box.removeChild(btns); addMsg('ai', d.detail || d.error || 'Done.'); })
+          .catch(function () { box.removeChild(btns); addMsg('ai', 'Action request failed — ask again.'); });
+      }
+      yes.addEventListener('click', function () { finish(EP.confirm); });
+      no.addEventListener('click', function () { finish(EP.cancel); });
+    }
+
     function load() {
-      fetch('/buddy/history')
+      fetch(EP.history)
         .then(function (r) { return r.json(); })
         .then(function (h) {
           (h.messages || []).forEach(function (m) { addMsg(m.role === 'user' ? 'user' : 'ai', m.content); });
@@ -118,44 +227,55 @@
             });
             chips.appendChild(c);
           });
-          if (!greeted) {
+          if (!greeted && EP.greeting) {
             greeted = true;
             var t = typing();
-            fetch('/buddy/greeting', { method: 'POST',
+            fetch(EP.greeting, { method: 'POST',
               headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF }, body: '{}' })
               .then(function (r) { return r.json(); })
               .then(function (g) {
                 t.remove();
-                if (g.greeted && g.reply) addMsg('ai', g.reply, g.ai === false);
+                if (g.greeted && g.reply) { addMsg('ai', g.reply, g.ai === false); speak(g.reply); }
                 else if ((h.messages || []).length === 0) {
                   addMsg('ai', "Hey! I'm your buddy — I keep an eye on your sales, your open bookings and your wins. Ask me anything about your numbers.");
                 }
               })
               .catch(function () { t.remove(); });
+          } else if (MODE === 'admin' && (h.messages || []).length === 0) {
+            addMsg('ai', "Super Buddy online. Ask me about anyone on the team — stats, dry spells, e-ticket lag, or what an agent's buddy has been hearing. I can also send nudges (you confirm every one).");
           }
         })
         .catch(function () { addMsg('ai', 'Could not load our chat — try reopening.'); });
     }
 
-    panel.querySelector('.bw-form').addEventListener('submit', function (ev) {
-      ev.preventDefault();
+    function sendCurrent() {
       var text = input.value.trim();
       if (!text || send.disabled) return;
       addMsg('user', text);
       input.value = '';
       send.disabled = true;
       var t = typing();
-      fetch('/buddy/chat', { method: 'POST',
+      fetch(EP.chat, { method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
         body: JSON.stringify({ message: text }) })
         .then(function (r) { return r.json(); })
         .then(function (d) {
           t.remove();
-          if (d.success) addMsg('ai', d.reply, d.ai === false);
-          else addMsg('ai', d.error || 'Something went wrong — try again.');
+          if (d.success) {
+            addMsg('ai', d.reply, d.ai === false);
+            speak(d.reply);
+            if (d.pending_action && EP.confirm) renderConfirm(d.pending_action);
+          } else {
+            addMsg('ai', d.error || 'Something went wrong — try again.');
+          }
         })
         .catch(function () { t.remove(); addMsg('ai', 'Network hiccup — try again.'); })
         .finally(function () { send.disabled = false; input.focus(); });
+    }
+
+    panel.querySelector('.bw-form').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      sendCurrent();
     });
 
     function addMsg(kind, text, degraded) {
@@ -245,6 +365,18 @@
 '.bw-send svg{width:18px;height:18px}' +
 '.bw-send:hover{filter:brightness(1.15)}' +
 '.bw-send:disabled{opacity:.5;cursor:default}' +
+'.bw-voice{background:none;border:0;font-size:16px;cursor:pointer;padding:2px 4px;opacity:.85}' +
+'.bw-voice:hover{opacity:1}' +
+'.bw-mic{width:40px;height:40px;flex:0 0 auto;border:1px solid rgba(120,150,255,.3);border-radius:12px;cursor:pointer;background:rgba(91,140,255,.12);color:#c8d6ff;display:flex;align-items:center;justify-content:center;transition:all .15s}' +
+'.bw-mic svg{width:18px;height:18px}' +
+'.bw-mic:hover{background:rgba(91,140,255,.25)}' +
+'.bw-mic-on{background:linear-gradient(135deg,#ef4444,#f97316);color:#fff;border-color:transparent;animation:bw-pulse 1s infinite}' +
+'.bw-confirm-btns{display:flex;gap:8px;margin-top:10px}' +
+'.bw-btn{border:0;border-radius:9px;font:700 12px/1 Inter;padding:9px 13px;cursor:pointer;transition:filter .15s}' +
+'.bw-btn:hover{filter:brightness(1.15)}' +
+'.bw-btn:disabled{opacity:.5;cursor:default}' +
+'.bw-btn-yes{background:linear-gradient(135deg,#059669,#34d399);color:#fff}' +
+'.bw-btn-no{background:rgba(255,255,255,.12);color:#c8d6ff;border:1px solid rgba(120,150,255,.3)}' +
 '@media (max-width:480px){.bw-panel{right:8px;bottom:8px;border-radius:16px}}';
     var s = document.createElement('style');
     s.textContent = css;

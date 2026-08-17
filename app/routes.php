@@ -171,6 +171,18 @@ $app->group('/buddy', function ($group) {
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
 
+// Super Buddy (P2) — admin only. Cross-agent tools + the confirm-action
+// endpoint, which is the ONLY path that executes a model-proposed action
+// (human click; the model cannot reach it).
+$app->group('/buddy/admin', function ($group) {
+    $group->get('/history',        [\App\Controllers\BuddyController::class, 'adminHistory']);
+    $group->post('/chat',          [\App\Controllers\BuddyController::class, 'adminChat']);
+    $group->post('/confirm-action',[\App\Controllers\BuddyController::class, 'adminConfirmAction']);
+    $group->post('/cancel-action', [\App\Controllers\BuddyController::class, 'adminCancelAction']);
+})
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
+
 // Letters — Letter of Intent maker (admin only)
 $app->group('/letters', function ($group) {
     $group->get('', [LetterController::class, 'loiMaker']);

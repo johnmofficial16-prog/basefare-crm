@@ -121,11 +121,14 @@ class BuddyController
             // badge is cosmetic — never block boot on it
         }
 
+        $isAdmin = (($_SESSION['role'] ?? '') === User::ROLE_ADMIN);
         return $this->json($response, [
             'ok'     => true,
             'csrf'   => $_SESSION['csrf_token'],
             'name'   => $_SESSION['name'] ?? '',
-            'admin'  => (($_SESSION['role'] ?? '') === User::ROLE_ADMIN),
+            'admin'  => $isAdmin,
+            // Admins get the Super Buddy in the widget; everyone else the agent buddy.
+            'mode'   => $isAdmin ? 'admin' : 'agent',
             'nudges' => $nudges,
         ]);
     }
@@ -197,6 +200,70 @@ class BuddyController
             return $this->json($response, ['success' => false, 'error' => $result['error'] ?? 'Failed.'], 422);
         }
         return $this->json($response, ['success' => true, 'reply' => $result['reply'], 'ai' => $result['ai']]);
+    }
+
+    // =========================================================================
+    // SUPER BUDDY (P2) — admin role only, re-checked per request
+    // =========================================================================
+
+    public function adminChat(Request $request, Response $response): Response
+    {
+        if (($_SESSION['role'] ?? '') !== User::ROLE_ADMIN) {
+            return $this->json($response, ['error' => 'forbidden'], 403);
+        }
+        $body   = $request->getParsedBody() ?? [];
+        $result = $this->service->adminChat((int) $_SESSION['user_id'], (string) ($body['message'] ?? ''));
+
+        if (!$result['success']) {
+            return $this->json($response, ['success' => false, 'error' => $result['error'] ?? 'Failed.'], 422);
+        }
+        return $this->json($response, [
+            'success'        => true,
+            'reply'          => $result['reply'],
+            'ai'             => $result['ai'],
+            'pending_action' => $result['pending_action'] ?? null,
+        ]);
+    }
+
+    public function adminHistory(Request $request, Response $response): Response
+    {
+        if (($_SESSION['role'] ?? '') !== User::ROLE_ADMIN) {
+            return $this->json($response, ['error' => 'forbidden'], 403);
+        }
+        $userId = (int) $_SESSION['user_id'];
+        $convId = DB::table('buddy_conversations')
+            ->where('user_id', $userId)->where('kind', 'admin')
+            ->orderByDesc('id')->value('id');
+
+        $messages = [];
+        if ($convId !== null) {
+            $messages = DB::table('buddy_messages')
+                ->where('conversation_id', $convId)
+                ->whereIn('role', ['user', 'model'])
+                ->orderByDesc('id')->limit(30)->get()->reverse()->values()
+                ->map(fn($m) => ['role' => $m->role, 'content' => $m->content, 'at' => $m->created_at])
+                ->all();
+        }
+        return $this->json($response, ['success' => true, 'messages' => $messages, 'nudges' => []]);
+    }
+
+    /** Human-clicked Confirm — the only path that executes a parked action. */
+    public function adminConfirmAction(Request $request, Response $response): Response
+    {
+        if (($_SESSION['role'] ?? '') !== User::ROLE_ADMIN) {
+            return $this->json($response, ['error' => 'forbidden'], 403);
+        }
+        $result = \App\Services\Buddy\AdminTools::executePending();
+        return $this->json($response, $result, $result['success'] ? 200 : 410);
+    }
+
+    public function adminCancelAction(Request $request, Response $response): Response
+    {
+        if (($_SESSION['role'] ?? '') !== User::ROLE_ADMIN) {
+            return $this->json($response, ['error' => 'forbidden'], 403);
+        }
+        unset($_SESSION[\App\Services\Buddy\AdminTools::PENDING_ACTION_KEY]);
+        return $this->json($response, ['success' => true, 'detail' => 'Cancelled — nothing was sent.']);
     }
 
     // =========================================================================
