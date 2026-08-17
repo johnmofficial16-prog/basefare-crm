@@ -166,6 +166,8 @@ $app->group('/buddy', function ($group) {
     $group->get('/history',   [\App\Controllers\BuddyController::class, 'agentHistory']);
     $group->post('/greeting', [\App\Controllers\BuddyController::class, 'agentGreeting']);
     $group->post('/chat',     [\App\Controllers\BuddyController::class, 'agentChat']);
+    $group->post('/tts',      [\App\Controllers\BuddyController::class, 'ttsSynthesize']);
+    $group->get('/tts/{file}',[\App\Controllers\BuddyController::class, 'ttsAudio']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())

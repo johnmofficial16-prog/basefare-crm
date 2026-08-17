@@ -59,8 +59,14 @@
     // (the liveboard TV taught us what unguarded speech APIs do in production).
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
     var ttsOk = ('speechSynthesis' in window) && typeof window.SpeechSynthesisUtterance === 'function';
-    var voiceOn = false;
-    try { voiceOn = localStorage.getItem('bwVoiceOn') === '1'; } catch (e) { /* private mode */ }
+    // Voice defaults ON (client: agents wear headphones, Aisha greets aloud).
+    // Toggle persists; first visit = on.
+    var voiceOn = true;
+    try {
+      var stored = localStorage.getItem('bwVoiceOn');
+      if (stored !== null) voiceOn = stored === '1';
+    } catch (e) { /* private mode */ }
+    var serverVoice = null;   // null = unprobed, true/false after first attempt
 
     // ── Orb ────────────────────────────────────────────────────────────────
     var orb = el('button', 'bw-orb');
@@ -78,16 +84,16 @@
 
     // ── Panel ──────────────────────────────────────────────────────────────
     var panel = el('div', 'bw-panel');
-    var title = MODE === 'admin' ? 'Super Buddy' : 'Buddy';
+    var title = MODE === 'admin' ? 'Aisha · Super' : 'Aisha';
     var sub   = MODE === 'admin'
-      ? 'your chief of staff · sees the whole team'
-      : 'knows your numbers · never your customers’ data';
+      ? 'your personal assistant · sees the whole team'
+      : 'your work buddy · knows your numbers, never your customers’ data';
     panel.innerHTML =
       '<div class="bw-head">' +
         '<div class="bw-ava"><span class="bw-ava-ring"></span><span class="bw-ava-dot"></span></div>' +
         '<div class="bw-head-txt"><div class="bw-title">' + title + '</div>' +
         '<div class="bw-sub"><span class="bw-live"></span>' + sub + '</div></div>' +
-        (MODE === 'admin' && ttsOk ? '<button type="button" class="bw-voice" title="Spoken replies on/off">' + (voiceOn ? '🔊' : '🔇') + '</button>' : '') +
+        '<button type="button" class="bw-voice" title="Aisha voice on/off">' + (voiceOn ? '🔊' : '🔇') + '</button>' +
         (boot.admin ? '<a class="bw-maint" href="/buddy/maintenance" title="Maintenance buddy">SYS</a>' : '') +
         '<button type="button" class="bw-close" aria-label="Close">×</button>' +
       '</div>' +
@@ -144,8 +150,8 @@
       pickVoice();
       if ('onvoiceschanged' in window.speechSynthesis) window.speechSynthesis.onvoiceschanged = pickVoice;
     }
-    function speak(text) {
-      if (!ttsOk || !voiceOn || MODE !== 'admin') return;
+    function browserSpeak(text) {
+      if (!ttsOk) return;
       try {
         window.speechSynthesis.cancel();
         var u = new SpeechSynthesisUtterance(String(text).slice(0, 600));
@@ -154,12 +160,48 @@
         window.speechSynthesis.speak(u);
       } catch (e) { /* never break chat over audio */ }
     }
+
+    var currentAudio = null;
+    /**
+     * Aisha speaks: Cloud TTS first (warm, human — server caches the MP3),
+     * falling back to browser speech, falling back to silence. `kind`:
+     *   'greeting' — spoken for EVERYONE with voice on (the client's spec:
+     *                Aisha greets the agents aloud, they reply in chat)
+     *   'reply'    — spoken for the admin only (full conversation mode)
+     */
+    function speak(text, kind) {
+      if (!voiceOn) return;
+      if (kind !== 'greeting' && MODE !== 'admin') return;
+      var payload = String(text).slice(0, 600);
+
+      if (serverVoice === false) { browserSpeak(payload); return; }
+      fetch('/buddy/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+        body: JSON.stringify({ text: payload }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok && d.url) {
+            serverVoice = true;
+            try {
+              if (currentAudio) currentAudio.pause();
+              currentAudio = new Audio(d.url);
+              currentAudio.play().catch(function () { browserSpeak(payload); });
+            } catch (e) { browserSpeak(payload); }
+          } else {
+            serverVoice = false;               // not configured yet — remember
+            browserSpeak(payload);
+          }
+        })
+        .catch(function () { browserSpeak(payload); });
+    }
     if (voiceBtn) {
       voiceBtn.addEventListener('click', function () {
         voiceOn = !voiceOn;
         voiceBtn.textContent = voiceOn ? '🔊' : '🔇';
         try { localStorage.setItem('bwVoiceOn', voiceOn ? '1' : '0'); } catch (e) {}
-        if (!voiceOn && ttsOk) { try { window.speechSynthesis.cancel(); } catch (e) {} }
+        if (!voiceOn) { try { if (currentAudio) currentAudio.pause(); if (ttsOk) window.speechSynthesis.cancel(); } catch (e) {} }
       });
     }
 
@@ -235,14 +277,14 @@
               .then(function (r) { return r.json(); })
               .then(function (g) {
                 t.remove();
-                if (g.greeted && g.reply) { addMsg('ai', g.reply, g.ai === false); speak(g.reply); }
+                if (g.greeted && g.reply) { addMsg('ai', g.reply, g.ai === false); speak(g.reply, 'greeting'); }
                 else if ((h.messages || []).length === 0) {
-                  addMsg('ai', "Hey! I'm your buddy — I keep an eye on your sales, your open bookings and your wins. Ask me anything about your numbers.");
+                  addMsg('ai', "Hey! I'm Aisha — your work buddy. I keep an eye on your sales, your open bookings and your wins, and I'm always up for a chat about your numbers. What's on your mind?");
                 }
               })
               .catch(function () { t.remove(); });
           } else if (MODE === 'admin' && (h.messages || []).length === 0) {
-            addMsg('ai', "Super Buddy online. Ask me about anyone on the team — stats, dry spells, e-ticket lag, or what an agent's buddy has been hearing. I can also send nudges (you confirm every one).");
+            addMsg('ai', "Aisha here — your assistant. Ask me about anyone on the team: stats, dry spells, e-ticket lag, or what an agent's buddy has been hearing. I can also send nudges — you confirm every one.");
           }
         })
         .catch(function () { addMsg('ai', 'Could not load our chat — try reopening.'); });
@@ -263,7 +305,7 @@
           t.remove();
           if (d.success) {
             addMsg('ai', d.reply, d.ai === false);
-            speak(d.reply);
+            speak(d.reply, 'reply');
             if (d.pending_action && EP.confirm) renderConfirm(d.pending_action);
           } else {
             addMsg('ai', d.error || 'Something went wrong — try again.');

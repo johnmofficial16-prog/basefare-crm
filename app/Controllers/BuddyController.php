@@ -276,6 +276,35 @@ class BuddyController
     }
 
     // =========================================================================
+    // VOICE (P4) — Aisha's Cloud TTS. Fail-soft: unconfigured → ok:false and
+    // the widget falls back to browser speech, then silence.
+    // =========================================================================
+
+    /** POST /buddy/tts {text} → {ok, url?} */
+    public function ttsSynthesize(Request $request, Response $response): Response
+    {
+        $body = $request->getParsedBody() ?? [];
+        $file = \App\Services\Buddy\TtsService::synthesize((string) ($body['text'] ?? ''));
+        if ($file === null) {
+            return $this->json($response, ['ok' => false]);
+        }
+        return $this->json($response, ['ok' => true, 'url' => '/buddy/tts/' . $file]);
+    }
+
+    /** GET /buddy/tts/{file} → cached MP3 (hash-shaped names only). */
+    public function ttsAudio(Request $request, Response $response, array $args): Response
+    {
+        $path = \App\Services\Buddy\TtsService::safeFile((string) ($args['file'] ?? ''));
+        if ($path === null) {
+            return $response->withStatus(404);
+        }
+        $response->getBody()->write((string) file_get_contents($path));
+        return $response
+            ->withHeader('Content-Type', 'audio/mpeg')
+            ->withHeader('Cache-Control', 'private, max-age=86400');
+    }
+
+    // =========================================================================
     // GATE + HELPERS
     // =========================================================================
 
