@@ -9,6 +9,38 @@ Working notes for picking this up in a fresh session. Memory files
 
 ---
 
+## 17 Aug (late) — NEXT SESSION START HERE: P5 "Aisha speaks first"
+
+Everything P0–P4 is live (see below + `ai-buddy-status` memory). The user's
+correct final critique: **detection is proactive, delivery is passive.** The
+trigger cron finds praise/departures/lags every 15 min, but they land as bell
+rows + chips — Aisha only talks when the agent opens the chat. She must
+INITIATE. Design (agreed direction, not yet built):
+
+1. **Nudge feed endpoint** `GET /buddy/feed`: drains this user's `pending`
+   buddy_nudges → phrases each AS AISHA (template-first for token economy:
+   payload has ref/amount/hours; optionally one Gemini call for praise tiers)
+   → stores as `model` messages in their agent conversation (history stays
+   coherent) → marks delivered → returns the new messages.
+2. **Widget polling**: every ~75s while the tab is visible (document.
+   visibilitychange gate). New messages: panel open → append + speak
+   ('greeting'-class voice); panel closed → toast bubble by the orb with the
+   first line + badge + spoken line if voice on. Click toast → open panel.
+3. **Greeting fires on page load, not on orb click**: on boot (agent mode),
+   call /buddy/greeting; if greeted → auto-open panel briefly or toast +
+   SPEAK it. This is the client's "greets him by name when he logs in".
+4. Quota note: feed phrasing must not eat the agent's 40/day chat quota —
+   nudge deliveries are Aisha-initiated, exclude from quotaCheck.
+5. Test plan: offline (feed drains + idempotent, poll gating), then live
+   drive via Chrome session as before. Red-team unchanged (no new tools).
+
+Also pending from the user: confirm backup + consolidator crons are actually
+REGISTERED in hPanel (both verified working by hand 17 Aug 20:49); GCP card
++ then GOOGLE_TTS_API_KEY (.env) to switch Aisha's real voice on (P4 note
+below); ₹94k Search-credit test on the 18th.
+
+---
+
 ## 17 August 2026 update — current state
 
 **Deployed:** server on `dev` at/after `c6720d7`. Everything through the full
