@@ -21,11 +21,24 @@ use Illuminate\Database\Capsule\Manager as DB;
  */
 class MaintenanceTools
 {
-    /** Cron heartbeats: activity_log action → what "healthy" means. */
+    /**
+     * Cron heartbeats: activity_log action → what "healthy" means.
+     *
+     * The buddy jobs were added after this monitor failed to catch a real
+     * outage: buddy_triggers was believed registered in hPanel for two days and
+     * was not, so no nudges were ever created and the entire proactive Aisha
+     * layer was dead — while every health check stayed green, because the job
+     * was not being watched at all. Both buddy crons now write an unconditional
+     * heartbeat, which is what makes silence here meaningful.
+     */
     private const CRON_TRACES = [
         'auto_clock_out'          => ['label' => 'Auto clock-out',    'stale_hours' => 26],
         'booking_reminder_fired'  => ['label' => 'Booking reminders', 'stale_hours' => null], // event-driven, silence can be normal
         'shift_gap_alert'         => ['label' => 'Shift gap alert',   'stale_hours' => null],
+        // Runs every 15 min; an hour of silence means it is not running.
+        'buddy_triggers_ran'      => ['label' => 'Buddy triggers (Aisha engine)', 'stale_hours' => 1],
+        // Weekly; allow a day of slack before calling it broken.
+        'buddy_consolidate_ran'   => ['label' => 'Buddy memory consolidator',     'stale_hours' => 192],
     ];
 
     public static function registry(int $userId): BuddyToolRegistry
@@ -73,7 +86,7 @@ class MaintenanceTools
 
         $r->register(
             'get_cron_health',
-            'Report when each cron job last left a trace (auto clock-out, booking reminders, shift gap alert, nightly backup) and flag anything overdue.',
+            'Report when each cron job last left a trace (auto clock-out, booking reminders, shift gap alert, nightly backup, buddy triggers, buddy consolidator) and flag anything overdue. A job with note "NEVER run" has no heartbeat at all and is almost certainly missing from hPanel — say so plainly and prominently.',
             [],
             fn() => self::cronHealth()
         );
@@ -230,12 +243,22 @@ class MaintenanceTools
         foreach (self::CRON_TRACES as $action => $meta) {
             $last = DB::table('activity_log')->where('action', $action)->max('created_at');
             $ageH = $last !== null ? round((time() - strtotime($last)) / 3600, 1) : null;
+            $note = null;
+            if ($meta['stale_hours'] === null) {
+                $note = 'event-driven; silence can be normal';
+            } elseif ($last === null) {
+                // The single most useful thing this tool can say. Say it plainly.
+                $note = 'NEVER run — cron almost certainly not registered in hPanel';
+            } elseif ($ageH > $meta['stale_hours']) {
+                $note = 'expected every ' . $meta['stale_hours'] . 'h or sooner';
+            }
+
             $out[] = [
                 'job'         => $meta['label'],
                 'last_trace'  => $last,
                 'age_hours'   => $ageH,
                 'overdue'     => $meta['stale_hours'] !== null && ($ageH === null || $ageH > $meta['stale_hours']),
-                'note'        => $meta['stale_hours'] === null ? 'event-driven; silence can be normal' : null,
+                'note'        => $note,
             ];
         }
 

@@ -359,5 +359,32 @@ foreach ($goalRows as $g) {
 }
 
 echo "  nudges created: {$created}\n";
+
+/**
+ * Heartbeat — written on EVERY run, including runs that create nothing.
+ *
+ * This exists because of a real incident: this cron was believed to be
+ * registered in hPanel for two days and was not. Nothing noticed, because the
+ * only evidence a trigger run leaves is the nudges it creates — and "no nudges"
+ * is indistinguishable from "never ran". The whole Aisha layer was silently
+ * dead with a green-looking system.
+ *
+ * A heartbeat that only fires when there is work to report is not a heartbeat.
+ * get_cron_health() reads this and flags silence over an hour as overdue.
+ */
+try {
+    Capsule::table('activity_log')->insert([
+        'user_id'     => null,
+        'action'      => 'buddy_triggers_ran',
+        'entity_type' => 'buddy_nudges',
+        'entity_id'   => null,
+        'details'     => json_encode(['created' => $created]),
+        'ip_address'  => null,
+        'created_at'  => date('Y-m-d H:i:s'),
+    ]);
+} catch (\Throwable $e) {
+    error_log('[buddy_triggers] heartbeat failed: ' . $e->getMessage());
+}
+
 echo '[' . date('Y-m-d H:i:s') . "] Done.\n";
 exit(0);

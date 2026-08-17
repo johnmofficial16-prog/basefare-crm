@@ -134,5 +134,25 @@ foreach ($candidates as $userId => $msgCount) {
 }
 
 echo "Facts " . ($dryRun ? 'found' : 'saved') . ": {$saved}\n";
+
+// Heartbeat on every real run, even one that saves nothing — see the note in
+// buddy_triggers.php. A dry run is a human poking it, not the schedule, so it
+// deliberately leaves no trace.
+if (!$dryRun) {
+    try {
+        Capsule::table('activity_log')->insert([
+            'user_id'     => null,
+            'action'      => 'buddy_consolidate_ran',
+            'entity_type' => 'buddy_agent_facts',
+            'entity_id'   => null,
+            'details'     => json_encode(['facts_saved' => $saved]),
+            'ip_address'  => null,
+            'created_at'  => date('Y-m-d H:i:s'),
+        ]);
+    } catch (\Throwable $e) {
+        error_log('[buddy_consolidate] heartbeat failed: ' . $e->getMessage());
+    }
+}
+
 echo '[' . date('Y-m-d H:i:s') . "] Done.\n";
 exit(0);
