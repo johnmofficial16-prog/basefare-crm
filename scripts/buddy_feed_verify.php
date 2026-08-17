@@ -637,5 +637,41 @@ check('lag before wrap, wrap before pace check-in',
     str_contains($wOrder[0] ?? '', 'WX1') && str_contains($wOrder[1] ?? '', '🌙')
     && (str_contains($wOrder[2] ?? '', 'days to go') || str_contains($wOrder[2] ?? '', 'days left')));
 
+echo "F23. History shape — Aisha remembers what she just said\n";
+$bc = fn(array $h) => \App\Services\Buddy\BuddyPromptBuilder::buildContents($h);
+
+// Post-P5 head-of-history: a run of Aisha-initiated nudges, then the agent.
+$h1 = $bc([
+    ['role' => 'model', 'content' => 'Nudge about booking AAA111.'],
+    ['role' => 'model', 'content' => 'Nudge about booking BBB222.'],
+    ['role' => 'user',  'content' => 'Which bookings did you just mention?'],
+]);
+$flat1 = json_encode($h1);
+check('leading nudges are KEPT, not dropped', str_contains($flat1, 'AAA111') && str_contains($flat1, 'BBB222'));
+check('first content is role user', ($h1[0]['role'] ?? '') === 'user');
+check('scaffold turn is the tiny resume marker', str_contains((string) ($h1[0]['parts'][0]['text'] ?? ''), 'conversation resumes'));
+
+// Consecutive same-role runs are merged — the proto-shape trap from 16 Aug.
+$roles1 = array_map(fn($c) => $c['role'], $h1);
+check('no consecutive same-role contents', $roles1 === array_values(array_filter($roles1, fn($r, $i) => $i === 0 || $roles1[$i-1] !== $r, ARRAY_FILTER_USE_BOTH)));
+$h2 = $bc([
+    ['role' => 'user',  'content' => 'hi'],
+    ['role' => 'model', 'content' => 'first'],
+    ['role' => 'model', 'content' => 'second'],
+    ['role' => 'user',  'content' => 'ok'],
+    ['role' => 'user',  'content' => 'and also'],
+]);
+$roles2 = array_map(fn($c) => $c['role'], $h2);
+check('model run merged into one turn', count(array_filter($roles2, fn($r) => $r === 'model')) === 1);
+check('user run merged too', $roles2 === ['user', 'model', 'user']);
+check('merged content keeps both halves in order',
+    str_contains((string) $h2[1]['parts'][0]['text'], "first\n\nsecond"));
+
+// A history that is ALL Aisha (agent never replied) must still reach Gemini.
+$h3 = $bc([
+    ['role' => 'model', 'content' => 'Solo nudge CCC333.'],
+]);
+check('all-model history survives with scaffold', count($h3) === 2 && str_contains(json_encode($h3), 'CCC333'));
+
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

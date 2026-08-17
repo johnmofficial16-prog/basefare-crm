@@ -27,8 +27,13 @@ class BuddyPromptBuilder
     /** Total character budget for conversation history sent to the model. */
     public const HISTORY_CHAR_BUDGET = 8000;
 
-    /** Max messages of history regardless of size. */
-    public const HISTORY_MAX_MESSAGES = 12;
+    /**
+     * Max messages of history regardless of size. Raised from 12 when the P5
+     * feed started writing Aisha-initiated rows into the same conversation —
+     * a busy morning's nudges alone could fill 12 slots and evict the actual
+     * dialogue. The char budget above still caps the real payload.
+     */
+    public const HISTORY_MAX_MESSAGES = 20;
 
     // =========================================================================
     // HISTORY
@@ -68,15 +73,35 @@ class BuddyPromptBuilder
         }
         $kept = array_reverse($kept);
 
-        // Gemini requires the FIRST content to have role 'user'. Our history
-        // legitimately starts with a model message whenever the business-day
-        // greeting opened the conversation — sending that verbatim made every
-        // post-greeting turn 400 while a fresh conversation worked (found live
-        // on production, 16 Aug). Drop leading model messages; their substance
-        // (the agent's numbers) is always re-derivable through tools.
-        while ($kept !== [] && $kept[0]['role'] === 'model') {
-            array_shift($kept);
+        // Two Gemini shape constraints, both learned the hard way:
+        //
+        // 1. Since P5, Aisha initiates — feed deliveries land as several model
+        //    rows back to back. Consecutive same-role contents are exactly the
+        //    kind of proto-shape trap that 400'd us on 16 Aug (role-user rule),
+        //    so merge runs of the same role into one content instead of finding
+        //    out live.
+        $merged = [];
+        foreach ($kept as $m) {
+            $last = count($merged) - 1;
+            if ($last >= 0 && $merged[$last]['role'] === $m['role']) {
+                $merged[$last]['content'] .= "\n\n" . $m['content'];
+            } else {
+                $merged[] = $m;
+            }
         }
+
+        // 2. The FIRST content must have role 'user' (found live, 16 Aug: every
+        //    post-greeting turn 400'd). The old fix DROPPED leading model
+        //    messages — tolerable when that was one greeting, but post-P5 the
+        //    head of history is often a whole run of Aisha-initiated nudges,
+        //    and dropping them meant she had no memory of what she just told
+        //    the agent ("which booking did you mention?" → blank). A tiny
+        //    synthetic user turn keeps the API happy AND keeps her own words
+        //    in context. Prompt scaffolding only — never stored.
+        if ($merged !== [] && $merged[0]['role'] === 'model') {
+            array_unshift($merged, ['role' => 'user', 'content' => '[conversation resumes]']);
+        }
+        $kept = $merged;
 
         $hits = 0;
         $out  = array_map(static function (array $m) use (&$hits): array {
