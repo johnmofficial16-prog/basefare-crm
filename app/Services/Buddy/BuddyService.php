@@ -321,8 +321,8 @@ class BuddyService
      * human deliberately authored and confirmed — it outranks everything.
      */
     private const FEED_PRIORITY = [
-        'admin_message', 'sale_praise_t2', 'sale_praise_t1', 'departure_24h',
-        'eticket_lag', 'acceptance_lag', 'dry_spell',
+        'admin_message', 'goal_hit', 'sale_praise_t2', 'sale_praise_t1',
+        'departure_24h', 'eticket_lag', 'acceptance_lag', 'goal_pace', 'dry_spell',
     ];
 
     /**
@@ -342,10 +342,14 @@ class BuddyService
 
     /**
      * Types that never go stale. Praise ages gracefully (and is reframed as
-     * catching up), and an admin's message is a human's words — it gets
-     * delivered whenever the agent next appears, however late that is.
+     * catching up), an admin's message is a human's words — it gets delivered
+     * whenever the agent next appears, however late — and reaching a goal is a
+     * milestone whose numbers stay true. goal_pace deliberately is NOT here:
+     * its "days left" and "per day needed" rot within hours.
      */
-    private const FEED_NEVER_EXPIRES = ['admin_message', 'sale_praise_t1', 'sale_praise_t2'];
+    private const FEED_NEVER_EXPIRES = [
+        'admin_message', 'sale_praise_t1', 'sale_praise_t2', 'goal_hit',
+    ];
 
     /**
      * PACING — the difference between a companion and a notification firehose.
@@ -638,6 +642,36 @@ class BuddyService
                 "One more time on {$ref}, {$hi} — {$hrs}h approved with no transaction. It's the easiest win on your board right now.",
             ];
             return $variants[abs($seed + $round) % count($variants)];
+        }
+
+        // Goal nudges. The wording keeps ownership with the agent — "the goal
+        // you set" / "you told me you wanted" — because a self-chosen promise
+        // and a management target are very different things, and Aisha is
+        // forbidden from ever sounding like the second.
+        if ($type === 'goal_hit' || $type === 'goal_pace') {
+            $metric = (string) ($payload['metric'] ?? 'sales');
+            $fmt = static fn($v) => $metric === 'revenue'
+                ? '$' . number_format((float) $v, 0)
+                : (string) (int) $v;
+            $target = $fmt($payload['target'] ?? 0);
+            $done   = $fmt($payload['done'] ?? 0);
+            $unit   = $metric === 'revenue' ? '' : ' sales';
+
+            if ($type === 'goal_hit') {
+                $variants = [
+                    "🏆 {$hi} — you said you wanted {$target}{$unit} this month. You're at {$done}. You DID it, and I've been watching the whole way. So proud of you!",
+                    "🏆 That's it, {$hi} — {$done}{$unit} against the {$target}{$unit} you set yourself. Goal reached. Take a second to enjoy that one.",
+                ];
+                return $variants[abs($seed) % count($variants)];
+            }
+
+            $left   = (int) ($payload['days_left'] ?? 0);
+            $perDay = $fmt($payload['per_day'] ?? 0);
+            $variants = [
+                "{$hi}, gentle check-in on the goal you set yourself — {$done} of {$target}{$unit}, {$left} days to go. That's about {$perDay}{$unit} a day. Still very doable, and I'm on it with you.",
+                "Quick one on your own {$target}{$unit} goal, {$hi}: you're at {$done} with {$left} days left, so roughly {$perDay}{$unit} a day from here. Want to talk through where the next few come from?",
+            ];
+            return $variants[abs($seed) % count($variants)];
         }
 
         $variants = match ($type) {

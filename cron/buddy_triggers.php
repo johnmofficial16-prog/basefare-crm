@@ -279,6 +279,85 @@ foreach ($agents as $agentId) {
     );
 }
 
+// ── 7. Self-set monthly goals: celebrate the hit, check in when drifting ─────
+// Only for agents who actually told Aisha a goal (buddy_settings.extra_json).
+// Never invents a target, and never fires for someone who set none.
+//
+// goal_hit  — once per agent per month per metric, the moment they cross it.
+// goal_pace — at most once a week, and only when meaningfully behind (>15% off
+//             the pace the month implies). Being slightly behind on a Tuesday
+//             is not news; it is nagging.
+$goalRows = Capsule::table('buddy_settings')
+    ->whereNotNull('extra_json')
+    ->get(['user_id', 'extra_json']);
+
+$monthKey   = date('Y-m');
+$weekKey    = date('oW');                 // ISO year+week — one pace check a week
+$daysInMth  = (int) date('t');
+$dayOfMth   = (int) date('j');
+$elapsed    = $dayOfMth / $daysInMth;
+
+foreach ($goalRows as $g) {
+    $extra = json_decode((string) $g->extra_json, true) ?: [];
+    $goal  = $extra['goal'] ?? null;
+    if (!is_array($goal) || (!isset($goal['sales']) && !isset($goal['revenue']))) {
+        continue;
+    }
+
+    $act = Capsule::table('transactions')
+        ->where('agent_id', $g->user_id)
+        ->where('status', 'approved')
+        ->whereBetween('created_at', [date('Y-m-01 00:00:00'), date('Y-m-d H:i:s')])
+        ->selectRaw('COUNT(*) AS n, COALESCE(SUM(total_amount),0) AS revenue')
+        ->first();
+
+    $metrics = [];
+    if (isset($goal['sales'])) {
+        $metrics['sales'] = [(float) $act->n, (float) $goal['sales']];
+    }
+    if (isset($goal['revenue'])) {
+        $metrics['revenue'] = [(float) $act->revenue, (float) $goal['revenue']];
+    }
+
+    foreach ($metrics as $metric => [$done, $target]) {
+        if ($target <= 0) {
+            continue;
+        }
+
+        if ($done >= $target) {
+            $created += (int) nudge(
+                (int) $g->user_id,
+                'goal_hit',
+                "goal_hit:user:{$g->user_id}:{$monthKey}:{$metric}",
+                ['metric' => $metric, 'target' => $target, 'done' => $done],
+                '🏆 Goal reached!',
+                'You hit the monthly ' . $metric . ' goal you set yourself. Come celebrate.'
+            );
+            continue;   // hit beats pace — never nag about a goal already met
+        }
+
+        // Behind pace, with enough month gone for that to mean anything.
+        $expected = $target * $elapsed;
+        if ($dayOfMth >= 7 && $expected > 0 && $done < $expected * 0.85) {
+            $daysLeft = max(1, $daysInMth - $dayOfMth);
+            $created += (int) nudge(
+                (int) $g->user_id,
+                'goal_pace',
+                "goal_pace:user:{$g->user_id}:{$monthKey}:{$metric}:w{$weekKey}",
+                [
+                    'metric'    => $metric,
+                    'target'    => $target,
+                    'done'      => $done,
+                    'days_left' => $daysLeft,
+                    'per_day'   => round(($target - $done) / $daysLeft, 2),
+                ],
+                '🎯 Goal check-in',
+                'A nudge about the monthly ' . $metric . ' goal you set yourself.'
+            );
+        }
+    }
+}
+
 echo "  nudges created: {$created}\n";
 echo '[' . date('Y-m-d H:i:s') . "] Done.\n";
 exit(0);

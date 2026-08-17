@@ -135,7 +135,8 @@
       sale_praise_t1: '👏 Nice sale', sale_praise_t2: '🎉 Big sale',
       eticket_lag: '🎫 E-ticket pending', acceptance_lag: '⏳ Acceptance open',
       departure_24h: '✈️ Departs soon', dry_spell: '💪 Check-in',
-      admin_message: '💬 From admin'
+      admin_message: '💬 From admin',
+      goal_hit: '🏆 Goal reached', goal_pace: '🎯 Goal check-in'
     };
 
     orb.addEventListener('click', function () {

@@ -479,5 +479,48 @@ check('greeting stamp survives a goal write', ($blob['last_greeted_bday'] ?? nul
 check('goal survives alongside it', ($blob['goal']['sales'] ?? 0) === 25);
 check('claim still honoured after goal write', $claim2->invoke($svc, 41, '2026-08-20') === false);
 
+echo "F19. Goal nudge phrasing keeps ownership with the agent\n";
+$hitS = BuddyService::phraseNudge('goal_hit', ['metric' => 'sales', 'target' => 20, 'done' => 21], 'Sam', 0);
+check('goal_hit celebrates with real figures', str_contains($hitS, '20') && str_contains($hitS, '21'));
+check('goal_hit says the agent set it', str_contains($hitS, 'you set') || str_contains($hitS, 'you said you wanted'));
+$hitR = BuddyService::phraseNudge('goal_hit', ['metric' => 'revenue', 'target' => 30000, 'done' => 31500], 'Sam', 1);
+check('revenue goal renders as dollars', str_contains($hitR, '$30,000') && str_contains($hitR, '$31,500'));
+check('revenue goal drops the "sales" unit', !str_contains($hitR, '$30,000 sales'));
+
+$pace = BuddyService::phraseNudge('goal_pace',
+    ['metric' => 'sales', 'target' => 20, 'done' => 6, 'days_left' => 10, 'per_day' => 1.4], 'Sam', 0);
+check('pace nudge gives the run rate', str_contains($pace, '10 days') || str_contains($pace, '10 days to go'));
+check('pace nudge keeps ownership', str_contains($pace, 'you set yourself') || str_contains($pace, 'your own'));
+foreach (['goal_hit' => $hitS, 'goal_pace' => $pace] as $lbl => $txt) {
+    check("{$lbl} never implies a management target",
+        !preg_match('/\b(target set by|management|your manager expects|required|quota|must hit)\b/i', $txt), $txt);
+    check("{$lbl} promises no reward or consequence",
+        !preg_match('/\b(bonus|incentive|commission|promotion|warning|trouble)\b/i', $txt), $txt);
+}
+
+echo "F19b. Goal nudge staleness rules\n";
+$mk(51, 'goal_hit', ['metric' => 'sales', 'target' => 20, 'done' => 21], 'g:1', date('Y-m-d H:i:s', time() - 60 * 3600));
+$mk(51, 'goal_pace', ['metric' => 'sales', 'target' => 20, 'done' => 6, 'days_left' => 10, 'per_day' => 1.4], 'g:2', date('Y-m-d H:i:s', time() - 60 * 3600));
+$gd = $svc->agentFeed(51, true);
+$gt = implode(' | ', array_column($gd['messages'], 'content'));
+check('old goal_hit still celebrated (milestone)', str_contains($gt, 'DID it') || str_contains($gt, 'Goal reached'));
+check('old goal_pace swallowed (its run rate has rotted)', !str_contains($gt, 'days to go') && !str_contains($gt, 'days left'));
+
+echo "F19c. goal_hit outranks routine nudges, goal_pace does not\n";
+$mk(52, 'dry_spell',  ['days_since_last_sale' => 4], 'gp:1');
+$mk(52, 'goal_pace',  ['metric' => 'sales', 'target' => 20, 'done' => 6, 'days_left' => 9, 'per_day' => 1.5], 'gp:2');
+$mk(52, 'goal_hit',   ['metric' => 'sales', 'target' => 20, 'done' => 20], 'gp:3');
+$mk(52, 'eticket_lag',['ref' => 'GX1', 'waiting_hours' => 5], 'gp:4');
+$ord = $svc->agentFeed(52, true);
+$o0 = $ord['messages'][0]['content'] ?? '';
+check('goal_hit delivered first', str_contains($o0, 'DID it') || str_contains($o0, 'Goal reached'));
+$o = array_column($ord['messages'], 'content');
+$paceIdx = -1; $lagIdx = -1;
+foreach ($o as $i => $txt) {
+    if (str_contains($txt, 'days to go') || str_contains($txt, 'days left')) { $paceIdx = $i; }
+    if (str_contains($txt, 'GX1')) { $lagIdx = $i; }
+}
+check('e-ticket lag ranks above the pace check-in', $lagIdx !== -1 && ($paceIdx === -1 || $lagIdx < $paceIdx));
+
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);
