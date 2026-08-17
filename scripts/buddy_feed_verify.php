@@ -419,5 +419,65 @@ $d1 = $svc->agentFeed($staleOnly);
 check('expired nudge swallowed but fresh praise still spoken',
     count($d1['messages']) === 1 && str_contains($d1['messages'][0]['content'], 'S2'));
 
+echo "F18. Self-set monthly goal\n";
+Capsule::connection()->getPdo()->exec(
+    'CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id INTEGER,
+     status TEXT, total_amount REAL, created_at TEXT)'
+);
+$reg  = \App\Services\Buddy\AgentTools::registry(41, 'agent');
+$none = $reg->execute('get_my_goal_progress', []);
+check('no goal yet reports has_goal:false', ($none['has_goal'] ?? null) === false);
+check('and tells Aisha not to invent one', str_contains((string) ($none['hint'] ?? ''), 'never invent'));
+
+check('rejects an empty goal', isset($reg->execute('set_my_goal', [])['error']));
+check('rejects a silly sales target', isset($reg->execute('set_my_goal', ['sales' => 5000])['error']));
+check('rejects a negative revenue target', isset($reg->execute('set_my_goal', ['revenue' => -5])['error']));
+
+$saved = $reg->execute('set_my_goal', ['sales' => 20]);
+check('saves a sales goal', ($saved['saved'] ?? false) === true && ($saved['goal']['sales'] ?? 0) === 20);
+$saved2 = $reg->execute('set_my_goal', ['revenue' => 30000]);
+check('adding revenue keeps the existing sales goal',
+    ($saved2['goal']['sales'] ?? 0) === 20 && ($saved2['goal']['revenue'] ?? 0) == 30000.0);
+
+// Eight approved sales this month, $12,000.
+for ($i = 0; $i < 8; $i++) {
+    Capsule::table('transactions')->insert([
+        'agent_id' => 41, 'status' => 'approved', 'total_amount' => 1500,
+        'created_at' => date('Y-m-d H:i:s'),
+    ]);
+}
+// Noise that must NOT count: another agent, and a non-approved sale.
+Capsule::table('transactions')->insert(['agent_id' => 99, 'status' => 'approved', 'total_amount' => 9999, 'created_at' => date('Y-m-d H:i:s')]);
+Capsule::table('transactions')->insert(['agent_id' => 41, 'status' => 'pending',  'total_amount' => 9999, 'created_at' => date('Y-m-d H:i:s')]);
+
+$prog = $reg->execute('get_my_goal_progress', []);
+check('counts only this agent, only approved', ($prog['sales']['done'] ?? -1) === 8);
+check('revenue matches the same rule', ($prog['revenue']['done'] ?? -1) == 12000.0);
+check('remaining is computed', ($prog['sales']['remaining'] ?? -1) === 12);
+check('goal not yet hit', ($prog['sales']['hit'] ?? true) === false);
+check('month framing present', ($prog['days_in_month'] ?? 0) >= 28 && ($prog['days_elapsed'] ?? 0) >= 1);
+check('pace expectation present', isset($prog['sales']['expected_by_now'], $prog['sales']['on_track']));
+check('labelled as the agent\'s own goal', str_contains((string) ($prog['goal_is'] ?? ''), 'self-chosen'));
+
+// Hitting it must be recognised.
+for ($i = 0; $i < 15; $i++) {
+    Capsule::table('transactions')->insert([
+        'agent_id' => 41, 'status' => 'approved', 'total_amount' => 1500,
+        'created_at' => date('Y-m-d H:i:s'),
+    ]);
+}
+$hit = $reg->execute('get_my_goal_progress', []);
+check('goal recognised as hit', ($hit['sales']['hit'] ?? false) === true);
+check('remaining floors at zero', ($hit['sales']['remaining'] ?? -1) === 0);
+
+echo "F18b. Goal storage shares extra_json without clobbering pacing/greeting\n";
+$claim2 = $ref->getMethod('claimGreeting');
+$claim2->invoke($svc, 41, '2026-08-20');
+$reg->execute('set_my_goal', ['sales' => 25]);
+$blob = json_decode((string) Capsule::table('buddy_settings')->where('user_id', 41)->value('extra_json'), true);
+check('greeting stamp survives a goal write', ($blob['last_greeted_bday'] ?? null) === '2026-08-20');
+check('goal survives alongside it', ($blob['goal']['sales'] ?? 0) === 25);
+check('claim still honoured after goal write', $claim2->invoke($svc, 41, '2026-08-20') === false);
+
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

@@ -81,6 +81,30 @@ class AgentTools
         );
 
         $r->register(
+            'set_my_goal',
+            "Save or update THIS AGENT'S OWN monthly goal — the target they set for themselves and told you about. "
+            . 'Use it when they say something like "I want to hit 30 sales this month". Pass sales, revenue, or both. '
+            . 'This is personal and self-chosen: it is NOT a target set by management and must never be described as one.',
+            [
+                'type'       => 'object',
+                'properties' => [
+                    'sales'   => ['type' => 'integer', 'description' => 'Target number of approved sales this month, 1–999.'],
+                    'revenue' => ['type' => 'number',  'description' => 'Target revenue in US dollars this month.'],
+                ],
+            ],
+            fn(array $a) => self::setGoal($userId, $a)
+        );
+
+        $r->register(
+            'get_my_goal_progress',
+            "Where the agent stands against the monthly goal THEY set themselves: the goal, what they have done so far "
+            . 'this month, how far through the month it is, the pace they would need, and whether they are on track. '
+            . 'Returns has_goal:false if they never set one — in that case offer to set one rather than inventing a target.',
+            [],
+            fn() => self::goalProgress($userId, $role)
+        );
+
+        $r->register(
             'remember_fact',
             'Save a short personal fact the agent shared (their preferred name, goals, what motivates them) to the buddy\'s permanent memory for this agent. Use during onboarding and whenever the agent shares something durable.',
             [
@@ -279,6 +303,145 @@ class AgentTools
             ])->all();
 
         return ['nudges' => $rows, 'window' => 'last 48 hours'];
+    }
+
+    // =========================================================================
+    // SELF-SET MONTHLY GOAL
+    //
+    // Stored structured (not as a free-text fact) because the whole point is to
+    // MEASURE against it — the persona has always told Aisha to ask for a goal,
+    // but until now the answer landed in buddy_agent_facts where nothing could
+    // ever compare it to real numbers.
+    //
+    // A standing goal carries forward month to month until the agent changes
+    // it, which is how people actually think about a monthly target.
+    // =========================================================================
+
+    /** @return array{goal: array|null} raw stored goal for this user */
+    private static function readGoal(int $userId): ?array
+    {
+        try {
+            $extra = json_decode(
+                (string) DB::table('buddy_settings')->where('user_id', $userId)->value('extra_json'),
+                true
+            ) ?: [];
+            $goal = $extra['goal'] ?? null;
+            return is_array($goal) ? $goal : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private static function setGoal(int $userId, array $args): array
+    {
+        $sales   = isset($args['sales'])   ? (int) $args['sales']     : null;
+        $revenue = isset($args['revenue']) ? (float) $args['revenue'] : null;
+
+        if ($sales === null && $revenue === null) {
+            return ['error' => 'Give a sales target, a revenue target, or both.'];
+        }
+        if ($sales !== null && ($sales < 1 || $sales > 999)) {
+            return ['error' => 'Sales target must be between 1 and 999.'];
+        }
+        if ($revenue !== null && ($revenue <= 0 || $revenue > 10000000)) {
+            return ['error' => 'Revenue target looks wrong — give a realistic monthly figure in dollars.'];
+        }
+
+        try {
+            $extra = json_decode(
+                (string) DB::table('buddy_settings')->where('user_id', $userId)->value('extra_json'),
+                true
+            ) ?: [];
+
+            // Merge, so setting only a sales target keeps an existing revenue one.
+            $goal = is_array($extra['goal'] ?? null) ? $extra['goal'] : [];
+            if ($sales !== null) {
+                $goal['sales'] = $sales;
+            }
+            if ($revenue !== null) {
+                $goal['revenue'] = round($revenue, 2);
+            }
+            $goal['set_at'] = date('Y-m-d H:i:s');
+            $extra['goal']  = $goal;
+
+            DB::table('buddy_settings')->updateOrInsert(
+                ['user_id' => $userId],
+                ['extra_json' => json_encode($extra, JSON_UNESCAPED_UNICODE)]
+            );
+            return ['saved' => true, 'goal' => $goal,
+                    'note'  => "This is the agent's own goal, self-chosen. Not a management target."];
+        } catch (\Throwable $e) {
+            return ['error' => 'Could not save the goal right now.'];
+        }
+    }
+
+    private static function goalProgress(int $userId, string $role): array
+    {
+        $goal = self::readGoal($userId);
+        if ($goal === null || (!isset($goal['sales']) && !isset($goal['revenue']))) {
+            return ['has_goal' => false,
+                    'hint' => 'No goal set yet. Offer to set one with set_my_goal — never invent a target for them.'];
+        }
+
+        // Same window and the same hold compliance as the Performance tab, so
+        // the goal maths can never disagree with the screen they are looking at
+        // — or become a side channel around a performance hold.
+        $q = DB::table('transactions')
+            ->where('agent_id', $userId)
+            ->whereBetween('created_at', [date('Y-m-01 00:00:00'), date('Y-m-d H:i:s')])
+            ->where('status', 'approved');
+        $q = PerformanceHold::apply($q, 'created_at', $role);
+        $row = $q->selectRaw('COUNT(*) AS n, COALESCE(SUM(total_amount),0) AS revenue')->first();
+
+        $salesDone   = (int) $row->n;
+        $revenueDone = round((float) $row->revenue, 2);
+
+        $daysInMonth = (int) date('t');
+        $dayOfMonth  = (int) date('j');
+        $daysLeft    = max(0, $daysInMonth - $dayOfMonth);
+        $elapsed     = $dayOfMonth / $daysInMonth;
+
+        $out = [
+            'has_goal'      => true,
+            'month'         => date('F Y'),
+            'days_elapsed'  => $dayOfMonth,
+            'days_in_month' => $daysInMonth,
+            'days_left'     => $daysLeft,
+            'goal_is'       => "the agent's own, self-chosen — never call it a management target",
+        ];
+
+        if (isset($goal['sales'])) {
+            $target   = (int) $goal['sales'];
+            $expected = $target * $elapsed;
+            $out['sales'] = [
+                'target'         => $target,
+                'done'           => $salesDone,
+                'remaining'      => max(0, $target - $salesDone),
+                'expected_by_now'=> round($expected, 1),
+                'on_track'       => $salesDone >= $expected,
+                'hit'            => $salesDone >= $target,
+                'per_day_needed' => $daysLeft > 0 ? round(max(0, $target - $salesDone) / $daysLeft, 2) : null,
+            ];
+        }
+        if (isset($goal['revenue'])) {
+            $target   = (float) $goal['revenue'];
+            $expected = $target * $elapsed;
+            $out['revenue'] = [
+                'target'         => round($target, 2),
+                'done'           => $revenueDone,
+                'remaining'      => round(max(0, $target - $revenueDone), 2),
+                'expected_by_now'=> round($expected, 2),
+                'on_track'       => $revenueDone >= $expected,
+                'hit'            => $revenueDone >= $target,
+                'per_day_needed' => $daysLeft > 0 ? round(max(0, $target - $revenueDone) / $daysLeft, 2) : null,
+            ];
+        }
+
+        $notice = PerformanceHold::notice($role);
+        if ($notice !== null) {
+            $out['hold_notice'] = $notice;
+        }
+        return $out;
     }
 
     private static function rememberFact(int $userId, string $fact): array

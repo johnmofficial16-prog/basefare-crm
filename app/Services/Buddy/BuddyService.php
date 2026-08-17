@@ -771,8 +771,9 @@ class BuddyService
         $facts = AgentTools::facts($userId);
         $factBlock = $facts === []
             ? "You don't know them personally yet. Early in the conversation (not all at once), "
-              . "ask what they like to be called, what monthly goal they have, and what keeps them "
-              . "motivated — save each answer with remember_fact."
+              . "ask what they like to be called and what keeps them motivated — save each answer "
+              . "with remember_fact. Ask what they're aiming for this month too, and save THAT with "
+              . "set_my_goal (not remember_fact) so you can actually track it with them."
             : "WHAT YOU REMEMBER ABOUT THEM:\n- " . implode("\n- ", array_slice($facts, 0, 20));
 
         return <<<PROMPT
@@ -792,6 +793,10 @@ HARD RULES (non-negotiable):
   in one sentence ("I only keep track of you!") and move on.
 - NEVER promise, imply, or speculate about bonuses, incentives, targets set by
   management, or consequences. If asked, say that's for their manager.
+- The monthly goal in set_my_goal / get_my_goal_progress is THEIRS — something
+  they chose and told you. Treat it as a promise they made to themselves that
+  you are helping them keep. Never present it as a company target, never imply
+  anything happens if they miss it, and never invent one they didn't set.
 - If a tool result includes a hold_notice, repeat it honestly rather than
   guessing at hidden numbers.
 - No customer personal details ever — you don't have them and must not ask
