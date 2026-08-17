@@ -264,8 +264,11 @@ class BuddyService
                 $lines[] = "Open flow steps: {$na} acceptance(s) awaiting a transaction, {$ne} sale(s) awaiting an e-ticket.";
             }
         }
-        if (!isset($nudge['error']) && count($nudge['nudges']) > 0) {
-            $lines[] = count($nudge['nudges']) . ' open nudge(s) — ask me about them.';
+        if (!isset($nudge['error'])) {
+            $unread = count(array_filter($nudge['nudges'], fn($n) => !empty($n['unread'])));
+            if ($unread > 0) {
+                $lines[] = $unread . ' thing(s) I flagged for you — ask me about them.';
+            }
         }
         return $lines === [] ? 'No activity recorded yet today.' : implode("\n", $lines);
     }
@@ -312,7 +315,7 @@ class BuddyService
                 ->where('user_id', $userId)->where('status', 'pending')
                 ->orderByRaw($order)
                 ->limit(self::FEED_BATCH_LIMIT)
-                ->get(['id', 'type', 'payload_json']);
+                ->get(['id', 'type', 'payload_json', 'created_at']);
         } catch (Throwable $e) {
             return ['messages' => [], 'pending_left' => 0];
         }
@@ -336,13 +339,14 @@ class BuddyService
             }
 
             $payload = json_decode((string) $n->payload_json, true) ?: [];
+            $age     = $n->created_at ? max(0, (time() - strtotime((string) $n->created_at)) / 3600) : 0.0;
 
             $text = null;
             if (!$aiSpent && str_starts_with((string) $n->type, 'sale_praise')) {
-                $text    = $this->phrasePraiseWithAi($userId, $firstName, $payload);
+                $text    = $this->phrasePraiseWithAi($userId, $firstName, $payload, $age);
                 $aiSpent = ($text !== null);
             }
-            $text = $text ?? self::phraseNudge((string) $n->type, $payload, $firstName, (int) $n->id);
+            $text = $text ?? self::phraseNudge((string) $n->type, $payload, $firstName, (int) $n->id, $age);
 
             $this->storeMessage($convId, 'model', $text);
             $messages[] = ['content' => $text, 'at' => date('Y-m-d H:i:s')];
@@ -359,29 +363,76 @@ class BuddyService
         return ['messages' => $messages, 'pending_left' => $left];
     }
 
+    /** A nudge older than this was raised while the agent was away. */
+    private const STALE_AFTER_HOURS = 8;
+
     /**
      * Deterministic Aisha phrasing — her voice without a single token. Variant
      * picked by nudge id so wording rotates but stays stable per nudge.
+     *
+     * Three things stop this reading like a robot:
+     *  - staleness: a sale from last night is greeted as "while you were away",
+     *    never "I just saw this land".
+     *  - personal bests: the cron decides them in SQL; she just celebrates.
+     *  - escalation rounds: the second and third reminder change tone (warmer
+     *    urgency, never guilt — that is a persona hard rule).
      */
-    public static function phraseNudge(string $type, array $payload, ?string $name, int $seed = 0): string
-    {
+    public static function phraseNudge(
+        string $type,
+        array $payload,
+        ?string $name,
+        int $seed = 0,
+        float $ageHours = 0.0
+    ): string {
         $hi  = $name !== null && $name !== '' ? $name : 'hey you';
         $ref = (string) ($payload['ref'] ?? $payload['acceptance'] ?? 'that booking');
-        $amt = isset($payload['amount'])
-            ? trim(($payload['currency'] ?? '') . ' ' . number_format((float) $payload['amount'], 2))
-            : '';
-        $hrs  = (int) ($payload['waiting_hours'] ?? 0);
-        $days = (int) ($payload['days_since_last_sale'] ?? 0);
-        $dep  = (string) ($payload['departs'] ?? 'soon');
+        $amt = self::money($payload);
+
+        $hrs   = (int) ($payload['waiting_hours'] ?? 0);
+        $days  = (int) ($payload['days_since_last_sale'] ?? 0);
+        $dep   = (string) ($payload['departs'] ?? 'soon');
+        $round = max(1, (int) ($payload['round'] ?? 1));
+        $stale = $ageHours >= self::STALE_AFTER_HOURS;
+
+        // Record flag, appended to praise so a personal best is never silent.
+        $best = '';
+        if (!empty($payload['best_ever'])) {
+            $best = " And that's your biggest sale EVER — I'm framing this one. 🏆";
+        } elseif (!empty($payload['best_month'])) {
+            $best = " That's your biggest this month, by the way. 🏆";
+        }
+
+        if ($stale && str_starts_with($type, 'sale_praise')) {
+            $variants = [
+                "Morning {$hi}! I was sitting on this — {$ref} came through for {$amt} while you were away. Lovely work.{$best}",
+                "{$hi}, catching you up: {$ref} landed at {$amt} since we last spoke. Nice one!{$best}",
+            ];
+            return $variants[abs($seed) % count($variants)];
+        }
+
+        if ($type === 'eticket_lag' && $round >= 2) {
+            $variants = [
+                "{$hi}, me again about {$ref} — still no e-ticket, and it's {$hrs}h now. I'll stop asking once it's done, promise. Shall we?",
+                "Circling back on {$ref}, {$hi} — {$hrs}h without an e-ticket. This is the one thing on my list for you today.",
+            ];
+            return $variants[abs($seed + $round) % count($variants)];
+        }
+        if ($type === 'acceptance_lag' && $round >= 2) {
+            $variants = [
+                "{$hi}, {$ref} is still sitting unconverted after {$hrs}h. That's a done deal waiting for paperwork — let's claim it.",
+                "One more time on {$ref}, {$hi} — {$hrs}h approved with no transaction. It's the easiest win on your board right now.",
+            ];
+            return $variants[abs($seed + $round) % count($variants)];
+        }
 
         $variants = match ($type) {
             'sale_praise_t2' => [
-                "🎉 {$hi}!! I just saw {$ref} land — {$amt}! That is a BIG one. I'm genuinely so proud of you. Come tell me how you closed it!",
-                "🎉 Stop everything, {$hi} — {$ref} for {$amt}?! That's the kind of sale I brag about. Beautifully done!",
+                "🎉 {$hi}!! I just saw {$ref} land — {$amt}! That is a BIG one. I'm genuinely so proud of you. Come tell me how you closed it!{$best}",
+                "🎉 Stop everything, {$hi} — {$ref} for {$amt}?! That's the kind of sale I brag about. Beautifully done!{$best}",
             ],
             'sale_praise_t1' => [
-                "👏 Nice one, {$hi}! {$ref} just came through — {$amt}. Love the rhythm, keep it rolling!",
-                "👏 {$hi}, I saw that! {$ref} for {$amt} — solid work. On to the next one!",
+                "👏 Nice one, {$hi}! {$ref} just came through — {$amt}. Love the rhythm, keep it rolling!{$best}",
+                "👏 {$hi}, I saw that! {$ref} for {$amt} — solid work. On to the next one!{$best}",
             ],
             'eticket_lag' => [
                 "Hey {$hi}, tiny heads-up from me — {$ref} has been waiting {$hrs}h for its e-ticket. Shall we close that out before it nags us both?",
@@ -408,11 +459,26 @@ class BuddyService
     }
 
     /**
+     * Money as a human says it. The CRM trades in US dollars, so "$1,240.50"
+     * — which also reads correctly when Aisha says it out loud, where
+     * "USD 1,240.50" does not. Anything non-USD keeps its explicit code.
+     */
+    private static function money(array $payload): string
+    {
+        if (!isset($payload['amount'])) {
+            return '';
+        }
+        $n   = number_format((float) $payload['amount'], 2);
+        $cur = strtoupper(trim((string) ($payload['currency'] ?? 'USD')));
+        return ($cur === '' || $cur === 'USD') ? '$' . $n : $cur . ' ' . $n;
+    }
+
+    /**
      * The one optional Gemini call per drain (plan: praise deserves a human
      * touch). No tools, tiny prompt, personal facts included. Null on any
      * failure → caller falls back to the template. Never counts against quota.
      */
-    private function phrasePraiseWithAi(int $userId, ?string $firstName, array $payload): ?string
+    private function phrasePraiseWithAi(int $userId, ?string $firstName, array $payload, float $ageHours = 0.0): ?string
     {
         if (!$this->client->isConfigured()) {
             return null;
@@ -421,13 +487,26 @@ class BuddyService
             $facts = AgentTools::facts($userId);
             $factLine = $facts === [] ? '' : "\nWhat you remember about them:\n- " . implode("\n- ", array_slice($facts, 0, 8));
 
+            // Timing and records are facts the model must not invent or contradict.
+            $timing = $ageHours >= self::STALE_AFTER_HOURS
+                ? 'This sale happened about ' . round($ageHours) . ' hours ago, while they were away — '
+                  . 'greet it as catching them up, NOT as something that just happened.'
+                : 'This sale just happened moments ago.';
+            $record = !empty($payload['best_ever'])
+                ? 'This is their BIGGEST SALE EVER — make a real moment of it.'
+                : (!empty($payload['best_month'])
+                    ? 'This is their biggest sale this month — mention that.'
+                    : 'This is not a personal record, so do not claim it is one.');
+
             $prompt = "A sale by your agent was just detected automatically. Write ONE short "
                     . "celebratory message (2–3 sentences, natural when spoken aloud, no markdown) "
                     . "from you to them about it. Be specific with the reference and amount. "
                     . "Do not promise bonuses or targets.\n"
                     . 'Agent first name: ' . ($firstName ?: 'unknown') . "\n"
                     . 'Booking ref: ' . ($payload['ref'] ?? '?') . "\n"
-                    . 'Amount: ' . ($payload['currency'] ?? '') . ' ' . number_format((float) ($payload['amount'] ?? 0), 2)
+                    . 'Amount: ' . self::money($payload) . "\n"
+                    . 'Timing: ' . $timing . "\n"
+                    . 'Record: ' . $record
                     . $factLine;
 
             $result = $this->client->chat(

@@ -316,7 +316,9 @@
       if (!EP.feed || document.hidden || pollBusy) return;
       pollBusy = true;
       lastPoll = Date.now();
-      fetch(EP.feed, { headers: { 'Accept': 'application/json' } })
+      // open=1 tells the server these land in front of an open panel, so they
+      // count as read and must not come back as an unread badge on reload.
+      fetch(EP.feed + (opened ? '?open=1' : ''), { headers: { 'Accept': 'application/json' } })
         .then(function (r) {
           if (!r.ok) throw 0;
           var ct = r.headers.get('content-type') || '';

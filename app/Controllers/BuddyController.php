@@ -116,10 +116,16 @@ class BuddyController
             return $this->json($response, ['ok' => false], 401);
         }
 
+        // Badge = everything Aisha has raised but the agent has not looked at:
+        // 'pending' (not yet spoken) AND 'delivered' (spoken while they were on
+        // another page). Counting only 'pending' meant a toast they missed
+        // vanished on the next page load. 'seen' is stamped when they actually
+        // open the panel (agentHistory).
         $nudges = 0;
         try {
             $nudges = (int) DB::table('buddy_nudges')
-                ->where('user_id', $userId)->where('status', 'pending')->count();
+                ->where('user_id', $userId)
+                ->whereIn('status', ['pending', 'delivered'])->count();
         } catch (\Throwable $e) {
             // badge is cosmetic — never block boot on it
         }
@@ -167,13 +173,25 @@ class BuddyController
                 ->all();
         }
 
+        // Chips = recent context (last 24h), not an unbounded backlog: an agent
+        // opening the panel should see what today has thrown at them, not a
+        // wall of chips for things they resolved last week.
         $nudges = DB::table('buddy_nudges')
             ->where('user_id', $userId)
-            ->whereIn('status', ['pending', 'delivered'])
+            ->where('created_at', '>=', date('Y-m-d H:i:s', time() - 86400))
             ->orderByDesc('id')->limit(6)
             ->get(['type', 'payload_json', 'created_at'])
             ->map(fn($n) => ['type' => $n->type, 'payload' => json_decode((string) $n->payload_json, true) ?: [], 'at' => $n->created_at])
             ->all();
+
+        // Opening the panel IS the agent seeing them — clears the badge for good.
+        try {
+            DB::table('buddy_nudges')
+                ->where('user_id', $userId)->where('status', 'delivered')
+                ->update(['status' => 'seen']);
+        } catch (\Throwable $e) {
+            // cosmetic — never fail a history load over the badge
+        }
 
         return $this->json($response, ['success' => true, 'messages' => $messages, 'nudges' => $nudges]);
     }
@@ -206,6 +224,20 @@ class BuddyController
         }
 
         $result = $this->service->agentFeed($userId, (string) ($_SESSION['role'] ?? 'agent'));
+
+        // ?open=1 — the widget had the panel open, so these landed in front of
+        // the agent and are already read. Without this they would come back as
+        // an unread badge on the next page load.
+        if (($request->getQueryParams()['open'] ?? '') === '1' && $result['messages'] !== []) {
+            try {
+                DB::table('buddy_nudges')
+                    ->where('user_id', $userId)->where('status', 'delivered')
+                    ->update(['status' => 'seen']);
+            } catch (\Throwable $e) {
+                // cosmetic
+            }
+        }
+
         return $this->json($response, ['ok' => true] + $result);
     }
 

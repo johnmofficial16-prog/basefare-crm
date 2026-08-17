@@ -15,10 +15,19 @@
  * Rules (v1):
  *   sale_praise_t1   approved txn >= $500 (last 24h)     one per txn
  *   sale_praise_t2   approved txn >= $1000 (last 24h)    one per txn (suppresses t1)
- *   eticket_lag      approved txn, no e-ticket after 4h  one per txn
- *   acceptance_lag   approved acceptance, no txn after 6h  one per acceptance
+ *   eticket_lag      approved txn, no e-ticket after 4h    one per txn per escalation round
+ *   acceptance_lag   approved acceptance, no txn after 6h  one per acceptance per round
  *   departure_24h    booking departs < 24h               one per txn
  *   dry_spell        no approved sale in 3 days          one per agent per quiet-streak day
+ *
+ * (Amounts are US dollars — the CRM trades in USD, so the thresholds are flat.)
+ *
+ * v2 (P5 companion polish):
+ *  - Lag rules ESCALATE instead of firing once ever. Round 1 keeps the original
+ *    dedupe key (so deploying this does not re-nudge every currently-lagging
+ *    booking); rounds 2+ add a suffix and re-arm once per tier.
+ *  - Praise payloads carry personal-best flags computed HERE in SQL, so Aisha
+ *    can say "your biggest this month" without ever estimating.
  */
 
 require __DIR__ . '/../vendor/autoload.php';
@@ -102,13 +111,34 @@ $sales = Capsule::table('transactions')
 foreach ($sales as $s) {
     $tier = ((float) $s->total_amount >= 1000) ? 't2' : 't1';
     $ref  = $s->pnr ?: ('#' . $s->id);
+    $amt  = (float) $s->total_amount;
+
+    // Personal bests — decided in SQL so Aisha can celebrate a record without
+    // ever estimating one. Excludes this txn so ties don't count as a new best.
+    $bestMonth = Capsule::table('transactions')
+        ->where('agent_id', $s->agent_id)->where('status', 'approved')
+        ->where('created_at', '>=', date('Y-m-01 00:00:00'))
+        ->where('id', '!=', $s->id)
+        ->max('total_amount');
+    $bestEver = Capsule::table('transactions')
+        ->where('agent_id', $s->agent_id)->where('status', 'approved')
+        ->where('id', '!=', $s->id)
+        ->max('total_amount');
+
     $created += (int) nudge(
         (int) $s->agent_id,
         'sale_praise_' . $tier,
         "sale_praise:txn:{$s->id}",
-        ['ref' => $ref, 'amount' => (float) $s->total_amount, 'currency' => $s->currency, 'tier' => $tier],
+        [
+            'ref'        => $ref,
+            'amount'     => $amt,
+            'currency'   => $s->currency,
+            'tier'       => $tier,
+            'best_month' => $bestMonth === null || $amt > (float) $bestMonth,
+            'best_ever'  => $bestEver === null || $amt > (float) $bestEver,
+        ],
         $tier === 't2' ? '🎉 Big sale!' : '👏 Nice sale!',
-        "Your buddy noticed {$ref} — " . $s->currency . ' ' . number_format((float) $s->total_amount, 2) . '. Come get your praise.',
+        "Your buddy noticed {$ref} — $" . number_format($amt, 2) . '. Come get your praise.',
         (int) $s->id
     );
 }
@@ -121,14 +151,21 @@ $lagged = Capsule::table('transactions AS t')
     ->whereBetween('t.created_at', [date('Y-m-d H:i:s', time() - 7 * 86400), date('Y-m-d H:i:s', time() - 4 * 3600)])
     ->get(['t.id', 't.agent_id', 't.pnr', 't.created_at']);
 
+// Escalation arithmetic + dedupe-key contract (unit-tested separately).
+require __DIR__ . '/buddy_triggers_rules.php';
+
 foreach ($lagged as $t) {
-    $ref = $t->pnr ?: ('#' . $t->id);
-    $hrs = round((time() - strtotime($t->created_at)) / 3600);
+    $ref   = $t->pnr ?: ('#' . $t->id);
+    $hrs   = round((time() - strtotime($t->created_at)) / 3600);
+    $round = lagRound((float) $hrs, 4);
+    if ($round === 0) {
+        continue;
+    }
     $created += (int) nudge(
         (int) $t->agent_id,
         'eticket_lag',
-        "eticket_lag:txn:{$t->id}",
-        ['ref' => $ref, 'waiting_hours' => $hrs],
+        lagKey('eticket_lag', 'txn', (int) $t->id, $round),
+        ['ref' => $ref, 'waiting_hours' => $hrs, 'round' => $round],
         '🎫 E-ticket pending',
         "Booking {$ref} was recorded {$hrs}h ago and still has no e-ticket.",
         (int) $t->id
@@ -147,12 +184,16 @@ $accLag = Capsule::table('acceptance_requests AS a')
     ->get(['a.id', 'a.agent_id', 'a.approved_at']);
 
 foreach ($accLag as $a) {
-    $hrs = round((time() - strtotime($a->approved_at)) / 3600);
+    $hrs   = round((time() - strtotime($a->approved_at)) / 3600);
+    $round = lagRound((float) $hrs, 6);
+    if ($round === 0) {
+        continue;
+    }
     $created += (int) nudge(
         (int) $a->agent_id,
         'acceptance_lag',
-        "acceptance_lag:acc:{$a->id}",
-        ['acceptance' => '#' . $a->id, 'waiting_hours' => $hrs],
+        lagKey('acceptance_lag', 'acc', (int) $a->id, $round),
+        ['acceptance' => '#' . $a->id, 'waiting_hours' => $hrs, 'round' => $round],
         '⏳ Acceptance not converted',
         "Acceptance #{$a->id} was approved {$hrs}h ago and has no transaction yet."
     );

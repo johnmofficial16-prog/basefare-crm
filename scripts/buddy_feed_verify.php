@@ -17,6 +17,10 @@
  *       placeholders; unknown types get the generic line instead of crashing.
  *   F7. Greeting stamp: once-per-business-day survives feed deliveries (the
  *       old "any model message today" check would not).
+ *   F8. Money reads as dollars ("$1,240.50") — right on screen and out loud.
+ *   F9. Stale praise is framed as catching up, not as just-happened.
+ *  F10. Personal bests are celebrated, and never claimed when absent.
+ *  F11. Lag escalation changes tone on rounds 2+ without guilt-tripping.
  *
  * The Gemini praise call is structurally absent here (no VERTEX_API_KEY), so
  * the template fallback path is what runs — the same path production takes
@@ -96,7 +100,8 @@ $texts = array_column($r1['messages'], 'content');
 check('praise first',   isset($texts[0]) && str_contains($texts[0], 'G7BGL3'));
 check('departure next', isset($texts[1]) && str_contains($texts[1], 'K9PMQ2'));
 check('eticket third',  isset($texts[2]) && str_contains($texts[2], 'AHYX2I'));
-check('praise carries amount', isset($texts[0]) && str_contains($texts[0], '1,240.50'));
+check('praise carries amount as dollars', isset($texts[0]) && str_contains($texts[0], '$1,240.50'));
+check('no raw "USD" prefix (reads badly aloud)', isset($texts[0]) && !str_contains($texts[0], 'USD 1,240'));
 check('personalized with first name', isset($texts[0]) && str_contains($texts[0], 'Sam') && !str_contains($texts[0], 'Kumar'));
 
 $delivered = Capsule::table('buddy_nudges')->where('status', 'delivered')->whereNotNull('delivered_at')->count();
@@ -154,6 +159,62 @@ $extra = json_decode((string) Capsule::table('buddy_settings')->where('user_id',
 check('display_name preserved alongside stamp',
     Capsule::table('buddy_settings')->where('user_id', 7)->value('display_name') === 'Sammy'
     && ($extra['last_greeted_bday'] ?? null) === '2026-08-17');
+
+echo "F8. Money formatting\n";
+$usd = BuddyService::phraseNudge('sale_praise_t1', ['ref' => 'A1', 'amount' => 900, 'currency' => 'USD'], 'Sam', 0);
+check('USD renders as $900.00', str_contains($usd, '$900.00'));
+$blank = BuddyService::phraseNudge('sale_praise_t1', ['ref' => 'A1', 'amount' => 900], 'Sam', 0);
+check('missing currency defaults to dollars', str_contains($blank, '$900.00'));
+$eur = BuddyService::phraseNudge('sale_praise_t1', ['ref' => 'A1', 'amount' => 900, 'currency' => 'EUR'], 'Sam', 0);
+check('non-USD keeps its code', str_contains($eur, 'EUR 900.00'));
+
+echo "F9. Stale praise framing\n";
+$fresh = BuddyService::phraseNudge('sale_praise_t2', ['ref' => 'B2', 'amount' => 1500, 'currency' => 'USD'], 'Sam', 0, 0.5);
+$old   = BuddyService::phraseNudge('sale_praise_t2', ['ref' => 'B2', 'amount' => 1500, 'currency' => 'USD'], 'Sam', 0, 14.0);
+check('fresh praise says "just saw"', str_contains($fresh, 'just saw'));
+check('stale praise does NOT claim it just happened', !str_contains($old, 'just saw') && !str_contains($old, 'Stop everything'));
+check('stale praise frames as catching up', str_contains($old, 'while you were away') || str_contains($old, 'catching you up'));
+check('stale praise still names ref + amount', str_contains($old, 'B2') && str_contains($old, '$1,500.00'));
+
+echo "F10. Personal bests\n";
+$ever = BuddyService::phraseNudge('sale_praise_t2', ['ref' => 'C3', 'amount' => 2000, 'best_ever' => true, 'best_month' => true], 'Sam', 0);
+check('all-time best celebrated', str_contains($ever, 'EVER'));
+$mon = BuddyService::phraseNudge('sale_praise_t1', ['ref' => 'C3', 'amount' => 700, 'best_month' => true], 'Sam', 0);
+check('monthly best celebrated', str_contains($mon, 'biggest this month'));
+check('monthly best does not claim all-time', !str_contains($mon, 'EVER'));
+$none = BuddyService::phraseNudge('sale_praise_t1', ['ref' => 'C3', 'amount' => 600], 'Sam', 0);
+check('no record claimed when absent', !str_contains($none, 'biggest') && !str_contains($none, 'EVER'));
+$staleBest = BuddyService::phraseNudge('sale_praise_t2', ['ref' => 'C4', 'amount' => 3000, 'best_ever' => true], 'Sam', 0, 20.0);
+check('stale praise still celebrates the record', str_contains($staleBest, 'EVER'));
+
+echo "F11. Lag escalation\n";
+$r1 = BuddyService::phraseNudge('eticket_lag', ['ref' => 'D4', 'waiting_hours' => 5, 'round' => 1], 'Sam', 0);
+$r2 = BuddyService::phraseNudge('eticket_lag', ['ref' => 'D4', 'waiting_hours' => 26, 'round' => 2], 'Sam', 0);
+$r3 = BuddyService::phraseNudge('eticket_lag', ['ref' => 'D4', 'waiting_hours' => 74, 'round' => 3], 'Sam', 0);
+check('round 1 is the gentle opener', str_contains($r1, 'tiny heads-up') || str_contains($r1, 'Two minutes'));
+check('round 2 acknowledges repetition', $r2 !== $r1 && (str_contains($r2, 'me again') || str_contains($r2, 'Circling back')));
+check('round 3 still escalated', $r3 !== $r1);
+foreach (['round 2' => $r2, 'round 3' => $r3] as $lbl => $txt) {
+    check("{$lbl} carries no guilt language",
+        !preg_match('/\b(you (still |always )?(failed|forgot|ignored)|why haven\'t you|disappoint)/i', $txt), $txt);
+}
+$ar2 = BuddyService::phraseNudge('acceptance_lag', ['acceptance' => '#12', 'waiting_hours' => 30, 'round' => 2], 'Sam', 0);
+check('acceptance round 2 escalates too', str_contains($ar2, '#12') && (str_contains($ar2, 'still sitting') || str_contains($ar2, 'One more time')));
+$missing = BuddyService::phraseNudge('eticket_lag', ['ref' => 'D4', 'waiting_hours' => 5], 'Sam', 0);
+check('missing round defaults to gentle', $missing === $r1);
+
+echo "F12. Escalation dedupe keys (cron contract)\n";
+require_once __DIR__ . '/../cron/buddy_triggers_rules.php';
+check('round 1 keeps the legacy key', lagKey('eticket_lag', 'txn', 9, 1) === 'eticket_lag:txn:9');
+check('round 0 also maps to legacy key', lagKey('eticket_lag', 'txn', 9, 0) === 'eticket_lag:txn:9');
+check('round 2 is distinct', lagKey('eticket_lag', 'txn', 9, 2) === 'eticket_lag:txn:9:r2');
+check('round 3 is distinct', lagKey('eticket_lag', 'txn', 9, 3) === 'eticket_lag:txn:9:r3');
+check('below tier1 = no nudge', lagRound(3, 4) === 0);
+check('at tier1 = round 1', lagRound(4, 4) === 1);
+check('23h still round 1', lagRound(23, 4) === 1);
+check('24h = round 2', lagRound(24, 4) === 2);
+check('72h = round 3', lagRound(72, 4) === 3);
+check('acceptance tier1 is 6h', lagRound(5, 6) === 0 && lagRound(6, 6) === 1);
 
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

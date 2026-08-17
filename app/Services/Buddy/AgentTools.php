@@ -75,7 +75,7 @@ class AgentTools
 
         $r->register(
             'get_my_nudges',
-            'Open buddy nudges for this agent (sale praise, dry spell, e-ticket lag, departure reminders) that have not been seen yet.',
+            'Things the buddy raised with this agent recently (last 48h): sale praise, dry spell, e-ticket lag, departure reminders. Each carries "unread": true if the agent has not opened the chat since it was raised. Use this to follow up on something you mentioned.',
             [],
             fn() => self::nudges($userId)
         );
@@ -256,22 +256,29 @@ class AgentTools
         return ['upcoming' => $rows, 'window' => 'next 72 hours'];
     }
 
+    /**
+     * Recency-windowed, NOT status-filtered. Opening the chat marks nudges
+     * 'seen' (that is what clears the badge), so a status filter would make
+     * the buddy claim she has nothing to say the moment the agent walks in.
+     * She should still be able to follow up on this morning's e-ticket.
+     */
     private static function nudges(int $userId): array
     {
         $rows = DB::table('buddy_nudges')
             ->where('user_id', $userId)
-            ->whereIn('status', ['pending', 'delivered'])
+            ->where('created_at', '>=', date('Y-m-d H:i:s', time() - 48 * 3600))
             ->orderByDesc('id')
             ->limit(10)
-            ->get(['id', 'type', 'payload_json', 'created_at'])
+            ->get(['id', 'type', 'payload_json', 'status', 'created_at'])
             ->map(fn($n) => [
                 'id'      => (int) $n->id,
                 'type'    => $n->type,
                 'payload' => json_decode((string) $n->payload_json, true) ?: [],
+                'unread'  => in_array($n->status, ['pending', 'delivered'], true),
                 'at'      => $n->created_at,
             ])->all();
 
-        return ['nudges' => $rows];
+        return ['nudges' => $rows, 'window' => 'last 48 hours'];
     }
 
     private static function rememberFact(int $userId, string $fact): array
