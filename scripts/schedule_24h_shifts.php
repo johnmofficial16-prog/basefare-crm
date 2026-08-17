@@ -44,11 +44,24 @@ date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'Asia/Kolkata');
 $apply    = in_array('--apply', $argv, true);
 $rollback = in_array('--rollback', $argv, true);
 $days     = 14;
+$roles    = ['agent'];
 foreach ($argv as $arg) {
     if (preg_match('/^--days=(\d+)$/', $arg, $m)) {
         $days = max(1, min(90, (int) $m[1]));
     }
+    // --roles=agent,manager[,csa] — which roles get the 24/7 roster + grace.
+    // Managers clock in and appear in the attendance/payroll reports too, so
+    // they need the same rows or their clock-ins stay gated to the 30-min
+    // default around a shift they don't have.
+    if (preg_match('/^--roles=([a-z,]+)$/', $arg, $m)) {
+        $roles = array_values(array_intersect(explode(',', $m[1]), ['agent', 'manager', 'csa']));
+        if ($roles === []) {
+            fwrite(STDERR, "No valid roles in --roles (allowed: agent,manager,csa)\n");
+            exit(1);
+        }
+    }
 }
+$rolesIn = "'" . implode("','", $roles) . "'";
 
 const TEMPLATE_NAME = 'Round-the-Clock (24h)';
 const SHIFT_START   = '18:00:00';
@@ -66,13 +79,13 @@ $db = new mysqli(
 $db->set_charset('utf8mb4');
 
 $agents = [];
-$res = $db->query("SELECT id, name FROM users WHERE role = 'agent' AND status = 'active' AND deleted_at IS NULL ORDER BY id");
+$res = $db->query("SELECT id, name FROM users WHERE role IN ({$rolesIn}) AND status = 'active' AND deleted_at IS NULL ORDER BY id");
 while ($row = $res->fetch_assoc()) {
     $agents[] = $row;
 }
 $res->free();
 
-echo count($agents) . " active agents found.\n";
+echo count($agents) . " active users found (roles: " . implode(",", $roles) . ").\n";
 if ($agents === []) {
     echo "Nothing to do.\n";
     exit(0);
@@ -88,7 +101,7 @@ if ($rollback) {
     $db->begin_transaction();
     $db->query("DELETE FROM shift_schedules WHERE template_id = " . (int) $tid . " AND shift_date >= CURDATE()");
     $deleted = $db->affected_rows;
-    $db->query("UPDATE users SET grace_period_mins = NULL WHERE role = 'agent'");
+    $db->query("UPDATE users SET grace_period_mins = NULL WHERE role IN ({$rolesIn})");
     $graced = $db->affected_rows;
     $db->commit();
     echo "Rolled back: {$deleted} future 24h shift rows deleted, grace reset for {$graced} agents (default 30 min applies).\n";
@@ -143,7 +156,7 @@ foreach ($agents as $agent) {
 }
 $stmt->close();
 
-$db->query("UPDATE users SET grace_period_mins = " . GRACE_MINUTES . " WHERE role = 'agent' AND status = 'active' AND deleted_at IS NULL");
+$db->query("UPDATE users SET grace_period_mins = " . GRACE_MINUTES . " WHERE role IN ({$rolesIn}) AND status = 'active' AND deleted_at IS NULL");
 $graced = $db->affected_rows;
 
 $db->commit();
