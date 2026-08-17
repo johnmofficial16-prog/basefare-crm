@@ -40,6 +40,16 @@ class BuddyService
         $this->client = $client ?? new BuddyGeminiClient();
     }
 
+    /**
+     * Global kill switch (plan §1 cross-cutting controls): BUDDY_ENABLED=false
+     * in .env hides the widget (boot returns ok:false) and turns every chat
+     * endpoint into a polite refusal. One env edit, zero deploys, all surfaces.
+     */
+    public static function enabled(): bool
+    {
+        return ($_ENV['BUDDY_ENABLED'] ?? getenv('BUDDY_ENABLED') ?: 'true') !== 'false';
+    }
+
     // =========================================================================
     // MAINTENANCE CHAT
     // =========================================================================
@@ -82,7 +92,7 @@ class BuddyService
         $result = $this->client->chat(self::maintenancePersona(), $contents, $registry);
 
         if ($result['success']) {
-            $this->storeMessage($convId, 'model', $result['text']);
+            $this->storeMessage($convId, 'model', $result['text'], $result['tokens_in'] ?? null, $result['tokens_out'] ?? null);
             return ['success' => true, 'reply' => $result['text'], 'ai' => true];
         }
 
@@ -134,7 +144,7 @@ class BuddyService
         $result = $this->client->chat(self::agentPersona($userId), $contents, $registry);
 
         if ($result['success']) {
-            $this->storeMessage($convId, 'model', $result['text']);
+            $this->storeMessage($convId, 'model', $result['text'], $result['tokens_in'] ?? null, $result['tokens_out'] ?? null);
             $this->markNudgesDelivered($userId);
             return ['success' => true, 'reply' => $result['text'], 'ai' => true];
         }
@@ -324,7 +334,7 @@ PROMPT;
         }
 
         if ($result['success']) {
-            $this->storeMessage($convId, 'model', $result['text']);
+            $this->storeMessage($convId, 'model', $result['text'], $result['tokens_in'] ?? null, $result['tokens_out'] ?? null);
             return ['success' => true, 'reply' => $result['text'], 'ai' => true, 'pending_action' => $pending];
         }
 
@@ -485,13 +495,15 @@ PROMPT;
             ->all();
     }
 
-    private function storeMessage(int $convId, string $role, string $content): void
+    private function storeMessage(int $convId, string $role, string $content, ?int $tokensIn = null, ?int $tokensOut = null): void
     {
         try {
             DB::table('buddy_messages')->insert([
                 'conversation_id' => $convId,
                 'role'            => $role,
                 'content'         => mb_substr($content, 0, 60000),
+                'tokens_in'       => $tokensIn,
+                'tokens_out'      => $tokensOut,
                 'created_at'      => date('Y-m-d H:i:s'),
             ]);
             DB::table('buddy_conversations')->where('id', $convId)

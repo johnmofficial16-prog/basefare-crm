@@ -62,10 +62,12 @@ class BuddyGeminiClient
     public function chat(string $systemInstruction, array $contents, BuddyToolRegistry $registry): array
     {
         if (!$this->isConfigured()) {
-            return ['success' => false, 'error' => 'AI is not configured (missing VERTEX_API_KEY).', 'hops' => 0, 'tool_calls' => []];
+            return ['success' => false, 'error' => 'AI is not configured (missing VERTEX_API_KEY).', 'hops' => 0, 'tool_calls' => [], 'tokens_in' => 0, 'tokens_out' => 0];
         }
 
         $toolCalls = [];
+        $tokensIn  = 0;   // accumulated across hops — every hop bills separately
+        $tokensOut = 0;
 
         for ($hop = 0; $hop <= self::MAX_HOPS; $hop++) {
             $payload = [
@@ -105,11 +107,19 @@ class BuddyGeminiClient
                     'error'   => 'The AI service returned an error.',
                     'hops'    => $hop,
                     'tool_calls' => $toolCalls,
+                    'tokens_in'  => $tokensIn,
+                    'tokens_out' => $tokensOut,
                 ];
             }
 
             $decoded = json_decode((string) $resp['body'], true);
             $parts   = $decoded['candidates'][0]['content']['parts'] ?? [];
+
+            // Token accounting (P3 cost visibility): Express responses carry
+            // usageMetadata; sum it per hop so buddy_messages records what the
+            // turn really billed, not just the final hop.
+            $tokensIn  += (int) ($decoded['usageMetadata']['promptTokenCount'] ?? 0);
+            $tokensOut += (int) ($decoded['usageMetadata']['candidatesTokenCount'] ?? 0);
 
             $functionCalls = [];
             $textOut       = '';
@@ -125,9 +135,9 @@ class BuddyGeminiClient
                 if (trim($textOut) === '') {
                     $finish = $decoded['candidates'][0]['finishReason'] ?? 'UNKNOWN';
                     error_log("[BuddyGemini] empty reply (finishReason={$finish})");
-                    return ['success' => false, 'error' => 'The AI returned an empty response.', 'hops' => $hop, 'tool_calls' => $toolCalls];
+                    return ['success' => false, 'error' => 'The AI returned an empty response.', 'hops' => $hop, 'tool_calls' => $toolCalls, 'tokens_in' => $tokensIn, 'tokens_out' => $tokensOut];
                 }
-                return ['success' => true, 'text' => trim($textOut), 'hops' => $hop, 'tool_calls' => $toolCalls];
+                return ['success' => true, 'text' => trim($textOut), 'hops' => $hop, 'tool_calls' => $toolCalls, 'tokens_in' => $tokensIn, 'tokens_out' => $tokensOut];
             }
 
             // Echo the model turn (with its functionCall parts) into history,
@@ -182,6 +192,8 @@ class BuddyGeminiClient
             'error'   => 'The AI could not reach an answer after several tool calls.',
             'hops'    => self::MAX_HOPS,
             'tool_calls' => $toolCalls,
+            'tokens_in'  => $tokensIn,
+            'tokens_out' => $tokensOut,
         ];
     }
 

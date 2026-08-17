@@ -80,6 +80,9 @@ class BuddyController
 
     public function maintenanceChat(Request $request, Response $response): Response
     {
+        if (!\App\Services\Buddy\BuddyService::enabled()) {
+            return $this->json($response, ['success' => false, 'error' => 'The buddy is temporarily switched off by the administrator.'], 503);
+        }
         if (!$this->allowed()) {
             return $this->json($response, ['error' => 'forbidden'], 403);
         }
@@ -109,7 +112,7 @@ class BuddyController
     public function boot(Request $request, Response $response): Response
     {
         $userId = (int) ($_SESSION['user_id'] ?? 0);
-        if ($userId <= 0 || empty($_SESSION['csrf_token'])) {
+        if ($userId <= 0 || empty($_SESSION['csrf_token']) || !\App\Services\Buddy\BuddyService::enabled()) {
             return $this->json($response, ['ok' => false], 401);
         }
 
@@ -187,6 +190,9 @@ class BuddyController
 
     public function agentChat(Request $request, Response $response): Response
     {
+        if (!\App\Services\Buddy\BuddyService::enabled()) {
+            return $this->json($response, ['success' => false, 'error' => 'The buddy is temporarily switched off by the administrator.'], 503);
+        }
         $body    = $request->getParsedBody() ?? [];
         $message = (string) ($body['message'] ?? '');
 
@@ -208,6 +214,9 @@ class BuddyController
 
     public function adminChat(Request $request, Response $response): Response
     {
+        if (!\App\Services\Buddy\BuddyService::enabled()) {
+            return $this->json($response, ['success' => false, 'error' => 'The buddy is temporarily switched off by the administrator.'], 503);
+        }
         if (($_SESSION['role'] ?? '') !== User::ROLE_ADMIN) {
             return $this->json($response, ['error' => 'forbidden'], 403);
         }

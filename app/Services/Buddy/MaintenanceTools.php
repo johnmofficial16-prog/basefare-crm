@@ -79,6 +79,13 @@ class MaintenanceTools
         );
 
         $r->register(
+            'get_buddy_usage',
+            'AI buddy usage and estimated Gemini cost: messages and tokens by surface (agent/admin/maintenance) for today and the last 7 days. Use for any cost or usage question.',
+            [],
+            fn() => self::buddyUsage()
+        );
+
+        $r->register(
             'get_system_pulse',
             'Small operational pulse: active users, currently clocked-in agents, transactions and errors in the current business day.',
             [],
@@ -246,6 +253,56 @@ class MaintenanceTools
         ];
 
         return ['jobs' => $out];
+    }
+
+    /**
+     * The P3 "cost tile". Token counts are recorded per model reply by
+     * BuddyService; prices are env-tunable so a Google price change is a .env
+     * edit, not a deploy (BUDDY_PRICE_IN / BUDDY_PRICE_OUT, USD per 1M tokens).
+     */
+    private static function buddyUsage(): array
+    {
+        $priceIn  = (float) ($_ENV['BUDDY_PRICE_IN']  ?? 0.30);
+        $priceOut = (float) ($_ENV['BUDDY_PRICE_OUT'] ?? 2.50);
+
+        $windows = [
+            'today'  => date('Y-m-d 00:00:00'),
+            'last_7_days' => date('Y-m-d H:i:s', time() - 7 * 86400),
+        ];
+        $out = ['prices_usd_per_1m' => ['in' => $priceIn, 'out' => $priceOut]];
+
+        foreach ($windows as $label => $since) {
+            $rows = DB::table('buddy_messages AS m')
+                ->join('buddy_conversations AS c', 'c.id', '=', 'm.conversation_id')
+                ->where('m.created_at', '>=', $since)
+                ->selectRaw('c.kind,
+                             SUM(m.role = "user") AS user_msgs,
+                             SUM(m.role = "model") AS model_msgs,
+                             COALESCE(SUM(m.tokens_in), 0)  AS tin,
+                             COALESCE(SUM(m.tokens_out), 0) AS tout')
+                ->groupBy('c.kind')->get();
+
+            $surfaces = [];
+            $tin = 0;
+            $tout = 0;
+            foreach ($rows as $rrow) {
+                $surfaces[$rrow->kind] = [
+                    'user_msgs'  => (int) $rrow->user_msgs,
+                    'model_msgs' => (int) $rrow->model_msgs,
+                    'tokens_in'  => (int) $rrow->tin,
+                    'tokens_out' => (int) $rrow->tout,
+                ];
+                $tin  += (int) $rrow->tin;
+                $tout += (int) $rrow->tout;
+            }
+            $out[$label] = [
+                'surfaces'      => $surfaces,
+                'tokens_total'  => ['in' => $tin, 'out' => $tout],
+                'est_cost_usd'  => round($tin / 1e6 * $priceIn + $tout / 1e6 * $priceOut, 4),
+                'note'          => 'estimate covers recorded buddy turns only; greeting turns and pre-P3 traffic have no token data',
+            ];
+        }
+        return $out;
     }
 
     private static function systemPulse(): array
