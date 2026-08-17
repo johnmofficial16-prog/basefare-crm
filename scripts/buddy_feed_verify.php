@@ -603,5 +603,39 @@ check('mutate creates a row for a brand-new user',
     \App\Services\Buddy\BuddySettings::mutate(73, fn(array $e) => [['seeded' => 1], true]) === true
     && (\App\Services\Buddy\BuddySettings::read(73)['seeded'] ?? 0) === 1);
 
+echo "F22. Shift wrap — the goodbye that closes the daily arc\n";
+$goodDay = ['hours' => 9.2, 'sales' => 4, 'revenue' => 2870.5, 'net_mco' => 410.0, 'best' => 1240.5, 'open_etix' => 2];
+$wg = BuddyService::phraseNudge('shift_wrap', $goodDay, 'Sam', 0);
+check('good day celebrates with real numbers', str_contains($wg, '4 sale') && str_contains($wg, '$2,870.50'));
+check('best sale mentioned on a multi-sale day', str_contains($wg, '$1,240.50'));
+check('open e-tickets carried to tomorrow, not nagged', str_contains($wg, '2 e-tickets still open'));
+check('sends them off to rest', stripos($wg, 'rest') !== false || stripos($wg, 'tomorrow') !== false);
+
+$zeroDay = ['hours' => 9.0, 'sales' => 0, 'revenue' => 0, 'net_mco' => 0, 'best' => null, 'open_etix' => 0];
+$wz = BuddyService::phraseNudge('shift_wrap', $zeroDay, 'Sam', 0);
+check('zero day acknowledges the hours', str_contains($wz, '9 hours') || stripos($wz, 'showed up') !== false);
+check('zero day claims no sales it does not have', !str_contains($wz, '0 sale') && !str_contains($wz, '$0.00'));
+check('zero day points at tomorrow', stripos($wz, 'tomorrow') !== false);
+foreach ([['good', $wg], ['zero', $wz], ['zero-v2', BuddyService::phraseNudge('shift_wrap', $zeroDay, 'Sam', 1)]] as [$lbl, $txt]) {
+    check("{$lbl} wrap carries no guilt language",
+        !preg_match('/\b(only|just|disappoint|should have|failed|behind|wasted)\b/i', $txt), $txt);
+}
+$oneSale = BuddyService::phraseNudge('shift_wrap', ['hours' => 8, 'sales' => 1, 'revenue' => 350.0, 'open_etix' => 1], 'Sam', 0);
+check('singular forms correct (1 sale, 1 e-ticket)',
+    str_contains($oneSale, '1 sale ') && str_contains($oneSale, '1 e-ticket still open') && !str_contains($oneSale, '1 sales'));
+
+echo "F22b. Wrap TTL and priority\n";
+$mk(81, 'shift_wrap', $goodDay, 'sw:1', date('Y-m-d H:i:s', time() - 5 * 3600));
+$w1 = $svc->agentFeed(81, true);
+check('5h-old wrap swallowed (4h TTL — numbers went stale)', $w1['messages'] === []);
+$mk(82, 'goal_pace', ['metric' => 'sales', 'target' => 20, 'done' => 6, 'days_left' => 9, 'per_day' => 1.5], 'sw:2');
+$mk(82, 'shift_wrap', $goodDay, 'sw:3');
+$mk(82, 'eticket_lag', ['ref' => 'WX1', 'waiting_hours' => 5], 'sw:4');
+$w2 = $svc->agentFeed(82, true);
+$wOrder = array_column($w2['messages'], 'content');
+check('lag before wrap, wrap before pace check-in',
+    str_contains($wOrder[0] ?? '', 'WX1') && str_contains($wOrder[1] ?? '', '🌙')
+    && (str_contains($wOrder[2] ?? '', 'days to go') || str_contains($wOrder[2] ?? '', 'days left')));
+
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

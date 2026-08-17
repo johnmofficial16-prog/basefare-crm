@@ -137,7 +137,7 @@
       departure_24h: '✈️ Departs soon', dry_spell: '💪 Check-in',
       admin_message: '💬 From admin',
       goal_hit: '🏆 Goal reached', goal_pace: '🎯 Goal check-in',
-      first_sale_today: '🙌 On the board'
+      first_sale_today: '🙌 On the board', shift_wrap: '🌙 Day wrap'
     };
 
     orb.addEventListener('click', function () {

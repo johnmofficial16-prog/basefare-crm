@@ -12,22 +12,34 @@
  * builds a stable key (rule:entity), so re-runs and overlapping crons cannot
  * double-nudge. INSERT IGNORE semantics via the duplicate-key catch.
  *
- * Rules (v1):
- *   sale_praise_t1   approved txn >= $500 (last 24h)     one per txn
- *   sale_praise_t2   approved txn >= $1000 (last 24h)    one per txn (suppresses t1)
- *   eticket_lag      approved txn, no e-ticket after 4h    one per txn per escalation round
- *   acceptance_lag   approved acceptance, no txn after 6h  one per acceptance per round
- *   departure_24h    booking departs < 24h               one per txn
- *   dry_spell        no approved sale in 3 days          one per agent per quiet-streak day
+ * Rules:
+ *   sale_praise_t1     approved txn >= t1 (last 24h)         one per txn
+ *   sale_praise_t2     approved txn >= t2 (last 24h)         one per txn (suppresses t1)
+ *   eticket_lag        approved txn, no e-ticket after 4h    one per txn per escalation round
+ *   acceptance_lag     approved acceptance, no txn after 6h  one per acceptance per round
+ *   departure_24h      booking departs < 24h                 one per txn
+ *   dry_spell          no approved sale in 3 days            one per agent per quiet-streak day
+ *   first_sale_today   first approved sale of the business   one per agent per business day,
+ *                      day, below the praise floor           (praise covers it otherwise)
+ *   shift_wrap         open attendance session past the      one per agent per business day
+ *                      wind-down threshold (~hour 13)
+ *   goal_hit           self-set monthly goal crossed         one per agent per month per metric
+ *   goal_pace          >15% behind own goal's pace           max one per agent per week, after the 7th
  *
- * (Amounts are US dollars — the CRM trades in USD, so the thresholds are flat.)
+ * Amounts are US dollars (the CRM trades in USD). Tunables, all via .env with
+ * no deploy: BUDDY_PRAISE_T1 (default 500), BUDDY_PRAISE_T2 (1000),
+ * BUDDY_WRAP_AFTER_HOURS (13 — the centre's real shift is 6pm→9am, so the
+ * wind-down cue lands ~7am; see the rule for why NOT 8).
  *
- * v2 (P5 companion polish):
- *  - Lag rules ESCALATE instead of firing once ever. Round 1 keeps the original
- *    dedupe key (so deploying this does not re-nudge every currently-lagging
- *    booking); rounds 2+ add a suffix and re-arm once per tier.
+ * Design notes that keep this honest:
+ *  - Lag rules ESCALATE (4h/24h/72h) rather than firing once ever; round 1
+ *    keeps the original dedupe key so deploys do not re-nudge current laggards.
  *  - Praise payloads carry personal-best flags computed HERE in SQL, so Aisha
  *    can say "your biggest this month" without ever estimating.
+ *  - Goal rules never run for someone who set no goal, and their wording keeps
+ *    ownership with the agent — never a management target.
+ *  - Every run ends with an unconditional heartbeat (buddy_triggers_ran) so
+ *    the maintenance buddy can tell "nothing to say" from "not running".
  */
 
 require __DIR__ . '/../vendor/autoload.php';
@@ -330,6 +342,68 @@ if ($firstPerAgent->isNotEmpty()) {
             (int) $t->id
         );
     }
+}
+
+// ── 6c. Shift wrap: close the daily arc ──────────────────────────────────────
+// Aisha greets at the start of the shift and reacts during it; this is the
+// goodbye. Fired while the agent is still AT the desk — an open attendance
+// session that has run 8+ hours — because a wrap delivered after clock-out is
+// never seen (and goes stale by the next login).
+//
+// scheduled_end is deliberately NOT the signal: the 24/7 roster gives everyone
+// 18:00→18:00 paper shifts, so "time worked" is the only honest wind-down cue.
+// Numbers are a snapshot ("so far today"); the feed TTL keeps them fresh.
+//
+// Threshold: the centre's real overnight shift runs 6pm→9am (~15h), so the
+// wind-down starts around hour 13 (~7am), NOT the office-job 8 — at hour 8
+// it is ~2am and "go rest, you've earned it" lands mid-shift, seven hours
+// early. Env-tunable because shift patterns change (BUDDY_WRAP_AFTER_HOURS).
+// An agent who leaves before the threshold gets no wrap; a missed goodbye
+// beats one that tells them to go home while they're still selling.
+$wrapAfter = (float) ($_ENV['BUDDY_WRAP_AFTER_HOURS'] ?? 13);
+
+$wrapEligible = Capsule::table('attendance_sessions AS s')
+    ->join('users AS u', 'u.id', '=', 's.user_id')
+    ->where('u.role', 'agent')->where('u.status', 'active')->whereNull('u.deleted_at')
+    ->whereNull('s.clock_out')
+    ->where('s.clock_in', '<=', date('Y-m-d H:i:s', (int) (time() - $wrapAfter * 3600)))
+    ->get(['s.user_id', 's.clock_in']);
+
+foreach ($wrapEligible as $w) {
+    $wrapKey = "shift_wrap:user:{$w->user_id}:{$bdKey}";
+    if (alreadyNudged($wrapKey)) {
+        continue;                       // one wrap per business day
+    }
+
+    $stats = Capsule::table('transactions')
+        ->where('agent_id', $w->user_id)->where('status', 'approved')
+        ->whereBetween('created_at', [(string) $bdStart, (string) $bdEnd])
+        ->selectRaw('COUNT(*) AS n, COALESCE(SUM(total_amount),0) AS revenue,
+                     COALESCE(SUM(profit_mco - refund_mco_impact),0) AS net_mco,
+                     MAX(total_amount) AS best')
+        ->first();
+
+    $openEtix = Capsule::table('transactions AS t')
+        ->leftJoin('etickets AS e', 'e.transaction_id', '=', 't.id')
+        ->where('t.agent_id', $w->user_id)->where('t.status', 'approved')
+        ->where('t.created_at', '>=', date('Y-m-d H:i:s', time() - 14 * 86400))
+        ->whereNull('e.id')->count();
+
+    $created += (int) nudge(
+        (int) $w->user_id,
+        'shift_wrap',
+        $wrapKey,
+        [
+            'hours'     => round((time() - strtotime((string) $w->clock_in)) / 3600, 1),
+            'sales'     => (int) $stats->n,
+            'revenue'   => round((float) $stats->revenue, 2),
+            'net_mco'   => round((float) $stats->net_mco, 2),
+            'best'      => $stats->best !== null ? round((float) $stats->best, 2) : null,
+            'open_etix' => $openEtix,
+        ],
+        '🌙 Day wrap',
+        'Your buddy has a read on your day — come see it before you head off.'
+    );
 }
 
 // ── 7. Self-set monthly goals: celebrate the hit, check in when drifting ─────

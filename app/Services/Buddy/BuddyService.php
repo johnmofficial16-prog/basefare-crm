@@ -303,7 +303,7 @@ class BuddyService
     private const FEED_PRIORITY = [
         'admin_message', 'goal_hit', 'sale_praise_t2', 'sale_praise_t1',
         'first_sale_today', 'departure_24h', 'eticket_lag', 'acceptance_lag',
-        'goal_pace', 'dry_spell',
+        'shift_wrap', 'goal_pace', 'dry_spell',
     ];
 
     /**
@@ -328,6 +328,9 @@ class BuddyService
      */
     private const FEED_TTL_OVERRIDES = [
         'first_sale_today' => 6,
+        // A day-wrap is a snapshot of "today so far" — four hours on, its
+        // numbers and its goodbye tone are both wrong.
+        'shift_wrap'       => 4,
     ];
 
     /**
@@ -453,9 +456,14 @@ class BuddyService
                 continue;
             }
 
+            // One optional Gemini call per drain, spent on the most human moment
+            // in the batch: praise first claim on it, else the day's goodbye.
             $text = null;
             if (!$aiSpent && str_starts_with((string) $n->type, 'sale_praise')) {
                 $text    = $this->phrasePraiseWithAi($userId, $firstName, $payload, $age);
+                $aiSpent = ($text !== null);
+            } elseif (!$aiSpent && (string) $n->type === 'shift_wrap') {
+                $text    = $this->phraseWrapWithAi($userId, $firstName, $payload);
                 $aiSpent = ($text !== null);
             }
             $text = $text ?? self::phraseNudge((string) $n->type, $payload, $firstName, (int) $n->id, $age);
@@ -653,6 +661,37 @@ class BuddyService
             return $variants[abs($seed) % count($variants)];
         }
 
+        // Shift wrap — the goodbye that closes the arc the greeting opened.
+        // Tone splits on how the day went: wins get celebrated with numbers, a
+        // zero day gets warmth and a clean slate — never an autopsy. The one
+        // hard rule here is the same as dry_spell's: no guilt at the door.
+        if ($type === 'shift_wrap') {
+            $sales = (int) ($payload['sales'] ?? 0);
+            $rev   = '$' . number_format((float) ($payload['revenue'] ?? 0), 2);
+            $best  = isset($payload['best']) && $payload['best'] !== null
+                ? '$' . number_format((float) $payload['best'], 2) : null;
+            $etix  = (int) ($payload['open_etix'] ?? 0);
+            $hours = (float) ($payload['hours'] ?? 0);
+
+            $carry = $etix > 0
+                ? " One thing for tomorrow-you: {$etix} e-ticket" . ($etix === 1 ? '' : 's') . " still open."
+                : '';
+
+            if ($sales > 0) {
+                $bestBit = $best !== null && $sales > 1 ? " — best one {$best}" : '';
+                $variants = [
+                    "🌙 {$hi}, what a shift — {$sales} sale" . ($sales === 1 ? '' : 's') . " and {$rev} today{$bestBit}. Genuinely well done.{$carry} Now go rest, you've earned it!",
+                    "🌙 Wrapping your day, {$hi}: {$sales} sale" . ($sales === 1 ? '' : 's') . ", {$rev} in.{$bestBit} That's a day to feel good about.{$carry} See you tomorrow!",
+                ];
+            } else {
+                $variants = [
+                    "🌙 {$hi}, long one today — " . round($hours) . " hours in. The board didn't move, and that's okay; some days are like that.{$carry} Tomorrow's a fresh page, and I'll be right here for it.",
+                    "🌙 Heading off, {$hi}? Quiet day on the numbers, but you showed up for all of it and that counts with me.{$carry} Rest up — we go again tomorrow.",
+                ];
+            }
+            return $variants[abs($seed) % count($variants)];
+        }
+
         $variants = match ($type) {
             'first_sale_today' => [
                 "🙌 {$hi}, you're on the board! {$ref} just came through at {$amt}. First one today — let's build on it.",
@@ -745,6 +784,51 @@ class BuddyService
                 self::agentPersona($userId),
                 [['role' => 'user', 'parts' => [['text' => $prompt]]]],
                 new BuddyToolRegistry($userId)   // empty registry — no tools, one hop
+            );
+            return ($result['success'] && trim((string) $result['text']) !== '')
+                ? trim($result['text'])
+                : null;
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * AI phrasing for the shift wrap — same contract as phrasePraiseWithAi:
+     * no tools, one hop, personal facts included, null on any failure so the
+     * template always covers. The goodbye is the moment personal memory earns
+     * its keep ("you said you wanted 25 this month — today got you 3 closer").
+     */
+    private function phraseWrapWithAi(int $userId, ?string $firstName, array $payload): ?string
+    {
+        if (!$this->client->isConfigured()) {
+            return null;
+        }
+        try {
+            $facts = AgentTools::facts($userId);
+            $factLine = $facts === [] ? '' : "\nWhat you remember about them:\n- " . implode("\n- ", array_slice($facts, 0, 8));
+
+            $sales = (int) ($payload['sales'] ?? 0);
+            $tone  = $sales > 0
+                ? 'The day went well — celebrate it with the real numbers.'
+                : 'No sales landed today. Be warm and completely guilt-free about that: '
+                . 'acknowledge the effort, keep it light, point gently at tomorrow. Never scold, never analyse what went wrong.';
+
+            $prompt = "The agent's shift is winding down; this is your end-of-day goodbye to them. "
+                    . "Write ONE short warm wrap-up (2–4 sentences, natural spoken aloud, no markdown). "
+                    . "Use ONLY these numbers, never invent others. Do not promise bonuses or targets.\n"
+                    . 'Agent first name: ' . ($firstName ?: 'unknown') . "\n"
+                    . 'Hours worked: ' . round((float) ($payload['hours'] ?? 0)) . "\n"
+                    . "Approved sales today: {$sales}\n"
+                    . 'Revenue today: $' . number_format((float) ($payload['revenue'] ?? 0), 2) . "\n"
+                    . 'E-tickets still open: ' . (int) ($payload['open_etix'] ?? 0) . "\n"
+                    . 'Tone: ' . $tone
+                    . $factLine;
+
+            $result = $this->client->chat(
+                self::agentPersona($userId),
+                [['role' => 'user', 'parts' => [['text' => $prompt]]]],
+                new BuddyToolRegistry($userId)
             );
             return ($result['success'] && trim((string) $result['text']) !== '')
                 ? trim($result['text'])
