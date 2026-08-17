@@ -218,52 +218,32 @@ class BuddyService
      *
      * @return bool true if THIS request won the claim and must now greet.
      *
-     * The UPDATE's WHERE clause is the lock: it only matches rows that do not
-     * already carry today's key, so exactly one concurrent request can see one
-     * affected row. buddy_settings.extra_json has no other writer in the
-     * codebase, so read-merging the rest of the blob is safe.
+     * Serialised through BuddySettings::mutate(), which holds a row lock for
+     * the whole read-modify-write. extra_json now has three independent
+     * writers (this stamp, the feed pacing stamp, and the agent's goal), so
+     * the earlier conditional-UPDATE approach was no longer enough on its own:
+     * it made the claim atomic but still lost whichever key a concurrent
+     * writer had merged in between our read and our write.
      */
     private function claimGreeting(int $userId, string $dayKey): bool
     {
-        try {
-            $row = DB::table('buddy_settings')->where('user_id', $userId)->first(['extra_json']);
+        // Cheap read first: almost every page load hits this already-greeted
+        // path, and it should not cost a transaction and a row lock.
+        if ((BuddySettings::read($userId)['last_greeted_bday'] ?? null) === $dayKey) {
+            return false;
+        }
 
-            if ($row === null) {
-                // First greeting ever for this user. A racing insert loses on the
-                // PK and falls through to the conditional UPDATE below.
-                try {
-                    DB::table('buddy_settings')->insert([
-                        'user_id'    => $userId,
-                        'extra_json' => json_encode(['last_greeted_bday' => $dayKey], JSON_UNESCAPED_UNICODE),
-                    ]);
-                    return true;
-                } catch (Throwable $e) {
-                    $row = DB::table('buddy_settings')->where('user_id', $userId)->first(['extra_json']);
-                    if ($row === null) {
-                        return false;
-                    }
-                }
-            }
-
-            $extra = json_decode((string) ($row->extra_json ?? ''), true) ?: [];
+        // Contested path only. Under the row lock the check and the write are
+        // one step, so exactly one concurrent caller can win — and unlike the
+        // previous conditional-UPDATE trick, a simultaneous goal or pacing
+        // write can no longer clobber the stamp we just set.
+        return BuddySettings::mutate($userId, function (array $extra) use ($dayKey) {
             if (($extra['last_greeted_bday'] ?? null) === $dayKey) {
-                return false;   // already greeted today — cheap path, no write
+                return [$extra, false];              // someone beat us to it
             }
             $extra['last_greeted_bday'] = $dayKey;
-
-            $affected = DB::table('buddy_settings')
-                ->where('user_id', $userId)
-                ->where(function ($q) use ($dayKey) {
-                    $q->whereNull('extra_json')
-                      ->orWhere('extra_json', 'not like', '%"last_greeted_bday":"' . $dayKey . '"%');
-                })
-                ->update(['extra_json' => json_encode($extra, JSON_UNESCAPED_UNICODE)]);
-
-            return $affected === 1;
-        } catch (Throwable $e) {
-            ErrorLogService::log('warning', '[buddy] greeting claim failed: ' . $e->getMessage());
-            return false;   // fail closed: a missed greeting beats a doubled one
-        }
+            return [$extra, true];
+        }, false);                                   // fail closed: a missed greeting beats a doubled one
     }
 
     /** Deterministic agent digest — fallback text and greeting raw material. */
@@ -521,10 +501,7 @@ class BuddyService
     private function feedHoldSeconds(int $userId, bool $panelOpen = false): int
     {
         try {
-            $extra = json_decode(
-                (string) DB::table('buddy_settings')->where('user_id', $userId)->value('extra_json'),
-                true
-            ) ?: [];
+            $extra = BuddySettings::read($userId);
 
             if (!$panelOpen) {
                 $last  = (int) ($extra['last_feed_at'] ?? 0);
@@ -562,19 +539,10 @@ class BuddyService
 
     private function stampFeed(int $userId): void
     {
-        try {
-            $extra = json_decode(
-                (string) DB::table('buddy_settings')->where('user_id', $userId)->value('extra_json'),
-                true
-            ) ?: [];
+        BuddySettings::mutate($userId, function (array $extra) {
             $extra['last_feed_at'] = time();
-            DB::table('buddy_settings')->updateOrInsert(
-                ['user_id' => $userId],
-                ['extra_json' => json_encode($extra, JSON_UNESCAPED_UNICODE)]
-            );
-        } catch (Throwable $e) {
-            // non-fatal: worst case she is briefly chattier than intended
-        }
+            return [$extra, true];
+        });
     }
 
     /** A nudge older than this was raised while the agent was away. */

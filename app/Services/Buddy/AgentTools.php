@@ -323,16 +323,8 @@ class AgentTools
     /** @return array{goal: array|null} raw stored goal for this user */
     private static function readGoal(int $userId): ?array
     {
-        try {
-            $extra = json_decode(
-                (string) DB::table('buddy_settings')->where('user_id', $userId)->value('extra_json'),
-                true
-            ) ?: [];
-            $goal = $extra['goal'] ?? null;
-            return is_array($goal) ? $goal : null;
-        } catch (\Throwable $e) {
-            return null;
-        }
+        $goal = BuddySettings::read($userId)['goal'] ?? null;
+        return is_array($goal) ? $goal : null;
     }
 
     private static function setGoal(int $userId, array $args): array
@@ -340,20 +332,13 @@ class AgentTools
         // Clearing comes first: a goal you cannot walk away from is a target
         // somebody else set, which is exactly what this must never become.
         if (!empty($args['clear'])) {
-            try {
-                $extra = json_decode(
-                    (string) DB::table('buddy_settings')->where('user_id', $userId)->value('extra_json'),
-                    true
-                ) ?: [];
+            $ok = BuddySettings::mutate($userId, function (array $extra) {
                 unset($extra['goal']);
-                DB::table('buddy_settings')->updateOrInsert(
-                    ['user_id' => $userId],
-                    ['extra_json' => json_encode($extra, JSON_UNESCAPED_UNICODE)]
-                );
-                return ['cleared' => true, 'note' => 'Goal forgotten. Do not ask them to set a new one unless they raise it.'];
-            } catch (\Throwable $e) {
-                return ['error' => 'Could not clear the goal right now.'];
-            }
+                return [$extra, true];
+            }, false);
+            return $ok
+                ? ['cleared' => true, 'note' => 'Goal forgotten. Do not ask them to set a new one unless they raise it.']
+                : ['error' => 'Could not clear the goal right now.'];
         }
 
         $sales   = isset($args['sales'])   ? (int) $args['sales']     : null;
@@ -369,12 +354,7 @@ class AgentTools
             return ['error' => 'Revenue target looks wrong — give a realistic monthly figure in dollars.'];
         }
 
-        try {
-            $extra = json_decode(
-                (string) DB::table('buddy_settings')->where('user_id', $userId)->value('extra_json'),
-                true
-            ) ?: [];
-
+        $goal = BuddySettings::mutate($userId, function (array $extra) use ($sales, $revenue) {
             // Merge, so setting only a sales target keeps an existing revenue one.
             $goal = is_array($extra['goal'] ?? null) ? $extra['goal'] : [];
             if ($sales !== null) {
@@ -385,16 +365,14 @@ class AgentTools
             }
             $goal['set_at'] = date('Y-m-d H:i:s');
             $extra['goal']  = $goal;
+            return [$extra, $goal];
+        });
 
-            DB::table('buddy_settings')->updateOrInsert(
-                ['user_id' => $userId],
-                ['extra_json' => json_encode($extra, JSON_UNESCAPED_UNICODE)]
-            );
-            return ['saved' => true, 'goal' => $goal,
-                    'note'  => "This is the agent's own goal, self-chosen. Not a management target."];
-        } catch (\Throwable $e) {
+        if ($goal === null) {
             return ['error' => 'Could not save the goal right now.'];
         }
+        return ['saved' => true, 'goal' => $goal,
+                'note'  => "This is the agent's own goal, self-chosen. Not a management target."];
     }
 
     private static function goalProgress(int $userId, string $role): array

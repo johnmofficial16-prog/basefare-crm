@@ -557,5 +557,51 @@ $ordr = $svc->agentFeed(64, true);
 check('big sale spoken before the on-the-board note',
     str_contains($ordr['messages'][0]['content'] ?? '', 'B1'));
 
+echo "F21. extra_json has three writers — none may clobber another\n";
+$U = 71;
+$claim3 = $ref->getMethod('claimGreeting');
+$stamp3 = $ref->getMethod('stampFeed');
+$reg71  = \App\Services\Buddy\AgentTools::registry($U, 'agent');
+
+// All three keys written by their real code paths, in sequence.
+check('greeting claimed', $claim3->invoke($svc, $U, '2026-08-18') === true);
+$stamp3->invoke($svc, $U);
+$reg71->execute('set_my_goal', ['sales' => 40]);
+
+$blob = \App\Services\Buddy\BuddySettings::read($U);
+check('greeting stamp survived the goal write', ($blob['last_greeted_bday'] ?? null) === '2026-08-18');
+check('pacing stamp survived the goal write', !empty($blob['last_feed_at']));
+check('goal survived both stamps', ($blob['goal']['sales'] ?? 0) === 40);
+
+// Reverse order: goal first, then the two stamps.
+$U2 = 72;
+$reg72 = \App\Services\Buddy\AgentTools::registry($U2, 'agent');
+$reg72->execute('set_my_goal', ['revenue' => 50000]);
+$claim3->invoke($svc, $U2, '2026-08-18');
+$stamp3->invoke($svc, $U2);
+$blob2 = \App\Services\Buddy\BuddySettings::read($U2);
+check('goal survived the later stamps', ($blob2['goal']['revenue'] ?? 0) == 50000.0);
+check('both stamps present alongside it',
+    ($blob2['last_greeted_bday'] ?? null) === '2026-08-18' && !empty($blob2['last_feed_at']));
+
+// Clearing the goal must not take the stamps with it.
+$reg72->execute('set_my_goal', ['clear' => true]);
+$blob3 = \App\Services\Buddy\BuddySettings::read($U2);
+check('clearing the goal leaves the stamps intact',
+    ($blob3['last_greeted_bday'] ?? null) === '2026-08-18' && !empty($blob3['last_feed_at']));
+check('goal really gone', !isset($blob3['goal']));
+check('greeting still counts as claimed after a goal clear',
+    $claim3->invoke($svc, $U2, '2026-08-18') === false);
+
+// mutate() declining to change anything must not write.
+$before = \App\Services\Buddy\BuddySettings::read($U2);
+$noop = \App\Services\Buddy\BuddySettings::mutate($U2, fn(array $e) => [$e, 'untouched']);
+check('a no-op mutate returns its result', $noop === 'untouched');
+check('a no-op mutate leaves the blob byte-identical',
+    \App\Services\Buddy\BuddySettings::read($U2) === $before);
+check('mutate creates a row for a brand-new user',
+    \App\Services\Buddy\BuddySettings::mutate(73, fn(array $e) => [['seeded' => 1], true]) === true
+    && (\App\Services\Buddy\BuddySettings::read(73)['seeded'] ?? 0) === 1);
+
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);
