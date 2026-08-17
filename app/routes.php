@@ -164,6 +164,7 @@ $app->group('/buddy', function ($group) {
     $group->get('',           [\App\Controllers\BuddyController::class, 'agentPage']);
     $group->get('/boot',      [\App\Controllers\BuddyController::class, 'boot']);
     $group->get('/history',   [\App\Controllers\BuddyController::class, 'agentHistory']);
+    $group->get('/feed',      [\App\Controllers\BuddyController::class, 'feed']);
     $group->post('/greeting', [\App\Controllers\BuddyController::class, 'agentGreeting']);
     $group->post('/chat',     [\App\Controllers\BuddyController::class, 'agentChat']);
     $group->post('/tts',      [\App\Controllers\BuddyController::class, 'ttsSynthesize']);

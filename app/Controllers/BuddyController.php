@@ -188,6 +188,27 @@ class BuddyController
         return $this->json($response, ['success' => true] + $result);
     }
 
+    /**
+     * GET /buddy/feed (P5 — Aisha initiates). Drains this user's pending
+     * nudges into their conversation as Aisha-phrased model messages and
+     * returns them for the widget to toast/speak. Idempotent: an empty drain
+     * returns messages:[] and costs one indexed COUNT. Never touches the
+     * agent's chat quota (no user message is stored).
+     */
+    public function feed(Request $request, Response $response): Response
+    {
+        if (!\App\Services\Buddy\BuddyService::enabled()) {
+            return $this->json($response, ['ok' => false], 503);
+        }
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0) {
+            return $this->json($response, ['ok' => false], 401);
+        }
+
+        $result = $this->service->agentFeed($userId, (string) ($_SESSION['role'] ?? 'agent'));
+        return $this->json($response, ['ok' => true] + $result);
+    }
+
     public function agentChat(Request $request, Response $response): Response
     {
         if (!\App\Services\Buddy\BuddyService::enabled()) {

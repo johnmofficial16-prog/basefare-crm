@@ -9,13 +9,24 @@ Working notes for picking this up in a fresh session. Memory files
 
 ---
 
-## 17 Aug (late) — NEXT SESSION START HERE: P5 "Aisha speaks first"
+## 17 Aug (later) — P5 BUILT ✓ (offline-tested 28/28; needs deploy + live drive)
 
-Everything P0–P4 is live (see below + `ai-buddy-status` memory). The user's
-correct final critique: **detection is proactive, delivery is passive.** The
-trigger cron finds praise/departures/lags every 15 min, but they land as bell
-rows + chips — Aisha only talks when the agent opens the chat. She must
-INITIATE. Design (agreed direction, not yet built):
+P5 is implemented exactly per the spec below, on local `dev`:
+`BuddyService::agentFeed` + `GET /buddy/feed` (atomic claim, batch cap 3,
+priority praise→urgency, quota-exempt), widget greeting-on-page-load, 75s
+visibility-gated polling, toast-by-orb + badge + spoken delivery with an
+autoplay-unlock queue (speech queued until first click/keydown — Chrome
+blocks it before a gesture). Two latent bugs fixed en route: the greeting
+dedupe check (was "any model message today" — feed messages would have
+suppressed the login greeting; now a stamp in buddy_settings.extra_json) and
+the silent bulk `markNudgesDelivered` on every chat turn (nudges could be
+swallowed unvoiced; the feed is now the only deliverer).
+Verify: `php scripts/buddy_feed_verify.php` (SQLite, no network, 28 checks).
+**TODO: push + `git pull origin dev` on server, then live Chrome drive:
+login as agent → greeting speaks after first click, seed a pending nudge →
+toast within ~75s.** No migration needed. Red-team unchanged (no new tools).
+
+Original design (for reference — all of it is built):
 
 1. **Nudge feed endpoint** `GET /buddy/feed`: drains this user's `pending`
    buddy_nudges → phrases each AS AISHA (template-first for token economy:

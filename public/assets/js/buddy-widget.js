@@ -16,6 +16,14 @@
  *   GET  /buddy/history   → {messages, nudges}
  *   POST /buddy/greeting  → once-per-business-day greeting (server decides)
  *   POST /buddy/chat      → {reply, ai}
+ *   GET  /buddy/feed      → {messages, pending_left} — P5: Aisha initiates.
+ *
+ * P5 delivery model: the greeting fires on PAGE LOAD (not orb click), and the
+ * feed is polled every ~75s while the tab is visible. New Aisha-initiated
+ * messages land in the open panel, or as a toast bubble by the orb + badge
+ * when it's closed — spoken aloud when voice is on. Browser autoplay policy
+ * blocks speech before the first user gesture, so early speech is queued and
+ * released on the first click/keypress.
  */
 (function () {
   'use strict';
@@ -50,10 +58,10 @@
     //    else the personal agent buddy. Server decides via /buddy/boot.
     var MODE = boot.mode === 'admin' ? 'admin' : 'agent';
     var EP = MODE === 'admin'
-      ? { history: '/buddy/admin/history', chat: '/buddy/admin/chat', greeting: null,
+      ? { history: '/buddy/admin/history', chat: '/buddy/admin/chat', greeting: null, feed: null,
           confirm: '/buddy/admin/confirm-action', cancel: '/buddy/admin/cancel-action' }
       : { history: '/buddy/history', chat: '/buddy/chat', greeting: '/buddy/greeting',
-          confirm: null, cancel: null };
+          feed: '/buddy/feed', confirm: null, cancel: null };
 
     // Web Speech — BOTH halves feature-detected; absence degrades silently
     // (the liveboard TV taught us what unguarded speech APIs do in production).
@@ -78,8 +86,17 @@
       '<path d="M12 3a7 7 0 0 1 7 7v1.5a6.5 6.5 0 0 1-6.5 6.5H12l-3.6 2.7c-.6.45-1.4-.06-1.4-.8V17A7 7 0 0 1 12 3Z" stroke="currentColor" stroke-width="1.6"/>' +
       '<circle cx="9.2" cy="10.6" r="1.1" fill="currentColor"/><circle cx="14.8" cy="10.6" r="1.1" fill="currentColor"/></svg>';
     var badge = el('span', 'bw-badge');
-    var nudgeCount = (boot.nudges | 0);
-    if (nudgeCount > 0) { badge.textContent = nudgeCount > 9 ? '9+' : String(nudgeCount); orb.appendChild(badge); }
+    var nudgeCount = 0;
+    function setBadge(n) {
+      nudgeCount = n;
+      if (n > 0) {
+        badge.textContent = n > 9 ? '9+' : String(n);
+        if (!badge.parentNode) orb.appendChild(badge);
+      } else if (badge.parentNode) {
+        badge.parentNode.removeChild(badge);
+      }
+    }
+    setBadge(boot.nudges | 0);
     document.body.appendChild(orb);
 
     // ── Panel ──────────────────────────────────────────────────────────────
@@ -126,7 +143,7 @@
       panel.classList.toggle('bw-open', opened);
       orb.classList.toggle('bw-orb-hidden', opened);
       if (opened && !panel.__loaded) { panel.__loaded = true; load(); }
-      if (opened) input.focus();
+      if (opened) { setBadge(0); hideToast(); input.focus(); }
     });
     panel.querySelector('.bw-close').addEventListener('click', function () {
       opened = false;
@@ -169,9 +186,27 @@
      *                Aisha greets the agents aloud, they reply in chat)
      *   'reply'    — spoken for the admin only (full conversation mode)
      */
+    // Autoplay unlock: browsers block audio/speech before the first user
+    // gesture on the page. Anything Aisha wants to say before that is queued
+    // and the FIRST queued line (the greeting) is released on first gesture —
+    // the rest stay visible as toast/panel text rather than a speech barrage.
+    var interacted = false, speechQueue = [];
+    function markInteracted() {
+      if (interacted) return;
+      interacted = true;
+      if (speechQueue.length) {
+        var q = speechQueue[0];
+        speechQueue = [];
+        speak(q[0], q[1]);
+      }
+    }
+    document.addEventListener('pointerdown', markInteracted, true);
+    document.addEventListener('keydown', markInteracted, true);
+
     function speak(text, kind) {
       if (!voiceOn) return;
       if (kind !== 'greeting' && MODE !== 'admin') return;
+      if (!interacted) { speechQueue.push([text, kind]); return; }
       var payload = String(text).slice(0, 600);
 
       if (serverVoice === false) { browserSpeak(payload); return; }
@@ -229,6 +264,92 @@
       });
     }
 
+    // ── P5: Aisha initiates ────────────────────────────────────────────────
+    // Toast bubble by the orb for messages that arrive while the panel is
+    // closed. One element, latest message wins, click-through opens the chat.
+    var toast = null, toastTimer = null;
+    function showToast(text) {
+      if (opened) return;
+      if (!toast) {
+        toast = el('div', 'bw-toast');
+        toast.addEventListener('click', function () { hideToast(); orb.click(); });
+        document.body.appendChild(toast);
+      }
+      toast.textContent = String(text).split('\n')[0].slice(0, 140);
+      toast.classList.add('bw-toast-show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(hideToast, 14000);
+    }
+    function hideToast() {
+      if (toast) toast.classList.remove('bw-toast-show');
+      clearTimeout(toastTimer);
+    }
+
+    // Guard against the greeting race: if the panel's history fetch already
+    // rendered this exact message, don't append it a second time.
+    function alreadyShown(text) {
+      var msgs = log.querySelectorAll('.bw-msg-ai');
+      for (var i = Math.max(0, msgs.length - 5); i < msgs.length; i++) {
+        if (msgs[i].textContent === text) return true;
+      }
+      return false;
+    }
+
+    /**
+     * One Aisha-initiated message reaches the agent: panel open → appended to
+     * the log; panel closed → toast + badge (and appended quietly if the log
+     * is already built, so it's there on open). Spoken via the 'greeting'
+     * voice class — everyone with voice on hears Aisha, per the client spec.
+     */
+    function deliver(text, speakIt) {
+      var dup = panel.__loaded && alreadyShown(text);
+      if (panel.__loaded && !dup) addMsg('ai', text);
+      if (!opened) { showToast(text); setBadge(nudgeCount + 1); }
+      if (speakIt && !dup) speak(text, 'greeting');
+    }
+
+    // Greeting fires on PAGE LOAD, not on orb click — Aisha greets them by
+    // name the moment they arrive. The server decides once-per-business-day.
+    var FEED_MS = 75000;
+    var lastPoll = 0, pollBusy = false;
+    function pollFeed() {
+      if (!EP.feed || document.hidden || pollBusy) return;
+      pollBusy = true;
+      lastPoll = Date.now();
+      fetch(EP.feed, { headers: { 'Accept': 'application/json' } })
+        .then(function (r) {
+          if (!r.ok) throw 0;
+          var ct = r.headers.get('content-type') || '';
+          if (ct.indexOf('json') === -1) throw 0;   // session died → HTML login
+          return r.json();
+        })
+        .then(function (d) {
+          if (!d || !d.ok) return;
+          (d.messages || []).forEach(function (m, i) { deliver(m.content, i === 0); });
+        })
+        .catch(function () { /* network blip — next tick will retry */ })
+        .finally(function () { pollBusy = false; });
+    }
+    if (EP.greeting) {
+      greeted = true;   // load() must not fire it a second time
+      fetch(EP.greeting, { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF }, body: '{}' })
+        .then(function (r) { return r.json(); })
+        .then(function (g) { if (g.greeted && g.reply) deliver(g.reply, true); })
+        .catch(function () { /* greeting is a bonus, never an error */ })
+        .finally(function () {
+          // First feed drain a beat after the greeting so Aisha doesn't talk
+          // over herself; then steady polling while the tab is visible.
+          if (EP.feed) setTimeout(pollFeed, 8000);
+        });
+    }
+    if (EP.feed) {
+      setInterval(pollFeed, FEED_MS);
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && Date.now() - lastPoll > FEED_MS) setTimeout(pollFeed, 2000);
+      });
+    }
+
     // Confirm gate UI: the model can only PARK an action; these buttons are the
     // human click that executes or discards it.
     function renderConfirm(summary) {
@@ -269,20 +390,10 @@
             });
             chips.appendChild(c);
           });
-          if (!greeted && EP.greeting) {
-            greeted = true;
-            var t = typing();
-            fetch(EP.greeting, { method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF }, body: '{}' })
-              .then(function (r) { return r.json(); })
-              .then(function (g) {
-                t.remove();
-                if (g.greeted && g.reply) { addMsg('ai', g.reply, g.ai === false); speak(g.reply, 'greeting'); }
-                else if ((h.messages || []).length === 0) {
-                  addMsg('ai', "Hey! I'm Aisha — your work buddy. I keep an eye on your sales, your open bookings and your wins, and I'm always up for a chat about your numbers. What's on your mind?");
-                }
-              })
-              .catch(function () { t.remove(); });
+          // Greeting is handled at page load (P5); here we only cover the
+          // very first ever open with an empty history.
+          if (MODE !== 'admin' && (h.messages || []).length === 0 && !log.querySelector('.bw-msg')) {
+            addMsg('ai', "Hey! I'm Aisha — your work buddy. I keep an eye on your sales, your open bookings and your wins, and I'm always up for a chat about your numbers. What's on your mind?");
           } else if (MODE === 'admin' && (h.messages || []).length === 0) {
             addMsg('ai', "Aisha here — your assistant. Ask me about anyone on the team: stats, dry spells, e-ticket lag, or what an agent's buddy has been hearing. I can also send nudges — you confirm every one.");
           }
@@ -419,7 +530,10 @@
 '.bw-btn:disabled{opacity:.5;cursor:default}' +
 '.bw-btn-yes{background:linear-gradient(135deg,#059669,#34d399);color:#fff}' +
 '.bw-btn-no{background:rgba(255,255,255,.12);color:#c8d6ff;border:1px solid rgba(120,150,255,.3)}' +
-'@media (max-width:480px){.bw-panel{right:8px;bottom:8px;border-radius:16px}}';
+'.bw-toast{position:fixed;right:22px;bottom:92px;z-index:9990;max-width:300px;background:linear-gradient(160deg,rgba(13,20,44,.97),rgba(22,50,116,.95));color:#e7ecff;border:1px solid rgba(120,150,255,.28);border-radius:16px 16px 4px 16px;padding:12px 15px;font:400 12.5px/1.5 Inter,sans-serif;box-shadow:0 12px 40px rgba(10,16,40,.5),0 0 24px rgba(91,140,255,.16);cursor:pointer;opacity:0;pointer-events:none;transform:translateY(10px) scale(.97);transition:all .3s ease;white-space:pre-wrap;word-break:break-word}' +
+'.bw-toast::after{content:"Aisha · tap to reply";display:block;margin-top:7px;font:700 9.5px/1 Inter;letter-spacing:.1em;color:#8fb0ff;text-transform:uppercase}' +
+'.bw-toast-show{opacity:1;pointer-events:auto;transform:none}' +
+'@media (max-width:480px){.bw-panel{right:8px;bottom:8px;border-radius:16px}.bw-toast{right:8px;max-width:calc(100vw - 90px)}}';
     var s = document.createElement('style');
     s.textContent = css;
     document.head.appendChild(s);
