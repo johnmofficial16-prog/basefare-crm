@@ -3,6 +3,54 @@
 Working notes for picking this up in a fresh session. Memory files
 (`MEMORY.md`) cover the durable project facts; this covers *today's* state.
 
+> **⚠️ §1–5 below are from 10 Aug and are now STALE.** The server is many
+> commits ahead. See the "17 August update" block immediately below for
+> current state; the memory files are the source of truth.
+
+---
+
+## 17 August 2026 update — current state
+
+**Deployed:** server on `dev` at/after `c6720d7`. Everything through the full
+AI-buddy build (P0–P3) is live and verified. Reliability safety net, the
+40-bug audit fixes, self-hosted Tailwind, 24/7 roster — all shipped. See
+memory: `ai-buddy-status`, `reliability-safety-net`, `roster-24-7`,
+`gcp-credits-deadline`.
+
+**Deploy is unchanged:** `git pull origin dev && php hostinger_migrate.php`
+(the migrator is now ledger-based and self-backs-up; safe to run every deploy).
+
+### OPEN OPERATIONAL TASKS (all the user's, none block code)
+
+1. **GCP billing card — DUE 18 Aug.** Free-trial credit expires; without a
+   card Gemini goes dark and the whole buddy layer degrades to deterministic
+   fallbacks. Also the Customer-Email AI module. Hard deadline.
+2. **₹94k GenAI Search credit scope test — 18 Aug.** Re-run queries against
+   the `basefare-kb-test` Discovery Engine app after the trial credit lapses;
+   check Billing→Reports credit column. (Details in `gcp-credits-deadline`.)
+3. **hPanel cron jobs to register:**
+   - Nightly backup — daily 03:30:
+     `php <crm>/cron/db_backup.php`  *(NOT yet registered — backups are stale)*
+   - Buddy triggers — every 15 min:
+     `php <crm>/cron/buddy_triggers.php`  *(ALREADY registered)*
+   - Buddy consolidator — weekly Sun 04:00:
+     `php <crm>/cron/buddy_consolidate.php`  *(not yet registered)*
+   (`<crm>` = `/home/u501549865/domains/base-fare.com/public_html/crm`)
+4. **24/7 roster weekly top-up** (horizon ends 30 Aug):
+   `php <crm>/scripts/schedule_24h_shifts.php --apply --roles=agent,manager`
+5. **Buddy kill switch** if ever needed: set `BUDDY_ENABLED=false` in `.env`
+   (hides widget + 503s all buddy chat, no deploy).
+
+### STILL GATED / DEFERRED (code decisions, not forgotten)
+- Attendance coaching in the buddy stays OFF until the `attendance_sessions.date`
+  overnight-split and dead break-tracking are fixed (rewrites history → needs
+  client sign-off). Plan §13.5.
+- Supervisor role dormant — excluded from all buddy surfaces + the shift bug
+  fixes were deferred (role currently unused).
+- 5 agents inactive 50–100+ days (surfaced by the Super Buddy dry-spell tool)
+  — worth asking the client whether those accounts should stay active; they
+  also each hold a 24/7 shift now.
+
 ---
 
 ## 1. Production state right now
