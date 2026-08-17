@@ -212,7 +212,9 @@
       // Cap the queue: if the agent never clicks, only the first line matters
       // and an unbounded backlog would be a slow leak on a long-lived tab.
       if (!interacted) { if (speechQueue.length < 3) speechQueue.push([text, kind]); return; }
-      var payload = String(text).slice(0, 600);
+      // Strip markdown before it reaches any voice engine, or she reads the
+      // syntax out loud.
+      var payload = plain(text).slice(0, 600);
 
       if (serverVoice === false) { browserSpeak(payload); return; }
       fetch('/buddy/tts', {
@@ -280,7 +282,7 @@
         toast.addEventListener('click', function () { hideToast(); orb.click(); });
         document.body.appendChild(toast);
       }
-      toast.textContent = String(text).split('\n')[0].slice(0, 140);
+      toast.textContent = plain(text).slice(0, 140);
       toast.classList.add('bw-toast-show');
       clearTimeout(toastTimer);
       toastTimer = setTimeout(hideToast, 14000);
@@ -483,7 +485,8 @@
         row.appendChild(av);
       }
       var b = el('div', 'bw-msg bw-msg-' + kind);
-      b.textContent = text;
+      // Aisha's side gets markdown rendered; the agent's own text stays literal.
+      if (kind === 'ai') { b.innerHTML = rich(text); } else { b.textContent = text; }
       if (degraded) {
         var tag = el('div', 'bw-degraded');
         tag.textContent = 'AI offline — raw numbers';
@@ -506,6 +509,45 @@
   }
 
   function el(tag, cls) { var e = document.createElement(tag); e.className = cls; return e; }
+
+  function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  /**
+   * Gemini answers in markdown — the admin persona explicitly asks for bullets
+   * — but the bubble was plain text, so real replies showed "### Top 3 by Net
+   * MCO", "**Cyrus**" and "\$14,568.73" exactly like that. Found by looking at
+   * production; no offline test would ever have noticed.
+   *
+   * HTML is escaped FIRST and only a tiny whitelist is reintroduced. That
+   * ordering is not optional: admin messages are relayed verbatim, so this
+   * would otherwise be an HTML injection point straight into another user's
+   * page.
+   */
+  function rich(text) {
+    var s = escHtml(text);
+    s = s.replace(/\\([\\$*_`#\[\]()~>+\-.!])/g, '$1');       // undo md escapes
+    s = s.replace(/^\s{0,3}#{1,6}\s*(.+)$/gm, '<b>$1</b>');    // headings
+    s = s.replace(/^\s*[\*\-•]\s+/gm, '• ');         // bullets
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');            // bold
+    s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');          // inline code
+    return s;
+  }
+
+  /** Speech must never pronounce syntax ("hash hash hash", "asterisk"). */
+  function plain(text) {
+    return String(text)
+      .replace(/\\([\\$*_`#])/g, '$1')
+      .replace(/^\s{0,3}#{1,6}\s*/gm, '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/`([^`\n]+)`/g, '$1')
+      .replace(/^\s*[\*\-•]\s+/gm, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
 
   function injectCss() {
     var css =
@@ -550,6 +592,8 @@
 '.bw-msg-ai{background:rgba(255,255,255,.07);color:#e7ecff;border:1px solid rgba(120,150,255,.14);border-bottom-left-radius:5px}' +
 '.bw-msg-user{background:linear-gradient(135deg,#3b62c4,#5b8cff);color:#fff;border-bottom-right-radius:5px;box-shadow:0 4px 14px rgba(91,140,255,.3)}' +
 '.bw-degraded{margin-top:7px;font-size:9.5px;color:#93a5d9;letter-spacing:.04em}' +
+'.bw-msg-ai b{color:#fff;font-weight:700}' +
+'.bw-msg-ai code{background:rgba(255,255,255,.1);border-radius:4px;padding:1px 5px;font:600 11.5px/1.4 ui-monospace,Menlo,Consolas,monospace}' +
 '.bw-typing{display:flex;gap:4px;align-items:center;padding:13px 15px}' +
 '.bw-typing i{width:6px;height:6px;border-radius:50%;background:#8fb0ff;animation:bw-dot 1.2s infinite}' +
 '.bw-typing i:nth-child(2){animation-delay:.15s}.bw-typing i:nth-child(3){animation-delay:.3s}' +
