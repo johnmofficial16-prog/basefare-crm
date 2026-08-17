@@ -32,13 +32,19 @@ class MaintenanceTools
      * heartbeat, which is what makes silence here meaningful.
      */
     private const CRON_TRACES = [
-        'auto_clock_out'          => ['label' => 'Auto clock-out',    'stale_hours' => 26],
-        'booking_reminder_fired'  => ['label' => 'Booking reminders', 'stale_hours' => null], // event-driven, silence can be normal
-        'shift_gap_alert'         => ['label' => 'Shift gap alert',   'stale_hours' => null],
-        // Runs every 15 min; an hour of silence means it is not running.
+        // Every job below writes an UNCONDITIONAL heartbeat at the end of its
+        // run, so silence genuinely means "did not run" and a threshold is
+        // meaningful. Watching work-product rows instead (auto_clock_out only
+        // logs when it closes a session; booking_reminder_fired only when a
+        // reminder is due) left this permanently red on a 24/7 roster where
+        // days can pass with nothing to do.
+        'auto_clockout_ran'       => ['label' => 'Auto clock-out',    'stale_hours' => 1],
+        'booking_reminders_ran'   => ['label' => 'Booking reminders', 'stale_hours' => 1],
         'buddy_triggers_ran'      => ['label' => 'Buddy triggers (Aisha engine)', 'stale_hours' => 1],
         // Weekly; allow a day of slack before calling it broken.
         'buddy_consolidate_ran'   => ['label' => 'Buddy memory consolidator',     'stale_hours' => 192],
+        // No heartbeat of its own yet, and optional — silence is not a fault.
+        'shift_gap_alert'         => ['label' => 'Shift gap alert',   'stale_hours' => null],
     ];
 
     public static function registry(int $userId): BuddyToolRegistry
@@ -247,8 +253,11 @@ class MaintenanceTools
             if ($meta['stale_hours'] === null) {
                 $note = 'event-driven; silence can be normal';
             } elseif ($last === null) {
-                // The single most useful thing this tool can say. Say it plainly.
-                $note = 'NEVER run — cron almost certainly not registered in hPanel';
+                // Say it plainly, but don't overclaim: a job registered five
+                // minutes ago has legitimately never run, and a weekly one can
+                // look like this for days after being set up.
+                $note = 'no heartbeat ever recorded — either not registered in hPanel, '
+                      . 'or registered recently and not yet due for its first run';
             } elseif ($ageH > $meta['stale_hours']) {
                 $note = 'expected every ' . $meta['stale_hours'] . 'h or sooner';
             }

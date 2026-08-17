@@ -50,4 +50,21 @@ try {
     exit(1);
 }
 
+// Unconditional heartbeat — see the note in auto_clockout.php. Dispatch rows
+// only appear when a reminder actually fires, so silence here was ambiguous
+// between "nothing due" and "not running at all".
+try {
+    \Illuminate\Database\Capsule\Manager::table('activity_log')->insert([
+        'user_id'     => null,
+        'action'      => 'booking_reminders_ran',
+        'entity_type' => 'booking_reminders',
+        'entity_id'   => null,
+        'details'     => json_encode(['dispatched' => $result['notifications'] ?? 0]),
+        'ip_address'  => null,
+        'created_at'  => date('Y-m-d H:i:s'),
+    ]);
+} catch (\Throwable $e) {
+    error_log('[booking_reminders_dispatch] heartbeat failed: ' . $e->getMessage());
+}
+
 echo "[Booking Reminders] Done.\n";

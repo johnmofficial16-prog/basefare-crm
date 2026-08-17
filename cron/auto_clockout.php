@@ -205,4 +205,23 @@ foreach ($activeSessions as $session) {
     $processed++;
 }
 
+// Unconditional heartbeat. The 'auto_clock_out' rows above are written only
+// when a session actually gets closed, which on a 24/7 roster can be days
+// apart — so health checks read that silence as "overdue" and sat permanently
+// red. A monitor nobody believes is worse than no monitor: it is how the buddy
+// trigger cron stayed dead in plain sight for two days.
+try {
+    Capsule::table('activity_log')->insert([
+        'user_id'     => null,
+        'action'      => 'auto_clockout_ran',
+        'entity_type' => 'attendance_sessions',
+        'entity_id'   => null,
+        'details'     => json_encode(['processed' => $processed]),
+        'ip_address'  => null,
+        'created_at'  => date('Y-m-d H:i:s'),
+    ]);
+} catch (\Throwable $e) {
+    error_log('[auto_clockout] heartbeat failed: ' . $e->getMessage());
+}
+
 echo "[" . date('Y-m-d H:i:s') . "] Done. Processed {$processed} stale session(s).\n";
