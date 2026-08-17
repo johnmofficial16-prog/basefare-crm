@@ -136,7 +136,8 @@
       eticket_lag: '🎫 E-ticket pending', acceptance_lag: '⏳ Acceptance open',
       departure_24h: '✈️ Departs soon', dry_spell: '💪 Check-in',
       admin_message: '💬 From admin',
-      goal_hit: '🏆 Goal reached', goal_pace: '🎯 Goal check-in'
+      goal_hit: '🏆 Goal reached', goal_pace: '🎯 Goal check-in',
+      first_sale_today: '🙌 On the board'
     };
 
     orb.addEventListener('click', function () {

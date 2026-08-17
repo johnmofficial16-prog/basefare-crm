@@ -522,5 +522,30 @@ foreach ($o as $i => $txt) {
 }
 check('e-ticket lag ranks above the pace check-in', $lagIdx !== -1 && ($paceIdx === -1 || $lagIdx < $paceIdx));
 
+echo "F20. First sale of the day (the sub-threshold silence gap)\n";
+$fs = BuddyService::phraseNudge('first_sale_today', ['ref' => 'SM350', 'amount' => 350, 'currency' => 'USD'], 'Sam', 0);
+check('acknowledges a small sale warmly', str_contains($fs, 'SM350') && str_contains($fs, '$350.00'));
+check('frames it as the first of the day', str_contains($fs, 'first') || str_contains($fs, 'On the board') || str_contains($fs, 'on the board'));
+check('does not oversell it as huge', !preg_match('/\b(BIG|huge|biggest|EVER)\b/', $fs), $fs);
+
+echo "F20b. Moment-shaped nudges expire faster than state-shaped ones\n";
+$mk(61, 'first_sale_today', ['ref' => 'OLDFS', 'amount' => 350, 'currency' => 'USD'], 'fs:1', date('Y-m-d H:i:s', time() - 9 * 3600));
+$e1 = $svc->agentFeed(61, true);
+check('9h-old first-sale is swallowed (6h TTL)', $e1['messages'] === [], implode(' | ', array_column($e1['messages'], 'content')));
+$mk(62, 'first_sale_today', ['ref' => 'NEWFS', 'amount' => 350, 'currency' => 'USD'], 'fs:2', date('Y-m-d H:i:s', time() - 2 * 3600));
+$e2 = $svc->agentFeed(62, true);
+check('2h-old first-sale still delivered', str_contains($e2['messages'][0]['content'] ?? '', 'NEWFS'));
+// A lag nudge of the same age must NOT be caught by the shorter override.
+$mk(63, 'eticket_lag', ['ref' => 'LAG9', 'waiting_hours' => 5], 'fs:3', date('Y-m-d H:i:s', time() - 9 * 3600));
+$e3 = $svc->agentFeed(63, true);
+check('9h-old lag nudge unaffected by the override', str_contains($e3['messages'][0]['content'] ?? '', 'LAG9'));
+
+echo "F20c. Praise still outranks the first-sale note\n";
+$mk(64, 'first_sale_today', ['ref' => 'A1', 'amount' => 350, 'currency' => 'USD'], 'fs:4');
+$mk(64, 'sale_praise_t2',   ['ref' => 'B1', 'amount' => 2000, 'currency' => 'USD'], 'fs:5');
+$ordr = $svc->agentFeed(64, true);
+check('big sale spoken before the on-the-board note',
+    str_contains($ordr['messages'][0]['content'] ?? '', 'B1'));
+
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

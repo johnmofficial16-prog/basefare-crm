@@ -121,14 +121,24 @@ function nudge(int $userId, string $type, string $dedupeKey, array $payload, str
 }
 
 // ── 1+2. Sale praise (approved sales in the last 24h) ────────────────────────
+//
+// Thresholds are env-tunable (BUDDY_PRAISE_T1 / BUDDY_PRAISE_T2, US dollars)
+// because the right numbers are a tone decision, not a code one, and they
+// depend on ticket sizes that drift. Calibration note from live data on
+// 18 Aug 2026: the team's average sale was $1,614, so the default t2 of $1,000
+// fires for a BELOW-average sale — i.e. the biggest celebration was the common
+// case. Raise BUDDY_PRAISE_T2 in .env (no deploy) if "big" should mean big.
+$praiseT1 = (float) ($_ENV['BUDDY_PRAISE_T1'] ?? 500);
+$praiseT2 = (float) ($_ENV['BUDDY_PRAISE_T2'] ?? 1000);
+
 $sales = Capsule::table('transactions')
     ->where('status', 'approved')
-    ->where('total_amount', '>=', 500)
+    ->where('total_amount', '>=', $praiseT1)
     ->where('created_at', '>=', date('Y-m-d H:i:s', time() - 86400))
     ->get(['id', 'agent_id', 'total_amount', 'currency', 'pnr']);
 
 foreach ($sales as $s) {
-    $tier = ((float) $s->total_amount >= 1000) ? 't2' : 't1';
+    $tier = ((float) $s->total_amount >= $praiseT2) ? 't2' : 't1';
     $ref  = $s->pnr ?: ('#' . $s->id);
     $amt  = (float) $s->total_amount;
 
@@ -277,6 +287,49 @@ foreach ($agents as $agentId) {
         '💪 Your buddy checked in',
         'It has been ' . floor($quietDays) . ' days since your last recorded sale — come talk tactics.'
     );
+}
+
+// ── 6b. First sale of the business day, whatever the size ───────────────────
+// Live data showed why this is needed: with the praise floor at $500 and a lot
+// of ~$350 bookings, a perfectly good day could pass with Aisha saying nothing
+// at all. Getting on the board is worth a word regardless of the number.
+//
+// Only fires when that first sale is BELOW the praise floor — above it, the
+// praise rule already speaks, and two messages about one booking is clutter.
+[$bdStart, $bdEnd] = \App\Services\ShiftService::businessDayBounds();
+$bdKey = substr((string) $bdStart, 0, 10);
+
+$firstPerAgent = Capsule::table('transactions')
+    ->where('status', 'approved')
+    ->whereBetween('created_at', [(string) $bdStart, (string) $bdEnd])
+    ->selectRaw('agent_id, MIN(id) AS first_id')
+    ->groupBy('agent_id')
+    ->get();
+
+if ($firstPerAgent->isNotEmpty()) {
+    $firstRows = Capsule::table('transactions')
+        ->whereIn('id', $firstPerAgent->pluck('first_id')->all())
+        ->get(['id', 'agent_id', 'pnr', 'total_amount'])
+        ->keyBy('id');
+
+    foreach ($firstPerAgent as $fp) {
+        $t = $firstRows[$fp->first_id] ?? null;
+        if ($t === null || (float) $t->total_amount >= $praiseT1) {
+            continue;                       // praise rule covers this one
+        }
+        if (alreadyNudged("first_sale:user:{$t->agent_id}:{$bdKey}")) {
+            continue;
+        }
+        $created += (int) nudge(
+            (int) $t->agent_id,
+            'first_sale_today',
+            "first_sale:user:{$t->agent_id}:{$bdKey}",
+            ['ref' => $t->pnr ?: ('#' . $t->id), 'amount' => (float) $t->total_amount, 'currency' => 'USD'],
+            '🙌 On the board!',
+            'Your first sale of the day is in.',
+            (int) $t->id
+        );
+    }
 }
 
 // ── 7. Self-set monthly goals: celebrate the hit, check in when drifting ─────

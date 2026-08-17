@@ -322,7 +322,8 @@ class BuddyService
      */
     private const FEED_PRIORITY = [
         'admin_message', 'goal_hit', 'sale_praise_t2', 'sale_praise_t1',
-        'departure_24h', 'eticket_lag', 'acceptance_lag', 'goal_pace', 'dry_spell',
+        'first_sale_today', 'departure_24h', 'eticket_lag', 'acceptance_lag',
+        'goal_pace', 'dry_spell',
     ];
 
     /**
@@ -339,6 +340,15 @@ class BuddyService
      * and dry_spell re-arms daily.
      */
     private const FEED_TTL_HOURS = 24;
+
+    /**
+     * Per-type TTL overrides, in hours, for nudges tied to a moment rather than
+     * a state. "Your first sale of the day is in!" arriving tomorrow morning is
+     * not a late greeting, it is a wrong one.
+     */
+    private const FEED_TTL_OVERRIDES = [
+        'first_sale_today' => 6,
+    ];
 
     /**
      * Types that never go stale. Praise ages gracefully (and is reframed as
@@ -457,7 +467,8 @@ class BuddyService
             // Expired: swallowed deliberately rather than voiced with numbers
             // that have since gone wrong. Already marked delivered above, so it
             // leaves the queue and a fresh, accurate one takes its place.
-            if ($age > self::FEED_TTL_HOURS
+            $ttl = self::FEED_TTL_OVERRIDES[(string) $n->type] ?? self::FEED_TTL_HOURS;
+            if ($age > $ttl
                 && !in_array((string) $n->type, self::FEED_NEVER_EXPIRES, true)) {
                 continue;
             }
@@ -675,6 +686,10 @@ class BuddyService
         }
 
         $variants = match ($type) {
+            'first_sale_today' => [
+                "🙌 {$hi}, you're on the board! {$ref} just came through at {$amt}. First one today — let's build on it.",
+                "🙌 There it is, {$hi} — {$ref} for {$amt}, your first of the day. Nice way to start.",
+            ],
             'sale_praise_t2' => [
                 "🎉 {$hi}!! I just saw {$ref} land — {$amt}! That is a BIG one. I'm genuinely so proud of you. Come tell me how you closed it!{$best}",
                 "🎉 Stop everything, {$hi} — {$ref} for {$amt}?! That's the kind of sale I brag about. Beautifully done!{$best}",
