@@ -60,6 +60,30 @@ pre-check; the greeting no longer opens a conversation row on every page load;
 feed polling backs off 75s → 5 min while quiet and snaps back on
 delivery/backlog/tab-focus/panel-open.
 
+**P7 — pacing + self-set goals (`8b585fb`, `fe4b701`, `0f98b99`).**
+
+*Pacing (defect fix).* The batch cap of 3 never actually paced anything: the
+widget keeps polling fast while `pending_left > 0`, so a backlog of twelve
+nudges arrived as twelve messages in ~5 minutes. Now server-side (client-side
+would be bypassable and would double across tabs): a **cooldown** between
+unsolicited batches — bypassed when the panel is open, because then the agent
+is *asking* — and a **daily ceiling** on how much she initiates, counted over
+the business day. The server returns `hold_seconds` so the widget waits rather
+than polling into a gate. `admin_message` ignores both.
+
+*Self-set goals.* Her persona always told her to ask each agent's monthly goal,
+but the answer landed in `buddy_agent_facts` as free text where nothing could
+measure against it. Now `set_my_goal` / `get_my_goal_progress` (structured, in
+`extra_json`, PerformanceHold-compliant, carries forward month to month), plus
+two proactive nudges: `goal_hit` (once per month per metric, ranks just under a
+human message, never expires) and `goal_pace` (weekly at most, only after the
+7th, only when >15% behind, expires like other time-sensitive nudges).
+**Boundary that matters:** this is the agent's *own* goal. Tests assert the
+phrasing never drifts into management-target language and never promises a
+bonus or a consequence.
+
+Verify: **132 checks** via `php scripts/buddy_feed_verify.php`.
+
 **TODO — deploy + live drive.** On the server:
 `git pull origin dev && php hostinger_migrate.php` (no new migration, but the
 migrator is safe to run). Then, as an agent in Chrome: greeting should speak
