@@ -81,6 +81,25 @@ class AgentTools
         );
 
         $r->register(
+            'get_my_patterns',
+            "Working patterns mined from THIS AGENT'S OWN last 90 days: which weekday they sell best, how fast "
+            . 'and how often their approved acceptances convert to sales, how quickly e-tickets follow sales, '
+            . 'average sale size this month vs last, and their current daily-sale streak. Use it to COACH — '
+            . '"when am I most effective?", "what should I improve?". Every section carries sample_size: when it '
+            . 'is small, say the pattern is tentative rather than presenting it as fact.',
+            [],
+            fn() => self::patterns($userId, $role)
+        );
+
+        $r->register(
+            'get_my_week_recap',
+            "The agent's own last 7 days vs the 7 days before: sales, revenue, net MCO, best day. "
+            . 'Use for "how was my week?" and for telling the story of their week.',
+            [],
+            fn() => self::weekRecap($userId, $role)
+        );
+
+        $r->register(
             'set_my_goal',
             "Save, update, or clear THIS AGENT'S OWN monthly goal — the target they set for themselves and told you about. "
             . 'Use it when they say something like "I want to hit 30 sales this month". Pass sales, revenue, or both. '
@@ -306,6 +325,199 @@ class AgentTools
             ])->all();
 
         return ['nudges' => $rows, 'window' => 'last 48 hours'];
+    }
+
+    // =========================================================================
+    // PATTERNS — the coach's eyes. Deterministic SQL + PHP aggregation over the
+    // agent's OWN rows only; aggregated in PHP (not DB date functions) so the
+    // exact same code runs on MySQL in production and SQLite in the offline
+    // verifier. Every section reports sample_size and refuses to pretend three
+    // data points are a pattern — Aisha's honesty rule applies to statistics
+    // as much as to numbers.
+    // =========================================================================
+
+    private const PATTERN_WINDOW_DAYS = 90;
+    private const PATTERN_ROW_CAP     = 400;
+    private const PATTERN_MIN_SAMPLE  = 5;
+
+    private static function patterns(int $userId, string $role): array
+    {
+        $since = date('Y-m-d H:i:s', time() - self::PATTERN_WINDOW_DAYS * 86400);
+        $out   = ['window' => 'last ' . self::PATTERN_WINDOW_DAYS . ' days, your own records only'];
+
+        // ── Best weekday ────────────────────────────────────────────────────
+        try {
+            $q = DB::table('transactions')
+                ->where('agent_id', $userId)->where('status', 'approved')
+                ->where('created_at', '>=', $since)
+                ->orderByDesc('id')->limit(self::PATTERN_ROW_CAP);
+            $q = PerformanceHold::apply($q, 'created_at', $role);
+            $sales = $q->get(['created_at', 'total_amount']);
+
+            $byDay = [];
+            foreach ($sales as $s) {
+                $d = date('l', strtotime((string) $s->created_at));
+                $byDay[$d] ??= ['sales' => 0, 'revenue' => 0.0];
+                $byDay[$d]['sales']++;
+                $byDay[$d]['revenue'] += (float) $s->total_amount;
+            }
+            foreach ($byDay as &$v) {
+                $v['revenue'] = round($v['revenue'], 2);
+            }
+            unset($v);
+            arsort($byDay);   // by sales count via array order of first key — sort explicitly:
+            uasort($byDay, fn($a, $b) => $b['sales'] <=> $a['sales']);
+
+            $total = count($sales);
+            $best  = array_key_first($byDay);
+            $out['weekdays'] = [
+                'sample_size' => $total,
+                'by_day'      => $byDay,
+                'best_day'    => ($total >= self::PATTERN_MIN_SAMPLE && $best !== null) ? $best : null,
+                'note'        => $total < self::PATTERN_MIN_SAMPLE
+                    ? 'too little data to call a best day — do not claim one'
+                    : null,
+            ];
+        } catch (\Throwable $e) {
+            $out['weekdays'] = ['error' => 'unavailable'];
+        }
+
+        // ── Acceptance → sale conversion ────────────────────────────────────
+        try {
+            $accs = DB::table('acceptance_requests AS a')
+                ->leftJoin('transactions AS t', function ($j) {
+                    $j->on('t.acceptance_id', '=', 'a.id')->where('t.status', '!=', 'voided');
+                })
+                ->where('a.agent_id', $userId)
+                ->where('a.status', 'APPROVED')
+                ->where('a.is_preauth', 0)
+                ->where('a.approved_at', '>=', $since)
+                ->orderByDesc('a.id')->limit(self::PATTERN_ROW_CAP)
+                ->get(['a.approved_at', 't.created_at AS txn_at']);
+
+            $n = count($accs);
+            $converted = 0;
+            $hours = [];
+            foreach ($accs as $a) {
+                if ($a->txn_at !== null) {
+                    $converted++;
+                    $h = (strtotime((string) $a->txn_at) - strtotime((string) $a->approved_at)) / 3600;
+                    if ($h >= 0 && $h < 24 * 14) {
+                        $hours[] = $h;
+                    }
+                }
+            }
+            $out['conversion'] = [
+                'sample_size'          => $n,
+                'approved_acceptances' => $n,
+                'converted_to_sale'    => $converted,
+                'rate_pct'             => $n > 0 ? round($converted / $n * 100, 1) : null,
+                'avg_hours_to_convert' => $hours !== [] ? round(array_sum($hours) / count($hours), 1) : null,
+                'note'                 => $n < self::PATTERN_MIN_SAMPLE
+                    ? 'small sample — treat as tentative'
+                    : null,
+            ];
+        } catch (\Throwable $e) {
+            $out['conversion'] = ['error' => 'unavailable'];
+        }
+
+        // ── Sale → e-ticket speed ───────────────────────────────────────────
+        try {
+            $pairs = DB::table('transactions AS t')
+                ->join('etickets AS e', 'e.transaction_id', '=', 't.id')
+                ->where('t.agent_id', $userId)->where('t.status', 'approved')
+                ->where('t.created_at', '>=', $since)
+                ->orderByDesc('t.id')->limit(self::PATTERN_ROW_CAP)
+                ->get(['t.created_at AS sold_at', 'e.created_at AS ticketed_at']);
+
+            $hours = [];
+            foreach ($pairs as $p) {
+                $h = (strtotime((string) $p->ticketed_at) - strtotime((string) $p->sold_at)) / 3600;
+                if ($h >= 0 && $h < 24 * 14) {
+                    $hours[] = $h;
+                }
+            }
+            $out['eticket_speed'] = [
+                'sample_size'          => count($hours),
+                'avg_hours_to_eticket' => $hours !== [] ? round(array_sum($hours) / count($hours), 1) : null,
+                'note'                 => count($hours) < self::PATTERN_MIN_SAMPLE
+                    ? 'small sample — treat as tentative'
+                    : null,
+            ];
+        } catch (\Throwable $e) {
+            $out['eticket_speed'] = ['error' => 'unavailable'];
+        }
+
+        // ── Momentum: avg sale size, this month vs last ─────────────────────
+        try {
+            $avg = static function (string $from, string $to) use ($userId, $role): array {
+                $q = DB::table('transactions')
+                    ->where('agent_id', $userId)->where('status', 'approved')
+                    ->whereBetween('created_at', [$from, $to]);
+                $q = PerformanceHold::apply($q, 'created_at', $role);
+                $row = $q->selectRaw('COUNT(*) AS n, COALESCE(AVG(total_amount),0) AS avg_amount')->first();
+                return ['sales' => (int) $row->n, 'avg_sale' => round((float) $row->avg_amount, 2)];
+            };
+            $out['momentum'] = [
+                'this_month' => $avg(date('Y-m-01 00:00:00'), date('Y-m-d H:i:s')),
+                'last_month' => $avg(
+                    date('Y-m-01 00:00:00', strtotime('first day of last month')),
+                    date('Y-m-t 23:59:59', strtotime('last day of last month'))
+                ),
+            ];
+        } catch (\Throwable $e) {
+            $out['momentum'] = ['error' => 'unavailable'];
+        }
+
+        $notice = PerformanceHold::notice($role);
+        if ($notice !== null) {
+            $out['hold_notice'] = $notice;
+        }
+        return $out;
+    }
+
+    /** Last 7 days vs the 7 before — also feeds the Monday greeting recap. */
+    public static function weekRecap(int $userId, string $role): array
+    {
+        $week = static function (int $daysAgoStart, int $daysAgoEnd) use ($userId, $role): array {
+            $from = date('Y-m-d H:i:s', time() - $daysAgoStart * 86400);
+            $to   = date('Y-m-d H:i:s', time() - $daysAgoEnd * 86400);
+            $q = DB::table('transactions')
+                ->where('agent_id', $userId)->where('status', 'approved')
+                ->whereBetween('created_at', [$from, $to]);
+            $q = PerformanceHold::apply($q, 'created_at', $role);
+            $rows = $q->orderByDesc('id')->limit(self::PATTERN_ROW_CAP)->get(['created_at', 'total_amount', 'profit_mco', 'refund_mco_impact']);
+
+            $sales = count($rows);
+            $revenue = 0.0;
+            $net = 0.0;
+            $byDate = [];
+            foreach ($rows as $r) {
+                $revenue += (float) $r->total_amount;
+                $net     += (float) $r->profit_mco - (float) $r->refund_mco_impact;
+                $d = substr((string) $r->created_at, 0, 10);
+                $byDate[$d] = ($byDate[$d] ?? 0) + 1;
+            }
+            arsort($byDate);
+            return [
+                'sales'    => $sales,
+                'revenue'  => round($revenue, 2),
+                'net_mco'  => round($net, 2),
+                'best_day' => $byDate === [] ? null
+                    : ['date' => array_key_first($byDate), 'sales' => reset($byDate)],
+            ];
+        };
+
+        $out = [
+            'window'     => 'rolling: last 7 days vs the 7 days before',
+            'last_7'     => $week(7, 0),
+            'prior_7'    => $week(14, 7),
+        ];
+        $notice = PerformanceHold::notice($role);
+        if ($notice !== null) {
+            $out['hold_notice'] = $notice;
+        }
+        return $out;
     }
 
     // =========================================================================

@@ -673,5 +673,87 @@ $h3 = $bc([
 ]);
 check('all-model history survives with scaffold', count($h3) === 2 && str_contains(json_encode($h3), 'CCC333'));
 
+echo "F24. Patterns — the coach's eyes (and its honesty flags)\n";
+Capsule::connection()->getPdo()->exec(<<<SQL
+CREATE TABLE acceptance_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id INTEGER, status TEXT,
+  is_preauth INTEGER DEFAULT 0, approved_at TEXT);
+CREATE TABLE etickets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, transaction_id INTEGER, created_at TEXT);
+SQL);
+// transactions table exists from F18 but patterns selects profit_mco/refund_mco_impact in weekRecap.
+Capsule::connection()->getPdo()->exec(
+    'ALTER TABLE transactions ADD COLUMN profit_mco REAL DEFAULT 0');
+Capsule::connection()->getPdo()->exec(
+    'ALTER TABLE transactions ADD COLUMN refund_mco_impact REAL DEFAULT 0');
+Capsule::connection()->getPdo()->exec(
+    'ALTER TABLE transactions ADD COLUMN acceptance_id INTEGER');
+
+$P = 91;
+$regP = \App\Services\Buddy\AgentTools::registry($P, 'agent');
+
+// Sparse data first: the honesty flags must engage.
+Capsule::table('transactions')->insert(['agent_id' => $P, 'status' => 'approved', 'total_amount' => 500,
+    'profit_mco' => 50, 'refund_mco_impact' => 0, 'created_at' => date('Y-m-d H:i:s', strtotime('last tuesday 20:00'))]);
+$sparse = $regP->execute('get_my_patterns', []);
+check('sparse weekdays refuse to name a best day',
+    array_key_exists('best_day', $sparse['weekdays']) && $sparse['weekdays']['best_day'] === null);
+check('sparse note says do not claim one', str_contains((string) ($sparse['weekdays']['note'] ?? ''), 'do not claim'));
+
+// Now a real shape: 6 Tuesday sales, 2 Friday sales (all within 90d).
+for ($i = 0; $i < 5; $i++) {
+    Capsule::table('transactions')->insert(['agent_id' => $P, 'status' => 'approved', 'total_amount' => 400 + $i,
+        'profit_mco' => 40, 'refund_mco_impact' => 0,
+        'created_at' => date('Y-m-d H:i:s', strtotime("-" . (7 * ($i + 1)) . " days tuesday 20:00") ?: time() - 7 * 86400 * ($i + 1))]);
+}
+// deterministic weekday rows: use explicit recent Tuesdays/Fridays
+Capsule::table('transactions')->where('agent_id', $P)->delete();
+$mkTxn = function (string $when, float $amt = 400) use ($P) {
+    return Capsule::table('transactions')->insertGetId(['agent_id' => $P, 'status' => 'approved',
+        'total_amount' => $amt, 'profit_mco' => 40, 'refund_mco_impact' => 0,
+        'created_at' => date('Y-m-d 20:00:00', strtotime($when))]);
+};
+$tues = []; $fris = [];
+for ($w = 1; $w <= 6; $w++) { $tues[] = $mkTxn("tuesday -{$w} week"); }
+for ($w = 1; $w <= 2; $w++) { $fris[] = $mkTxn("friday -{$w} week"); }
+$pat = $regP->execute('get_my_patterns', []);
+check('best day is Tuesday', ($pat['weekdays']['best_day'] ?? '') === 'Tuesday', json_encode($pat['weekdays']));
+check('weekday sample_size is 8', ($pat['weekdays']['sample_size'] ?? 0) === 8);
+check('no tentative note once the sample is real', ($pat['weekdays']['note'] ?? null) === null);
+
+// Conversion: 4 approved acceptances, 3 converted (2h, 4h, 6h), 1 not.
+foreach ([2, 4, 6] as $i => $h) {
+    $accId = Capsule::table('acceptance_requests')->insertGetId(['agent_id' => $P, 'status' => 'APPROVED',
+        'is_preauth' => 0, 'approved_at' => date('Y-m-d H:i:s', time() - 10 * 86400 - $h * 3600)]);
+    Capsule::table('transactions')->insert(['agent_id' => $P, 'status' => 'approved', 'total_amount' => 300,
+        'profit_mco' => 30, 'refund_mco_impact' => 0, 'acceptance_id' => $accId,
+        'created_at' => date('Y-m-d H:i:s', time() - 10 * 86400)]);
+}
+Capsule::table('acceptance_requests')->insert(['agent_id' => $P, 'status' => 'APPROVED',
+    'is_preauth' => 0, 'approved_at' => date('Y-m-d H:i:s', time() - 9 * 86400)]);
+$pat2 = $regP->execute('get_my_patterns', []);
+check('conversion rate 75%', ($pat2['conversion']['rate_pct'] ?? 0) == 75.0, json_encode($pat2['conversion']));
+check('avg hours to convert = 4', ($pat2['conversion']['avg_hours_to_convert'] ?? 0) == 4.0);
+
+// E-ticket speed: two ticketed sales, 3h and 5h after sale.
+foreach ([3, 5] as $h) {
+    $tid = $mkTxn('-3 days');
+    Capsule::table('etickets')->insert(['transaction_id' => $tid,
+        'created_at' => date('Y-m-d H:i:s', strtotime(date('Y-m-d 20:00:00', strtotime('-3 days'))) + $h * 3600)]);
+}
+$pat3 = $regP->execute('get_my_patterns', []);
+check('eticket speed averages 4h', ($pat3['eticket_speed']['avg_hours_to_eticket'] ?? 0) == 4.0, json_encode($pat3['eticket_speed']));
+check('eticket small-sample flag honest', str_contains((string) ($pat3['eticket_speed']['note'] ?? ''), 'tentative'));
+
+// PII wall: nothing customer-shaped in the whole payload.
+$flatP = json_encode($pat3);
+check('patterns carry no customer fields', !preg_match('/customer|email|phone|card/i', $flatP));
+
+echo "F24b. Week recap\n";
+$wr = $regP->execute('get_my_week_recap', []);
+check('recap has both windows', isset($wr['last_7']['sales'], $wr['prior_7']['sales']));
+check('recap counts something recent', $wr['last_7']['sales'] >= 1);
+check('best day named with its count', !empty($wr['last_7']['best_day']['date']));
+
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

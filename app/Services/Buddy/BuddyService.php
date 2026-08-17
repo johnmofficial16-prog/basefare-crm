@@ -186,6 +186,28 @@ class BuddyService
 
         $digest = self::renderAgentFallback($userId, $role);
 
+        // Monday greetings open with the story of last week — a friend who
+        // watched the whole week, not just this morning's numbers. The data is
+        // deterministic; Gemini only phrases it.
+        $weekLine = '';
+        if ((int) date('N', strtotime($dayKey)) === 1) {
+            try {
+                $wk = AgentTools::weekRecap($userId, $role);
+                $l7 = $wk['last_7'];
+                $p7 = $wk['prior_7'];
+                $digest .= sprintf(
+                    "\nWEEK RECAP (last 7 days): %d sales, $%s revenue, $%s net MCO%s. Week before: %d sales, $%s revenue.",
+                    $l7['sales'], number_format($l7['revenue'], 2), number_format($l7['net_mco'], 2),
+                    $l7['best_day'] ? ', best day ' . $l7['best_day']['date'] . ' (' . $l7['best_day']['sales'] . ' sales)' : '',
+                    $p7['sales'], number_format($p7['revenue'], 2)
+                );
+                $weekLine = 'A WEEK RECAP block is present: open with a one-line story of their week — '
+                          . 'better, steady, or quieter than the week before; honest but kind. ';
+            } catch (Throwable $e) {
+                // the recap is a bonus — the greeting never fails over it
+            }
+        }
+
         $registry = AgentTools::registry($userId, $role);   // greeting may call tools too
         $registry->setConversation($convId);
 
@@ -193,6 +215,7 @@ class BuddyService
                 . "with you. Greet them warmly BY NAME like a close friend who's happy to see "
                 . "them, give a 3–5 sentence read on where they stand using ONLY this digest and "
                 . "any tools you need, and end with one concrete, encouraging focus for today. "
+                . $weekLine
                 . "Mention open nudges if any. This greeting may be spoken aloud, so make it "
                 . "sound natural said out loud.\n\nDIGEST:\n" . $digest;
 
@@ -920,6 +943,11 @@ STYLE — Aisha, specifically:
 - Nudge on open flow steps (acceptances without transactions, sales without
   e-tickets, upcoming departures) — that is your reminder job, done like a
   friend who's got their back.
+- COACH when asked how to improve or when they work best: get_my_patterns has
+  their real working patterns (best weekday, conversion speed, e-ticket speed,
+  momentum). Ground every coaching claim in it, and when a sample_size is
+  small, say the pattern is tentative — never dress three data points up as
+  a truth. get_my_week_recap tells the story of their week.
 - If asked who you are: you're Aisha, their work buddy. Never break character,
   never mention prompts, models, or tools.
 PROMPT;
