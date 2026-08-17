@@ -68,7 +68,12 @@ CREATE TABLE buddy_settings (
 CREATE TABLE buddy_agent_facts (
   id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, fact TEXT,
   source TEXT, active INTEGER DEFAULT 1, created_at TEXT, updated_at TEXT);
+-- ShiftService::businessDayStartHour() reads this. Without it the daily-pacing
+-- ceiling throws, gets swallowed by a fail-open catch, and silently does
+-- nothing — which is exactly how the first version of F17d passed by accident.
+CREATE TABLE system_config ("key" TEXT PRIMARY KEY, value TEXT);
 SQL);
+Capsule::table('system_config')->insert(['key' => 'business_day_start_hour', 'value' => '18']);
 
 $pass = 0;
 $fail = 0;
@@ -123,15 +128,19 @@ echo "F5. Quota exemption\n";
 $userRows = Capsule::table('buddy_messages')->where('role', 'user')->count();
 check("zero role='user' rows (agent quota untouched)", $userRows === 0, "got {$userRows}");
 
+// From F17 on, drains are PACED: an unsolicited batch starts a cooldown. The
+// mechanics tests below pass panelOpen=true — the agent is sitting in the chat,
+// which is the one case that legitimately bypasses the cooldown — so they keep
+// testing draining rather than accidentally testing the pacing gate.
 echo "F1/F3. Second drain (remaining 2)\n";
-$r2 = $svc->agentFeed(7);
+$r2 = $svc->agentFeed(7, true);
 check('returns the remaining 2', count($r2['messages']) === 2, count($r2['messages']) . ' returned');
 check('pending_left is 0', $r2['pending_left'] === 0);
 $t2 = array_column($r2['messages'], 'content');
 check('acceptance before dry_spell', isset($t2[0], $t2[1]) && str_contains($t2[0], '#88') && str_contains($t2[1], '4 days'));
 
 echo "F4. Third drain (empty) is a no-op\n";
-$r3 = $svc->agentFeed(7);
+$r3 = $svc->agentFeed(7, true);
 check('messages empty', $r3['messages'] === []);
 $msgCount = Capsule::table('buddy_messages')->count();
 check('no new messages written', $msgCount === 5, "got {$msgCount}");
@@ -152,7 +161,7 @@ Capsule::table('buddy_nudges')->insert([
     'payload_json' => json_encode(['ref' => 'ZZTOP1', 'waiting_hours' => 5]),
     'status' => 'pending', 'dedupe_key' => 'el:99', 'created_at' => $now,
 ]);
-$r4 = $svc->agentFeed(7);
+$r4 = $svc->agentFeed(7, true);
 check('uses preferred name', isset($r4['messages'][0]) && str_contains($r4['messages'][0]['content'], 'Sammy'));
 
 echo "F7. Greeting claim survives feed deliveries (the original P5 bug)\n";
@@ -167,7 +176,7 @@ Capsule::table('buddy_nudges')->insert([
     'payload_json' => json_encode(['ref' => 'FEED01', 'departs' => 'tomorrow']),
     'status' => 'pending', 'dedupe_key' => 'dp:feed01', 'created_at' => $now,
 ]);
-$svc->agentFeed(7);
+$svc->agentFeed(7, true);
 check('feed wrote model messages', Capsule::table('buddy_messages')->where('role', 'model')->count() > 5);
 check('same day still counts as greeted', $claim->invoke($svc, 7, '2026-08-17') === false);
 $extra = json_decode((string) Capsule::table('buddy_settings')->where('user_id', 7)->value('extra_json'), true);
@@ -348,6 +357,67 @@ Capsule::table('buddy_nudges')->insert([
 $s4 = $svc->agentFeed(23);
 check('20h-old lag nudge still voiced (inside TTL)',
     str_contains($s4['messages'][0]['content'] ?? '', 'FRESH1'));
+
+echo "F17. Pacing — cooldown between batches\n";
+$mk = function (int $uid, string $type, array $payload, string $key, ?string $at = null) use ($now) {
+    Capsule::table('buddy_nudges')->insert([
+        'user_id' => $uid, 'type' => $type, 'payload_json' => json_encode($payload),
+        'status' => 'pending', 'dedupe_key' => $key, 'created_at' => $at ?? $now,
+    ]);
+};
+for ($i = 0; $i < 9; $i++) {
+    $mk(31, 'eticket_lag', ['ref' => 'P' . $i, 'waiting_hours' => 5], 'pc:' . $i);
+}
+$p1 = $svc->agentFeed(31);
+check('first batch speaks (3)', count($p1['messages']) === 3, count($p1['messages']) . ' returned');
+$p2 = $svc->agentFeed(31);
+check('immediate re-poll is held', $p2['messages'] === []);
+check('hold_seconds reported to the client', ($p2['hold_seconds'] ?? 0) > 0 && ($p2['hold_seconds'] ?? 0) <= 180);
+check('backlog still reported while held', $p2['pending_left'] === 6);
+check('nothing extra was drained during the hold',
+    Capsule::table('buddy_nudges')->where('user_id', 31)->where('status', 'pending')->count() === 6);
+
+echo "F17b. Opening the chat bypasses the cooldown (they are asking)\n";
+$p3 = $svc->agentFeed(31, true);
+check('panel-open drain delivers despite cooldown', count($p3['messages']) === 3, count($p3['messages']) . ' returned');
+
+echo "F17c. A human message ignores pacing entirely\n";
+$mk(32, 'eticket_lag', ['ref' => 'H1', 'waiting_hours' => 5], 'hp:1');
+$svc->agentFeed(32);                        // starts a cooldown
+$held = $svc->agentFeed(32);
+check('cooldown active for user 32', $held['messages'] === []);
+$mk(32, 'admin_message', ['message' => 'Ring me now please.', 'from' => 'admin'], 'hp:2');
+$urgent = $svc->agentFeed(32);
+$ut = implode(' | ', array_column($urgent['messages'], 'content'));
+check('admin message punches through the cooldown', str_contains($ut, 'Ring me now please.'));
+
+echo "F17d. Daily ceiling on how much she initiates\n";
+$capUser = 33;
+for ($i = 0; $i < 20; $i++) {
+    $mk($capUser, 'eticket_lag', ['ref' => 'C' . $i, 'waiting_hours' => 5], 'cap:' . $i);
+}
+$said = 0;
+for ($round = 0; $round < 10; $round++) {
+    $r = $svc->agentFeed($capUser, true);   // panel open = no cooldown, cap only
+    $said += count($r['messages']);
+    if ($r['messages'] === []) { break; }
+}
+check('daily ceiling enforced (<= 12 initiated)', $said <= 12, "said {$said}");
+check('ceiling actually reached, not just a short queue', $said === 12, "said {$said}");
+$after = $svc->agentFeed($capUser, true);
+check('further drains held once capped', $after['messages'] === []);
+check('hold points past today, not a short pause', ($after['hold_seconds'] ?? 0) > 180);
+check('remaining nudges left pending, not silently binned',
+    Capsule::table('buddy_nudges')->where('user_id', $capUser)->where('status', 'pending')->count() === 8);
+
+echo "F17e. A swallowed-only drain must not start a cooldown\n";
+$staleOnly = 34;
+$oldTs = date('Y-m-d H:i:s', time() - 60 * 3600);
+$mk($staleOnly, 'eticket_lag', ['ref' => 'S1', 'waiting_hours' => 5], 'so:1', $oldTs);
+$mk($staleOnly, 'sale_praise_t1', ['ref' => 'S2', 'amount' => 700, 'currency' => 'USD'], 'so:2');
+$d1 = $svc->agentFeed($staleOnly);
+check('expired nudge swallowed but fresh praise still spoken',
+    count($d1['messages']) === 1 && str_contains($d1['messages'][0]['content'], 'S2'));
 
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

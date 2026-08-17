@@ -348,6 +348,27 @@ class BuddyService
     private const FEED_NEVER_EXPIRES = ['admin_message', 'sale_praise_t1', 'sale_praise_t2'];
 
     /**
+     * PACING — the difference between a companion and a notification firehose.
+     *
+     * The batch cap alone does not pace anything: the widget keeps polling at
+     * its fast interval while pending_left > 0, so a backlog of twelve nudges
+     * still arrived as twelve messages inside five minutes. A person who had
+     * been saving things up would not do that.
+     *
+     * Two limits, both server-side because the client can be bypassed and a
+     * second tab would double any client-side counter:
+     *  - a cooldown between batches, so she finishes a thought before starting
+     *    another one;
+     *  - a ceiling on how much she initiates in one business day, so a noisy
+     *    day cannot turn her into background noise the agent learns to ignore.
+     *
+     * admin_message bypasses BOTH. A human wrote it and pressed Confirm; it is
+     * not Aisha's chatter to ration.
+     */
+    private const FEED_COOLDOWN_SECONDS = 180;
+    private const FEED_DAILY_MAX        = 12;
+
+    /**
      * Drain this user's pending nudges into their agent conversation, phrased
      * AS AISHA, and return the new messages for the widget to show/speak.
      *
@@ -370,7 +391,7 @@ class BuddyService
      *
      * @return array{messages: array<array{content: string, at: string}>, pending_left: int}
      */
-    public function agentFeed(int $userId): array
+    public function agentFeed(int $userId, bool $panelOpen = false): array
     {
         $order = "CASE type ";
         foreach (self::FEED_PRIORITY as $i => $t) {
@@ -390,6 +411,26 @@ class BuddyService
 
         if ($pending->isEmpty()) {
             return ['messages' => [], 'pending_left' => 0];
+        }
+
+        // Pacing gates. A human message in the batch overrides both — Aisha
+        // relays people immediately, and only rations her own chatter.
+        $hasHuman = false;
+        foreach ($pending as $n) {
+            if ($n->type === 'admin_message') {
+                $hasHuman = true;
+                break;
+            }
+        }
+        if (!$hasHuman) {
+            $hold = $this->feedHoldSeconds($userId, $panelOpen);
+            if ($hold > 0) {
+                return [
+                    'messages'     => [],
+                    'pending_left' => $this->pendingCount($userId),
+                    'hold_seconds' => $hold,
+                ];
+            }
         }
 
         $convId    = $this->openConversation($userId, 'agent');
@@ -428,15 +469,97 @@ class BuddyService
             $messages[] = ['content' => $text, 'at' => date('Y-m-d H:i:s')];
         }
 
-        $left = 0;
-        try {
-            $left = (int) DB::table('buddy_nudges')
-                ->where('user_id', $userId)->where('status', 'pending')->count();
-        } catch (Throwable $e) {
-            // cosmetic
+        // Only stamp when she actually said something — a drain that only
+        // swallowed expired nudges must not start a cooldown, or a stale
+        // backlog would throttle the fresh nudges queued behind it.
+        if ($messages !== []) {
+            $this->stampFeed($userId);
         }
 
-        return ['messages' => $messages, 'pending_left' => $left];
+        return ['messages' => $messages, 'pending_left' => $this->pendingCount($userId)];
+    }
+
+    private function pendingCount(int $userId): int
+    {
+        try {
+            return (int) DB::table('buddy_nudges')
+                ->where('user_id', $userId)->where('status', 'pending')->count();
+        } catch (Throwable $e) {
+            return 0;   // cosmetic
+        }
+    }
+
+    /**
+     * How long Aisha should stay quiet, in seconds. 0 = free to speak.
+     *
+     * @param bool $panelOpen The agent has the chat open in front of them.
+     *                        The cooldown paces UNSOLICITED interruptions; if
+     *                        they have opened the chat they are asking, and a
+     *                        companion who went quiet at exactly that moment
+     *                        would be worse than one who chattered. The daily
+     *                        ceiling still applies — that guards volume, not
+     *                        timing.
+     *
+     * @return int Seconds to hold; the widget uses it to schedule its next poll
+     *             instead of hammering a gate that will refuse it anyway.
+     */
+    private function feedHoldSeconds(int $userId, bool $panelOpen = false): int
+    {
+        try {
+            $extra = json_decode(
+                (string) DB::table('buddy_settings')->where('user_id', $userId)->value('extra_json'),
+                true
+            ) ?: [];
+
+            if (!$panelOpen) {
+                $last  = (int) ($extra['last_feed_at'] ?? 0);
+                $since = time() - $last;
+                if ($last > 0 && $since < self::FEED_COOLDOWN_SECONDS) {
+                    return self::FEED_COOLDOWN_SECONDS - $since;
+                }
+            }
+
+            // Daily ceiling, counted over the business day (18:00→18:00) so it
+            // matches the agent's shift rather than a calendar midnight.
+            [$dayStart] = \App\Services\ShiftService::businessDayBounds();
+            $saidToday = (int) DB::table('buddy_nudges')
+                ->where('user_id', $userId)
+                ->whereIn('status', ['delivered', 'seen'])
+                ->where('delivered_at', '>=', (string) $dayStart)
+                ->count();
+
+            if ($saidToday >= self::FEED_DAILY_MAX) {
+                // Hold until the next business day rather than a fixed window:
+                // she is done talking for today, not merely pausing.
+                return max(60, strtotime((string) $dayStart) + 86400 - time());
+            }
+
+            return 0;
+        } catch (Throwable $e) {
+            // Fail OPEN: pacing is a nicety and must never block delivery. But
+            // log it — a silent failure here turns the daily ceiling off
+            // entirely, and "she suddenly won't stop talking" is a horrible
+            // thing to have to debug from a bug report.
+            ErrorLogService::log('warning', '[buddy] feed pacing check failed: ' . $e->getMessage());
+            return 0;
+        }
+    }
+
+    private function stampFeed(int $userId): void
+    {
+        try {
+            $extra = json_decode(
+                (string) DB::table('buddy_settings')->where('user_id', $userId)->value('extra_json'),
+                true
+            ) ?: [];
+            $extra['last_feed_at'] = time();
+            DB::table('buddy_settings')->updateOrInsert(
+                ['user_id' => $userId],
+                ['extra_json' => json_encode($extra, JSON_UNESCAPED_UNICODE)]
+            );
+        } catch (Throwable $e) {
+            // non-fatal: worst case she is briefly chattier than intended
+        }
     }
 
     /** A nudge older than this was raised while the agent was away. */

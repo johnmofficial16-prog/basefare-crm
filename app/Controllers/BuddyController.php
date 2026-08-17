@@ -234,13 +234,15 @@ class BuddyController
             return $this->json($response, ['ok' => false], 401);
         }
 
-        $result = $this->service->agentFeed($userId);
+        $body      = $request->getParsedBody() ?? [];
+        $panelOpen = !empty($body['open']);
 
-        // open — the widget had the panel open, so these landed in front of the
-        // agent and are already read. Without this they would come back as an
-        // unread badge on the next page load.
-        $body = $request->getParsedBody() ?? [];
-        if (!empty($body['open']) && $result['messages'] !== []) {
+        $result = $this->service->agentFeed($userId, $panelOpen);
+
+        // The panel was open, so these landed in front of the agent and are
+        // already read. Without this they would come back as an unread badge
+        // on the next page load.
+        if ($panelOpen && $result['messages'] !== []) {
             try {
                 DB::table('buddy_nudges')
                     ->where('user_id', $userId)->where('status', 'delivered')

@@ -357,9 +357,17 @@
           if (!d || !d.ok) { backOff(); return; }
           var msgs = d.messages || [];
           msgs.forEach(function (m, i) { deliver(m.content, i === 0); });
-          // A backlog (pending_left) means more is queued behind the batch cap,
-          // so stay fast until she has said everything she has to say.
-          if (msgs.length || d.pending_left) { feedMs = FEED_MIN_MS; } else { backOff(); }
+          if (d.hold_seconds) {
+            // Server is pacing her deliberately. Wait it out rather than
+            // polling into a gate that will refuse us every 75 seconds.
+            feedMs = Math.max(FEED_MIN_MS, d.hold_seconds * 1000);
+          } else if (msgs.length || d.pending_left) {
+            // A backlog means more is queued behind the batch cap, so stay
+            // fast until she has said everything she has to say.
+            feedMs = FEED_MIN_MS;
+          } else {
+            backOff();
+          }
         })
         .catch(function () { backOff(); })   // don't hammer a broken endpoint
         .finally(function () { pollBusy = false; scheduleFeed(feedMs); });
