@@ -112,13 +112,23 @@ memory: `ai-buddy-status`, `reliability-safety-net`, `roster-24-7`,
 2. **₹94k GenAI Search credit scope test — 18 Aug.** Re-run queries against
    the `basefare-kb-test` Discovery Engine app after the trial credit lapses;
    check Billing→Reports credit column. (Details in `gcp-credits-deadline`.)
-3. **hPanel cron jobs to register:**
-   - Nightly backup — daily 03:30:
-     `php <crm>/cron/db_backup.php`  *(NOT yet registered — backups are stale)*
-   - Buddy triggers — every 15 min:
-     `php <crm>/cron/buddy_triggers.php`  *(ALREADY registered)*
-   - Buddy consolidator — weekly Sun 04:00:
-     `php <crm>/cron/buddy_consolidate.php`  *(not yet registered)*
+3. **hPanel cron jobs to register.** ⚠️ Verified against the actual hPanel list
+   on 17 Aug: only FOUR jobs are registered — `auto_clockout.php` (*/15),
+   `check_email_replies.php` (*/5), `customer_email_inbound.php` (*/5) and
+   `booking_reminders_dispatch.php` (*/15). Earlier notes claiming the buddy
+   trigger cron was registered were WRONG; the 26 nudges it produced came from
+   a manual run. Missing, in priority order:
+   - **Buddy triggers — every 15 min. THE ENGINE.** Without it no nudges are
+     ever created, so the whole P5 "Aisha speaks first" layer has nothing to
+     deliver and she stays silent no matter how well it works.
+     `*/15 * * * *` → `/usr/bin/php <crm>/cron/buddy_triggers.php`
+   - **Nightly backup — daily 03:30.** Backups are stale until this runs.
+     `30 3 * * *` → `/usr/bin/php <crm>/cron/db_backup.php`
+   - Buddy consolidator — weekly Sun 04:00 (memory quality over time):
+     `0 4 * * 0` → `/usr/bin/php <crm>/cron/buddy_consolidate.php`
+   - Optional: `shift_gap_alert.php` (daily ~20:00) — warns when an active
+     agent has no shift for tomorrow. Less urgent while the 24/7 roster covers
+     everyone through 30 Aug.
    (`<crm>` = `/home/u501549865/domains/base-fare.com/public_html/crm`)
 4. **24/7 roster weekly top-up** (horizon ends 30 Aug):
    `php <crm>/scripts/schedule_24h_shifts.php --apply --roles=agent,manager`

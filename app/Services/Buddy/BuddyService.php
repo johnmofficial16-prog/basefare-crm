@@ -326,6 +326,28 @@ class BuddyService
     ];
 
     /**
+     * Nudge payloads are a SNAPSHOT taken by the trigger cron: waiting_hours,
+     * days_since_last_sale and departure times are all frozen at creation. A
+     * nudge delivered long after it was raised would have Aisha state numbers
+     * that are simply wrong — "waiting 6h" when it has been two days, or
+     * "departs tomorrow" for a flight that has already gone. Stating a wrong
+     * number is worse than saying nothing, and it breaks her one hard rule.
+     *
+     * So time-sensitive nudges expire: they are drained (marked delivered, so
+     * they stop clogging the queue) but never voiced. Nothing is lost — the
+     * escalation rounds re-raise e-ticket and acceptance lag with fresh hours,
+     * and dry_spell re-arms daily.
+     */
+    private const FEED_TTL_HOURS = 24;
+
+    /**
+     * Types that never go stale. Praise ages gracefully (and is reframed as
+     * catching up), and an admin's message is a human's words — it gets
+     * delivered whenever the agent next appears, however late that is.
+     */
+    private const FEED_NEVER_EXPIRES = ['admin_message', 'sale_praise_t1', 'sale_praise_t2'];
+
+    /**
      * Drain this user's pending nudges into their agent conversation, phrased
      * AS AISHA, and return the new messages for the widget to show/speak.
      *
@@ -386,6 +408,14 @@ class BuddyService
 
             $payload = json_decode((string) $n->payload_json, true) ?: [];
             $age     = $n->created_at ? max(0, (time() - strtotime((string) $n->created_at)) / 3600) : 0.0;
+
+            // Expired: swallowed deliberately rather than voiced with numbers
+            // that have since gone wrong. Already marked delivered above, so it
+            // leaves the queue and a fresh, accurate one takes its place.
+            if ($age > self::FEED_TTL_HOURS
+                && !in_array((string) $n->type, self::FEED_NEVER_EXPIRES, true)) {
+                continue;
+            }
 
             $text = null;
             if (!$aiSpent && str_starts_with((string) $n->type, 'sale_praise')) {

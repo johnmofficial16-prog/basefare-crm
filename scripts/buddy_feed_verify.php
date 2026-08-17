@@ -298,5 +298,56 @@ check('dates not mistaken for phone numbers', str_contains($dw, '2026-08-18 09:4
 check('amounts survive scrubbing', str_contains($dw, '1,240.50'));
 check('booking refs survive scrubbing', str_contains($dw, 'G7BGL3'));
 
+echo "F16. Stale time-sensitive nudges are swallowed, not voiced with wrong numbers\n";
+$old = date('Y-m-d H:i:s', time() - 60 * 3600);   // 2.5 days ago
+$stale = [
+    ['eticket_lag',    ['ref' => 'OLD001', 'waiting_hours' => 5], 'st:1'],
+    ['acceptance_lag', ['acceptance' => '#OLD2', 'waiting_hours' => 7], 'st:2'],
+    ['departure_24h',  ['ref' => 'OLD003', 'departs' => 'tomorrow'], 'st:3'],
+    ['dry_spell',      ['days_since_last_sale' => 3], 'st:4'],
+];
+foreach ($stale as [$type, $payload, $key]) {
+    Capsule::table('buddy_nudges')->insert([
+        'user_id' => 21, 'type' => $type, 'payload_json' => json_encode($payload),
+        'status' => 'pending', 'dedupe_key' => $key, 'created_at' => $old,
+    ]);
+}
+$s1 = $svc->agentFeed(21);
+$s2 = $svc->agentFeed(21);   // drain past the batch cap
+$said = array_merge(array_column($s1['messages'], 'content'), array_column($s2['messages'], 'content'));
+check('nothing voiced from stale lag/departure/dry-spell', $said === [], implode(' | ', $said));
+check('stale nudges still drained (queue not clogged)',
+    Capsule::table('buddy_nudges')->where('user_id', 21)->where('status', 'pending')->count() === 0);
+check('no wrong "5h" claim reached the transcript',
+    !Capsule::table('buddy_messages')->where('content', 'like', '%OLD001%')->exists());
+
+// ...but a stale sale praise and a stale admin message MUST still arrive.
+Capsule::table('buddy_nudges')->insert([
+    'user_id' => 22, 'type' => 'sale_praise_t2',
+    'payload_json' => json_encode(['ref' => 'LATE01', 'amount' => 1800, 'currency' => 'USD']),
+    'status' => 'pending', 'dedupe_key' => 'st:5', 'created_at' => $old,
+]);
+Capsule::table('buddy_nudges')->insert([
+    'user_id' => 22, 'type' => 'admin_message',
+    'payload_json' => json_encode(['message' => 'Call me when you are in.', 'from' => 'admin']),
+    'status' => 'pending', 'dedupe_key' => 'st:6', 'created_at' => $old,
+]);
+$s3 = $svc->agentFeed(22);
+$t3 = implode(' | ', array_column($s3['messages'], 'content'));
+check('old admin message still delivered', str_contains($t3, 'Call me when you are in.'));
+check('old praise still delivered', str_contains($t3, 'LATE01'));
+check('old praise uses catching-up framing', str_contains($t3, 'while you were away') || str_contains($t3, 'catching you up'));
+
+// Boundary: just inside the TTL must still be voiced.
+Capsule::table('buddy_nudges')->insert([
+    'user_id' => 23, 'type' => 'eticket_lag',
+    'payload_json' => json_encode(['ref' => 'FRESH1', 'waiting_hours' => 5]),
+    'status' => 'pending', 'dedupe_key' => 'st:7',
+    'created_at' => date('Y-m-d H:i:s', time() - 20 * 3600),
+]);
+$s4 = $svc->agentFeed(23);
+check('20h-old lag nudge still voiced (inside TTL)',
+    str_contains($s4['messages'][0]['content'] ?? '', 'FRESH1'));
+
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);
