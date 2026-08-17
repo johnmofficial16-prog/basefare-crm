@@ -32,6 +32,34 @@ or via `?open=1`); `get_my_nudges` is recency-windowed with an unread flag.
 
 Verify: `php scripts/buddy_feed_verify.php` (SQLite, no network, **58 checks**).
 
+**Self-audit round (`8fc359d`, `a849c07`, + CSRF fix).** Re-reviewing P5/P6
+against the rest of the system turned up four real defects, all fixed:
+
+1. **Admin messages were being destroyed.** The Super Buddy writes nudges with
+   `type=admin_message` and the admin's text in `payload.message`. The feed had
+   no case for it, so it fell through to the generic branch — the admin pressed
+   Confirm, saw "sent", and the agent received *"I noticed something on that
+   booking worth a look."* Admin text is now relayed verbatim and outranks
+   every other nudge type.
+2. **Greeting race.** Read-then-write meant two tabs could both greet, at twice
+   the Gemini cost. Now an atomic claim (conditional UPDATE, decided by
+   affected rows), taken *before* the API call, failing closed.
+3. **PII path to Google.** Relaying admin text made an existing gap reachable:
+   `buildContents` never scrubbed history, so an admin's free-typed message —
+   which no scrubber had ever seen — would reach Gemini on the agent's next
+   turn. History is now scrubbed on the way out for every message class. The
+   stored transcript stays intact, so the agent still reads what was written.
+4. **`/buddy/feed` was a mutating GET.** CsrfMiddleware only validates
+   POST/PUT/DELETE/PATCH, so any page an agent visited could have drained their
+   nudges to `seen` with a bare `<img>` tag — Aisha would go quiet with no
+   trace. Now POST + CSRF header.
+
+Plus: personal-best flags were recomputed ~96× per sale (24h window, 15-min
+cron) with no composite index to lean on — now skipped via a dedupe-key
+pre-check; the greeting no longer opens a conversation row on every page load;
+feed polling backs off 75s → 5 min while quiet and snaps back on
+delivery/backlog/tab-focus/panel-open.
+
 **TODO — deploy + live drive.** On the server:
 `git pull origin dev && php hostinger_migrate.php` (no new migration, but the
 migrator is safe to run). Then, as an agent in Chrome: greeting should speak

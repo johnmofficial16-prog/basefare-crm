@@ -16,7 +16,9 @@
  *   GET  /buddy/history   → {messages, nudges}
  *   POST /buddy/greeting  → once-per-business-day greeting (server decides)
  *   POST /buddy/chat      → {reply, ai}
- *   GET  /buddy/feed      → {messages, pending_left} — P5: Aisha initiates.
+ *   POST /buddy/feed      → {messages, pending_left} — P5: Aisha initiates.
+ *                           (POST because the drain mutates nudge state, so it
+ *                            must sit behind CSRF validation.)
  *
  * P5 delivery model: the greeting fires on PAGE LOAD (not orb click), and the
  * feed is polled every ~75s while the tab is visible. New Aisha-initiated
@@ -337,9 +339,14 @@
       if (!EP.feed) return;
       if (document.hidden || pollBusy) { scheduleFeed(feedMs); return; }
       pollBusy = true;
-      // open=1 tells the server these land in front of an open panel, so they
-      // count as read and must not come back as an unread badge on reload.
-      fetch(EP.feed + (opened ? '?open=1' : ''), { headers: { 'Accept': 'application/json' } })
+      // POSTed with CSRF: the drain mutates nudge state one-way, so it must not
+      // be reachable cross-site. `open` tells the server these land in front of
+      // an open panel, so they count as read rather than returning as a badge.
+      fetch(EP.feed, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+        body: JSON.stringify({ open: opened ? 1 : 0 }),
+      })
         .then(function (r) {
           if (!r.ok) throw 0;
           var ct = r.headers.get('content-type') || '';

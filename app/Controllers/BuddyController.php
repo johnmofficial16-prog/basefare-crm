@@ -212,11 +212,17 @@ class BuddyController
     }
 
     /**
-     * GET /buddy/feed (P5 — Aisha initiates). Drains this user's pending
+     * POST /buddy/feed (P5 — Aisha initiates). Drains this user's pending
      * nudges into their conversation as Aisha-phrased model messages and
-     * returns them for the widget to toast/speak. Idempotent: an empty drain
-     * returns messages:[] and costs one indexed COUNT. Never touches the
-     * agent's chat quota (no user message is stored).
+     * returns them for the widget to toast/speak. An empty drain returns
+     * messages:[] and costs one indexed read. Never touches the agent's chat
+     * quota (no user message is stored).
+     *
+     * POST rather than GET because the drain is destructive and one-way:
+     * pending → delivered → seen, with no path back. As a GET it sat outside
+     * CsrfMiddleware (which only guards state-changing verbs), so any page an
+     * agent visited could have silently drained their nudges to 'seen' with a
+     * bare <img> tag — Aisha would simply go quiet and no one would know why.
      */
     public function feed(Request $request, Response $response): Response
     {
@@ -230,10 +236,11 @@ class BuddyController
 
         $result = $this->service->agentFeed($userId);
 
-        // ?open=1 — the widget had the panel open, so these landed in front of
-        // the agent and are already read. Without this they would come back as
-        // an unread badge on the next page load.
-        if (($request->getQueryParams()['open'] ?? '') === '1' && $result['messages'] !== []) {
+        // open — the widget had the panel open, so these landed in front of the
+        // agent and are already read. Without this they would come back as an
+        // unread badge on the next page load.
+        $body = $request->getParsedBody() ?? [];
+        if (!empty($body['open']) && $result['messages'] !== []) {
             try {
                 DB::table('buddy_nudges')
                     ->where('user_id', $userId)->where('status', 'delivered')
