@@ -58,6 +58,25 @@ echo '[' . date('Y-m-d H:i:s') . "] Buddy trigger engine starting...\n";
 $created = 0;
 
 /**
+ * Has this exact (rule, entity) already been nudged?
+ *
+ * The UNIQUE dedupe_key is what actually guarantees idempotency — this is a
+ * cheap pre-check so a rule can skip EXPENSIVE payload work it would only
+ * throw away on the duplicate-key catch. Never rely on it for correctness:
+ * between this read and the insert another run could win, which is exactly
+ * what the unique index is there to settle.
+ */
+function alreadyNudged(string $dedupeKey): bool
+{
+    try {
+        return Capsule::table('buddy_nudges')
+            ->where('dedupe_key', substr($dedupeKey, 0, 120))->exists();
+    } catch (\Throwable $e) {
+        return false;   // on doubt, do the work — the insert still dedupes
+    }
+}
+
+/**
  * Insert a nudge + bell notification. Returns true if it was NEW.
  * The UNIQUE dedupe_key makes this safe under overlap and re-runs.
  */
@@ -112,6 +131,16 @@ foreach ($sales as $s) {
     $tier = ((float) $s->total_amount >= 1000) ? 't2' : 't1';
     $ref  = $s->pnr ?: ('#' . $s->id);
     $amt  = (float) $s->total_amount;
+
+    // The praise window is 24h but this cron runs every 15 minutes, so each
+    // sale is revisited ~96 times and all but the first insert is discarded by
+    // the UNIQUE dedupe key. Checking the key first turns 95 of those visits
+    // into one indexed lookup instead of two aggregate scans over the agent's
+    // whole transaction history (transactions has idx_agent_id only — there is
+    // no composite (agent_id, status) index to lean on).
+    if (alreadyNudged("sale_praise:txn:{$s->id}")) {
+        continue;
+    }
 
     // Personal bests — decided in SQL so Aisha can celebrate a record without
     // ever estimating one. Excludes this txn so ties don't count as a new best.

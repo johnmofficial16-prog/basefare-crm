@@ -228,7 +228,7 @@ class BuddyController
             return $this->json($response, ['ok' => false], 401);
         }
 
-        $result = $this->service->agentFeed($userId, (string) ($_SESSION['role'] ?? 'agent'));
+        $result = $this->service->agentFeed($userId);
 
         // ?open=1 — the widget had the panel open, so these landed in front of
         // the agent and are already read. Without this they would come back as

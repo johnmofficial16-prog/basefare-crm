@@ -31,9 +31,7 @@
   window.__buddyWidget = true;
 
   var CSRF = null;
-  var booted = false;
   var opened = false;
-  var greeted = false;
 
   // ── boot: decide whether this page gets a buddy at all ──────────────────
   fetch('/buddy/boot', { headers: { 'Accept': 'application/json' } })
@@ -46,7 +44,6 @@
     .then(function (d) {
       if (!d || !d.ok || !d.csrf) return;
       CSRF = d.csrf;
-      booted = true;
       mount(d);
     })
     .catch(function () { /* no session / gated / error → stay invisible */ });
@@ -361,7 +358,6 @@
         .finally(function () { pollBusy = false; scheduleFeed(feedMs); });
     }
     if (EP.greeting) {
-      greeted = true;   // load() must not fire it a second time
       fetch(EP.greeting, { method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF }, body: '{}' })
         .then(function (r) { return r.json(); })

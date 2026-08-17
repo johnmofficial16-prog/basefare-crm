@@ -100,7 +100,7 @@ foreach ($seed as [$type, $payload, $key]) {
 $svc = new BuddyService();
 
 echo "F1–F3. First drain (5 pending, cap 3, priority order)\n";
-$r1 = $svc->agentFeed(7, 'agent');
+$r1 = $svc->agentFeed(7);
 check('returns 3 messages', count($r1['messages']) === 3, count($r1['messages']) . ' returned');
 check('pending_left is 2', $r1['pending_left'] === 2, 'got ' . $r1['pending_left']);
 $texts = array_column($r1['messages'], 'content');
@@ -124,14 +124,14 @@ $userRows = Capsule::table('buddy_messages')->where('role', 'user')->count();
 check("zero role='user' rows (agent quota untouched)", $userRows === 0, "got {$userRows}");
 
 echo "F1/F3. Second drain (remaining 2)\n";
-$r2 = $svc->agentFeed(7, 'agent');
+$r2 = $svc->agentFeed(7);
 check('returns the remaining 2', count($r2['messages']) === 2, count($r2['messages']) . ' returned');
 check('pending_left is 0', $r2['pending_left'] === 0);
 $t2 = array_column($r2['messages'], 'content');
 check('acceptance before dry_spell', isset($t2[0], $t2[1]) && str_contains($t2[0], '#88') && str_contains($t2[1], '4 days'));
 
 echo "F4. Third drain (empty) is a no-op\n";
-$r3 = $svc->agentFeed(7, 'agent');
+$r3 = $svc->agentFeed(7);
 check('messages empty', $r3['messages'] === []);
 $msgCount = Capsule::table('buddy_messages')->count();
 check('no new messages written', $msgCount === 5, "got {$msgCount}");
@@ -152,7 +152,7 @@ Capsule::table('buddy_nudges')->insert([
     'payload_json' => json_encode(['ref' => 'ZZTOP1', 'waiting_hours' => 5]),
     'status' => 'pending', 'dedupe_key' => 'el:99', 'created_at' => $now,
 ]);
-$r4 = $svc->agentFeed(7, 'agent');
+$r4 = $svc->agentFeed(7);
 check('uses preferred name', isset($r4['messages'][0]) && str_contains($r4['messages'][0]['content'], 'Sammy'));
 
 echo "F7. Greeting claim survives feed deliveries (the original P5 bug)\n";
@@ -167,7 +167,7 @@ Capsule::table('buddy_nudges')->insert([
     'payload_json' => json_encode(['ref' => 'FEED01', 'departs' => 'tomorrow']),
     'status' => 'pending', 'dedupe_key' => 'dp:feed01', 'created_at' => $now,
 ]);
-$svc->agentFeed(7, 'agent');
+$svc->agentFeed(7);
 check('feed wrote model messages', Capsule::table('buddy_messages')->where('role', 'model')->count() > 5);
 check('same day still counts as greeted', $claim->invoke($svc, 7, '2026-08-17') === false);
 $extra = json_decode((string) Capsule::table('buddy_settings')->where('user_id', 7)->value('extra_json'), true);
@@ -244,7 +244,7 @@ Capsule::table('buddy_nudges')->insert([
     'payload_json' => json_encode(['days_since_last_sale' => 5]),
     'status' => 'pending', 'dedupe_key' => 'ds:7:b', 'created_at' => $now,
 ]);
-$r5 = $svc->agentFeed(7, 'agent');
+$r5 = $svc->agentFeed(7);
 $adminMsg = $r5['messages'][0]['content'] ?? '';
 check('admin message delivered first', str_contains($adminMsg, 'admin'));
 check('admin text relayed VERBATIM', str_contains($adminMsg, $adminText), $adminMsg);

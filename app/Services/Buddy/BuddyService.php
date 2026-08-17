@@ -167,8 +167,6 @@ class BuddyService
         [$dayStart] = \App\Services\ShiftService::businessDayBounds();
         $dayKey = substr((string) $dayStart, 0, 10);
 
-        $convId = $this->openConversation($userId, 'agent');
-
         // Claim the greeting BEFORE spending anything on it. A durable stamp in
         // buddy_settings, NOT "any model message since day start" — P5 feed
         // deliveries are model messages too and would swallow the greeting.
@@ -177,9 +175,14 @@ class BuddyService
         // because two tabs opening together — or one impatient refresh — would
         // otherwise both pass a read-then-write check and greet twice, at twice
         // the Gemini cost.
+        // Claim first, THEN open the conversation. The widget POSTs this on every
+        // page load, so the already-greeted path — which is almost all of them —
+        // must cost one indexed read, not a conversation lookup-or-insert.
         if (!$this->claimGreeting($userId, $dayKey)) {
             return ['greeted' => false];
         }
+
+        $convId = $this->openConversation($userId, 'agent');
 
         $digest = self::renderAgentFallback($userId, $role);
 
@@ -333,9 +336,19 @@ class BuddyService
      * - Aisha-initiated: stores only model messages, so the agent's 40/day
      *   chat quota (which counts role='user' rows) is untouched by design.
      *
+     * No role parameter, deliberately. Every other agent-surface entry point
+     * takes one to drive PerformanceHold, but this one reads nudge rows rather
+     * than transactions, and nudges are self-scoped by user_id — a role cannot
+     * widen or narrow what a person sees of their own. The hold still cannot be
+     * side-channelled here: it covers a historical window (1–9 Aug) while the
+     * praise rule only ever fires on sales from the last 24 hours, so no nudge
+     * can carry held figures. If the praise window is ever widened, that
+     * reasoning stops holding and this needs PerformanceHold applied at
+     * trigger time.
+     *
      * @return array{messages: array<array{content: string, at: string}>, pending_left: int}
      */
-    public function agentFeed(int $userId, string $role): array
+    public function agentFeed(int $userId): array
     {
         $order = "CASE type ";
         foreach (self::FEED_PRIORITY as $i => $t) {
