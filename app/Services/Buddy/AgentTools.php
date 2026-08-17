@@ -82,14 +82,17 @@ class AgentTools
 
         $r->register(
             'set_my_goal',
-            "Save or update THIS AGENT'S OWN monthly goal — the target they set for themselves and told you about. "
+            "Save, update, or clear THIS AGENT'S OWN monthly goal — the target they set for themselves and told you about. "
             . 'Use it when they say something like "I want to hit 30 sales this month". Pass sales, revenue, or both. '
+            . 'Pass clear:true if they ask you to forget or drop their goal — always honour that immediately and without '
+            . 'pushing back; it is theirs to set and theirs to abandon. '
             . 'This is personal and self-chosen: it is NOT a target set by management and must never be described as one.',
             [
                 'type'       => 'object',
                 'properties' => [
                     'sales'   => ['type' => 'integer', 'description' => 'Target number of approved sales this month, 1–999.'],
                     'revenue' => ['type' => 'number',  'description' => 'Target revenue in US dollars this month.'],
+                    'clear'   => ['type' => 'boolean', 'description' => 'True to forget their goal entirely.'],
                 ],
             ],
             fn(array $a) => self::setGoal($userId, $a)
@@ -334,6 +337,25 @@ class AgentTools
 
     private static function setGoal(int $userId, array $args): array
     {
+        // Clearing comes first: a goal you cannot walk away from is a target
+        // somebody else set, which is exactly what this must never become.
+        if (!empty($args['clear'])) {
+            try {
+                $extra = json_decode(
+                    (string) DB::table('buddy_settings')->where('user_id', $userId)->value('extra_json'),
+                    true
+                ) ?: [];
+                unset($extra['goal']);
+                DB::table('buddy_settings')->updateOrInsert(
+                    ['user_id' => $userId],
+                    ['extra_json' => json_encode($extra, JSON_UNESCAPED_UNICODE)]
+                );
+                return ['cleared' => true, 'note' => 'Goal forgotten. Do not ask them to set a new one unless they raise it.'];
+            } catch (\Throwable $e) {
+                return ['error' => 'Could not clear the goal right now.'];
+            }
+        }
+
         $sales   = isset($args['sales'])   ? (int) $args['sales']     : null;
         $revenue = isset($args['revenue']) ? (float) $args['revenue'] : null;
 

@@ -470,6 +470,16 @@ $hit = $reg->execute('get_my_goal_progress', []);
 check('goal recognised as hit', ($hit['sales']['hit'] ?? false) === true);
 check('remaining floors at zero', ($hit['sales']['remaining'] ?? -1) === 0);
 
+echo "F18c. A goal can be abandoned\n";
+$reg->execute('set_my_goal', ['sales' => 30]);
+check('goal set before clearing', ($reg->execute('get_my_goal_progress', [])['has_goal'] ?? false) === true);
+$cleared = $reg->execute('set_my_goal', ['clear' => true]);
+check('clear reports success', ($cleared['cleared'] ?? false) === true);
+check('progress reverts to has_goal:false', ($reg->execute('get_my_goal_progress', [])['has_goal'] ?? null) === false);
+check('clearing tells Aisha not to re-badger', str_contains((string) ($cleared['note'] ?? ''), 'unless they raise it'));
+$reg->execute('set_my_goal', ['sales' => 20]);   // restore for the tests below
+$reg->execute('set_my_goal', ['revenue' => 30000]);
+
 echo "F18b. Goal storage shares extra_json without clobbering pacing/greeting\n";
 $claim2 = $ref->getMethod('claimGreeting');
 $claim2->invoke($svc, 41, '2026-08-20');

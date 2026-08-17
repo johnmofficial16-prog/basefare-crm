@@ -340,9 +340,14 @@ if ($firstPerAgent->isNotEmpty()) {
 // goal_pace — at most once a week, and only when meaningfully behind (>15% off
 //             the pace the month implies). Being slightly behind on a Tuesday
 //             is not news; it is nagging.
-$goalRows = Capsule::table('buddy_settings')
-    ->whereNotNull('extra_json')
-    ->get(['user_id', 'extra_json']);
+// Joined to users so a deactivated or deleted account cannot keep collecting
+// goal nudges nobody will ever read.
+$goalRows = Capsule::table('buddy_settings AS bs')
+    ->join('users AS u', 'u.id', '=', 'bs.user_id')
+    ->whereNotNull('bs.extra_json')
+    ->where('u.status', 'active')
+    ->whereNull('u.deleted_at')
+    ->get(['bs.user_id', 'bs.extra_json']);
 
 $monthKey   = date('Y-m');
 $weekKey    = date('oW');                 // ISO year+week — one pace check a week
