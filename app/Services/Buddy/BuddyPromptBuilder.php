@@ -38,6 +38,18 @@ class BuddyPromptBuilder
      * Convert stored messages (oldest→newest, each ['role'=>'user'|'model',
      * 'content'=>string]) into Gemini contents, dropping oldest first when over
      * budget. The current user turn is appended by the caller.
+     *
+     * History is SCRUBBED on the way out, not trusted because it is already
+     * stored. This class claims to be the single choke point through which text
+     * reaches Gemini, and until P5 that claim quietly excluded history: stored
+     * messages were assumed clean because user input is scrubbed on the way in.
+     * Aisha-initiated messages broke that assumption — an admin's free-typed
+     * message, relayed verbatim to the agent, is a stored model message that no
+     * scrubber had ever seen. Scrubbing here closes the gap for every message
+     * class at once, at the cost of three regexes over ~8KB per turn.
+     *
+     * The scrub applies ONLY to what Google sees. The stored transcript, and so
+     * the agent's view of what their admin actually wrote, is left intact.
      */
     public static function buildContents(array $history): array
     {
@@ -66,10 +78,25 @@ class BuddyPromptBuilder
             array_shift($kept);
         }
 
-        return array_map(static fn(array $m) => [
-            'role'  => $m['role'] === 'model' ? 'model' : 'user',
-            'parts' => [['text' => $m['content']]],
-        ], $kept);
+        $hits = 0;
+        $out  = array_map(static function (array $m) use (&$hits): array {
+            [$clean, $h] = self::scrub((string) $m['content']);
+            $hits += $h;
+            return [
+                'role'  => $m['role'] === 'model' ? 'model' : 'user',
+                'parts' => [['text' => $clean]],
+            ];
+        }, $kept);
+
+        if ($hits > 0) {
+            ErrorLogService::log(
+                'warning',
+                "[BuddyScrub] {$hits} PII pattern(s) scrubbed from conversation history — "
+                . 'something reached the transcript without passing an input scrub.'
+            );
+        }
+
+        return $out;
     }
 
     // =========================================================================

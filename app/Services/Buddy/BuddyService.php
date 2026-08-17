@@ -169,10 +169,15 @@ class BuddyService
 
         $convId = $this->openConversation($userId, 'agent');
 
-        // Already greeted this business day? A durable stamp in buddy_settings,
-        // NOT "any model message since day start" — P5 feed deliveries are model
-        // messages too and must never swallow the login greeting.
-        if ($this->greetedStamp($userId) === $dayKey) {
+        // Claim the greeting BEFORE spending anything on it. A durable stamp in
+        // buddy_settings, NOT "any model message since day start" — P5 feed
+        // deliveries are model messages too and would swallow the greeting.
+        //
+        // The claim is atomic (a conditional UPDATE, checked by affected rows)
+        // because two tabs opening together — or one impatient refresh — would
+        // otherwise both pass a read-then-write check and greet twice, at twice
+        // the Gemini cost.
+        if (!$this->claimGreeting($userId, $dayKey)) {
             return ['greeted' => false];
         }
 
@@ -194,43 +199,67 @@ class BuddyService
             $registry
         );
 
+        // The claim is already ours, so a Gemini failure must still produce a
+        // greeting — otherwise the claim would burn the agent's only greeting
+        // of the day on an error.
         $reply = $result['success'] ? $result['text'] : "Good to see you! Here's where you stand:\n\n" . $digest;
         $this->storeMessage($convId, 'model', $reply);
-        $this->setGreetedStamp($userId, $dayKey);
         // Nudges are NOT marked delivered here — the P5 feed is the single
         // delivery channel; specifics follow the greeting on the next poll.
 
         return ['greeted' => true, 'reply' => $reply, 'ai' => $result['success']];
     }
 
-    /** Business-day key ('Y-m-d' of day start) of the last greeting, or null. */
-    private function greetedStamp(int $userId): ?string
+    /**
+     * Atomically claim today's greeting for this user.
+     *
+     * @return bool true if THIS request won the claim and must now greet.
+     *
+     * The UPDATE's WHERE clause is the lock: it only matches rows that do not
+     * already carry today's key, so exactly one concurrent request can see one
+     * affected row. buddy_settings.extra_json has no other writer in the
+     * codebase, so read-merging the rest of the blob is safe.
+     */
+    private function claimGreeting(int $userId, string $dayKey): bool
     {
         try {
-            $extra = json_decode(
-                (string) DB::table('buddy_settings')->where('user_id', $userId)->value('extra_json'),
-                true
-            ) ?: [];
-            return isset($extra['last_greeted_bday']) ? (string) $extra['last_greeted_bday'] : null;
-        } catch (Throwable $e) {
-            return null;
-        }
-    }
+            $row = DB::table('buddy_settings')->where('user_id', $userId)->first(['extra_json']);
 
-    private function setGreetedStamp(int $userId, string $dayKey): void
-    {
-        try {
-            $extra = json_decode(
-                (string) DB::table('buddy_settings')->where('user_id', $userId)->value('extra_json'),
-                true
-            ) ?: [];
+            if ($row === null) {
+                // First greeting ever for this user. A racing insert loses on the
+                // PK and falls through to the conditional UPDATE below.
+                try {
+                    DB::table('buddy_settings')->insert([
+                        'user_id'    => $userId,
+                        'extra_json' => json_encode(['last_greeted_bday' => $dayKey], JSON_UNESCAPED_UNICODE),
+                    ]);
+                    return true;
+                } catch (Throwable $e) {
+                    $row = DB::table('buddy_settings')->where('user_id', $userId)->first(['extra_json']);
+                    if ($row === null) {
+                        return false;
+                    }
+                }
+            }
+
+            $extra = json_decode((string) ($row->extra_json ?? ''), true) ?: [];
+            if (($extra['last_greeted_bday'] ?? null) === $dayKey) {
+                return false;   // already greeted today — cheap path, no write
+            }
             $extra['last_greeted_bday'] = $dayKey;
-            DB::table('buddy_settings')->updateOrInsert(
-                ['user_id' => $userId],
-                ['extra_json' => json_encode($extra, JSON_UNESCAPED_UNICODE)]
-            );
+
+            $affected = DB::table('buddy_settings')
+                ->where('user_id', $userId)
+                ->where(function ($q) use ($dayKey) {
+                    $q->whereNull('extra_json')
+                      ->orWhere('extra_json', 'not like', '%"last_greeted_bday":"' . $dayKey . '"%');
+                })
+                ->update(['extra_json' => json_encode($extra, JSON_UNESCAPED_UNICODE)]);
+
+            return $affected === 1;
         } catch (Throwable $e) {
-            ErrorLogService::log('warning', '[buddy] greeting stamp write failed: ' . $e->getMessage());
+            ErrorLogService::log('warning', '[buddy] greeting claim failed: ' . $e->getMessage());
+            return false;   // fail closed: a missed greeting beats a doubled one
         }
     }
 
@@ -283,9 +312,13 @@ class BuddyService
      */
     private const FEED_BATCH_LIMIT = 3;
 
-    /** Delivery order when several nudges are pending: celebrate first, then urgency. */
+    /**
+     * Delivery order when several nudges are pending: a real person's message
+     * first, then celebrate, then urgency. admin_message is the only type a
+     * human deliberately authored and confirmed — it outranks everything.
+     */
     private const FEED_PRIORITY = [
-        'sale_praise_t2', 'sale_praise_t1', 'departure_24h',
+        'admin_message', 'sale_praise_t2', 'sale_praise_t1', 'departure_24h',
         'eticket_lag', 'acceptance_lag', 'dry_spell',
     ];
 
@@ -400,6 +433,22 @@ class BuddyService
             $best = " And that's your biggest sale EVER — I'm framing this one. 🏆";
         } elseif (!empty($payload['best_month'])) {
             $best = " That's your biggest this month, by the way. 🏆";
+        }
+
+        // A human wrote this and pressed Confirm. Aisha is the messenger, not
+        // the author: the text is relayed VERBATIM and never summarised,
+        // re-toned, or sent to the model. Getting this wrong silently destroys
+        // an admin's message, which is worse than not delivering it at all.
+        if ($type === 'admin_message') {
+            $msg = trim((string) ($payload['message'] ?? ''));
+            if ($msg === '') {
+                return "{$hi}, the admin sent you a message but it came through empty — worth pinging them.";
+            }
+            $variants = [
+                "{$hi}, passing this on from the admin:\n\n\"{$msg}\"",
+                "Message for you from the admin, {$hi}:\n\n\"{$msg}\"",
+            ];
+            return $variants[abs($seed) % count($variants)];
         }
 
         if ($stale && str_starts_with($type, 'sale_praise')) {

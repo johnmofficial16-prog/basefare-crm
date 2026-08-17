@@ -21,6 +21,13 @@
  *   F9. Stale praise is framed as catching up, not as just-happened.
  *  F10. Personal bests are celebrated, and never claimed when absent.
  *  F11. Lag escalation changes tone on rounds 2+ without guilt-tripping.
+ *  F13. Admin messages are relayed VERBATIM and outrank everything else. The
+ *       Super Buddy writes type='admin_message' with the admin's text in the
+ *       payload; a generic fallback here silently destroys a human-authored,
+ *       human-confirmed message.
+ *  F14. The greeting claim is atomic — concurrent tabs greet exactly once.
+ *  F15. History is scrubbed on the way to Gemini. Relaying admin text verbatim
+ *       to the agent must not become a PII path to Google.
  *
  * The Gemini praise call is structurally absent here (no VERTEX_API_KEY), so
  * the template fallback path is what runs — the same path production takes
@@ -148,13 +155,21 @@ Capsule::table('buddy_nudges')->insert([
 $r4 = $svc->agentFeed(7, 'agent');
 check('uses preferred name', isset($r4['messages'][0]) && str_contains($r4['messages'][0]['content'], 'Sammy'));
 
-echo "F7. Greeting stamp survives feed deliveries\n";
-$ref  = new ReflectionClass(BuddyService::class);
-$get  = $ref->getMethod('greetedStamp');
-$set  = $ref->getMethod('setGreetedStamp');
-check('no stamp yet', $get->invoke($svc, 7) === null);
-$set->invoke($svc, 7, '2026-08-17');
-check('stamp reads back', $get->invoke($svc, 7) === '2026-08-17');
+echo "F7. Greeting claim survives feed deliveries (the original P5 bug)\n";
+$ref   = new ReflectionClass(BuddyService::class);
+$claim = $ref->getMethod('claimGreeting');
+check('greeting claimable on a fresh business day', $claim->invoke($svc, 7, '2026-08-17') === true);
+// Deliver more nudges — these write model messages into the same conversation.
+// The ORIGINAL bug was checking "any model message since day start", which
+// these would satisfy, silently cancelling the next login greeting.
+Capsule::table('buddy_nudges')->insert([
+    'user_id' => 7, 'type' => 'departure_24h',
+    'payload_json' => json_encode(['ref' => 'FEED01', 'departs' => 'tomorrow']),
+    'status' => 'pending', 'dedupe_key' => 'dp:feed01', 'created_at' => $now,
+]);
+$svc->agentFeed(7, 'agent');
+check('feed wrote model messages', Capsule::table('buddy_messages')->where('role', 'model')->count() > 5);
+check('same day still counts as greeted', $claim->invoke($svc, 7, '2026-08-17') === false);
 $extra = json_decode((string) Capsule::table('buddy_settings')->where('user_id', 7)->value('extra_json'), true);
 check('display_name preserved alongside stamp',
     Capsule::table('buddy_settings')->where('user_id', 7)->value('display_name') === 'Sammy'
@@ -215,6 +230,73 @@ check('23h still round 1', lagRound(23, 4) === 1);
 check('24h = round 2', lagRound(24, 4) === 2);
 check('72h = round 3', lagRound(72, 4) === 3);
 check('acceptance tier1 is 6h', lagRound(5, 6) === 0 && lagRound(6, 6) === 1);
+
+echo "F13. Admin message relay (Super Buddy → agent)\n";
+$adminText = "Sam, please prioritise the Dubai group booking today - client called twice.";
+Capsule::table('buddy_nudges')->insert([
+    'user_id' => 7, 'type' => 'admin_message',
+    'payload_json' => json_encode(['message' => $adminText, 'from' => 'admin'], JSON_UNESCAPED_UNICODE),
+    'status' => 'pending', 'dedupe_key' => 'admin_nudge:1:7:' . time(), 'created_at' => $now,
+]);
+// A lower-priority nudge queued alongside it, to prove ordering.
+Capsule::table('buddy_nudges')->insert([
+    'user_id' => 7, 'type' => 'dry_spell',
+    'payload_json' => json_encode(['days_since_last_sale' => 5]),
+    'status' => 'pending', 'dedupe_key' => 'ds:7:b', 'created_at' => $now,
+]);
+$r5 = $svc->agentFeed(7, 'agent');
+$adminMsg = $r5['messages'][0]['content'] ?? '';
+check('admin message delivered first', str_contains($adminMsg, 'admin'));
+check('admin text relayed VERBATIM', str_contains($adminMsg, $adminText), $adminMsg);
+check('not replaced by the generic fallback', !str_contains($adminMsg, 'worth a look'));
+$empty = BuddyService::phraseNudge('admin_message', ['message' => '  '], 'Sam', 0);
+check('empty admin message degrades honestly', str_contains($empty, 'empty'));
+$longText = str_repeat('word ', 200);
+$long = BuddyService::phraseNudge('admin_message', ['message' => $longText], 'Sam', 0);
+check('long admin message is not truncated', str_contains($long, rtrim($longText)));
+
+echo "F14. Greeting claim is atomic\n";
+$claim = $ref->getMethod('claimGreeting');
+Capsule::table('buddy_settings')->where('user_id', 7)->update(['extra_json' => null]);
+$first  = $claim->invoke($svc, 7, '2026-08-18');
+$second = $claim->invoke($svc, 7, '2026-08-18');
+$third  = $claim->invoke($svc, 7, '2026-08-18');
+check('first caller wins the claim', $first === true);
+check('second concurrent caller loses', $second === false);
+check('third caller loses too', $third === false);
+check('next business day claims again', $claim->invoke($svc, 7, '2026-08-19') === true);
+check('display_name still intact after claims',
+    Capsule::table('buddy_settings')->where('user_id', 7)->value('display_name') === 'Sammy');
+// A user with no buddy_settings row at all (the common case on day one).
+$fresh1 = $claim->invoke($svc, 99, '2026-08-18');
+$fresh2 = $claim->invoke($svc, 99, '2026-08-18');
+check('brand-new user claims once', $fresh1 === true && $fresh2 === false);
+
+echo "F15. History is scrubbed on the way to Gemini\n";
+$leaky = "Sam, call the client on 9876543210 or mail raj.sharma@example.com about card 4111 1111 1111 1111.";
+$contents = \App\Services\Buddy\BuddyPromptBuilder::buildContents([
+    ['role' => 'user',  'content' => 'hi'],
+    ['role' => 'model', 'content' => "passing this on from the admin:\n\n\"{$leaky}\""],
+]);
+$wire = json_encode($contents);
+check('phone scrubbed from history', !str_contains($wire, '9876543210') && str_contains($wire, '[phone-redacted]'));
+check('email scrubbed from history', !str_contains($wire, 'raj.sharma@example.com') && str_contains($wire, '[email-redacted]'));
+check('card scrubbed from history', !str_contains($wire, '4111') && str_contains($wire, '[card-redacted]'));
+check('surrounding text survives', str_contains($wire, 'passing this on from the admin'));
+
+// The agent must still see exactly what their admin wrote — scrubbing is for
+// the wire to Google only, never for the stored transcript.
+$relay = BuddyService::phraseNudge('admin_message', ['message' => $leaky], 'Sam', 0);
+check('agent-facing relay is NOT redacted', str_contains($relay, '9876543210') && str_contains($relay, 'raj.sharma@example.com'));
+
+// Timestamps in history must survive (the date-shape exemption).
+$dated = \App\Services\Buddy\BuddyPromptBuilder::buildContents([
+    ['role' => 'user', 'content' => 'Booking G7BGL3 departs 2026-08-18 09:40 for $1,240.50'],
+]);
+$dw = json_encode($dated);
+check('dates not mistaken for phone numbers', str_contains($dw, '2026-08-18 09:40'));
+check('amounts survive scrubbing', str_contains($dw, '1,240.50'));
+check('booking refs survive scrubbing', str_contains($dw, 'G7BGL3'));
 
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

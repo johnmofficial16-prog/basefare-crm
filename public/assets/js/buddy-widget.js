@@ -135,7 +135,8 @@
     var NUDGE_LABELS = {
       sale_praise_t1: '👏 Nice sale', sale_praise_t2: '🎉 Big sale',
       eticket_lag: '🎫 E-ticket pending', acceptance_lag: '⏳ Acceptance open',
-      departure_24h: '✈️ Departs soon', dry_spell: '💪 Check-in'
+      departure_24h: '✈️ Departs soon', dry_spell: '💪 Check-in',
+      admin_message: '💬 From admin'
     };
 
     orb.addEventListener('click', function () {
@@ -143,7 +144,9 @@
       panel.classList.toggle('bw-open', opened);
       orb.classList.toggle('bw-orb-hidden', opened);
       if (opened && !panel.__loaded) { panel.__loaded = true; load(); }
-      if (opened) { setBadge(0); hideToast(); input.focus(); }
+      // Opening the panel is the clearest "tell me now" there is — drain any
+      // pending nudges straight away instead of leaving them to the backoff.
+      if (opened) { setBadge(0); hideToast(); feedNow(); input.focus(); }
     });
     panel.querySelector('.bw-close').addEventListener('click', function () {
       opened = false;
@@ -206,7 +209,9 @@
     function speak(text, kind) {
       if (!voiceOn) return;
       if (kind !== 'greeting' && MODE !== 'admin') return;
-      if (!interacted) { speechQueue.push([text, kind]); return; }
+      // Cap the queue: if the agent never clicks, only the first line matters
+      // and an unbounded backlog would be a slow leak on a long-lived tab.
+      if (!interacted) { if (speechQueue.length < 3) speechQueue.push([text, kind]); return; }
       var payload = String(text).slice(0, 600);
 
       if (serverVoice === false) { browserSpeak(payload); return; }
@@ -301,21 +306,40 @@
      * is already built, so it's there on open). Spoken via the 'greeting'
      * voice class — everyone with voice on hears Aisha, per the client spec.
      */
-    function deliver(text, speakIt) {
+    function deliver(text, speakIt, degraded) {
       var dup = panel.__loaded && alreadyShown(text);
-      if (panel.__loaded && !dup) addMsg('ai', text);
+      if (panel.__loaded && !dup) addMsg('ai', text, degraded);
       if (!opened) { showToast(text); setBadge(nudgeCount + 1); }
       if (speakIt && !dup) speak(text, 'greeting');
     }
 
     // Greeting fires on PAGE LOAD, not on orb click — Aisha greets them by
     // name the moment they arrive. The server decides once-per-business-day.
-    var FEED_MS = 75000;
-    var lastPoll = 0, pollBusy = false;
+    // Adaptive interval. The trigger cron only mints nudges every 15 minutes,
+    // so a fixed 75s poll spends ~12 authenticated PHP requests to discover
+    // nothing — per user, per open tab, forever. Quiet periods back off toward
+    // 5 min; anything that suggests news (a delivery, a backlog, the agent
+    // coming back to the tab or opening the panel) snaps straight back to 75s.
+    var FEED_MIN_MS = 75000, FEED_MAX_MS = 300000;
+    var feedMs = FEED_MIN_MS, feedTimer = null, pollBusy = false;
+
+    function scheduleFeed(ms) {
+      if (!EP.feed) return;
+      clearTimeout(feedTimer);
+      feedTimer = setTimeout(pollFeed, ms);
+    }
+    function backOff() {
+      feedMs = Math.min(Math.round(feedMs * 1.6), FEED_MAX_MS);
+    }
+    function feedNow() {          // "something changed — look again promptly"
+      feedMs = FEED_MIN_MS;
+      scheduleFeed(1500);
+    }
+
     function pollFeed() {
-      if (!EP.feed || document.hidden || pollBusy) return;
+      if (!EP.feed) return;
+      if (document.hidden || pollBusy) { scheduleFeed(feedMs); return; }
       pollBusy = true;
-      lastPoll = Date.now();
       // open=1 tells the server these land in front of an open panel, so they
       // count as read and must not come back as an unread badge on reload.
       fetch(EP.feed + (opened ? '?open=1' : ''), { headers: { 'Accept': 'application/json' } })
@@ -326,18 +350,22 @@
           return r.json();
         })
         .then(function (d) {
-          if (!d || !d.ok) return;
-          (d.messages || []).forEach(function (m, i) { deliver(m.content, i === 0); });
+          if (!d || !d.ok) { backOff(); return; }
+          var msgs = d.messages || [];
+          msgs.forEach(function (m, i) { deliver(m.content, i === 0); });
+          // A backlog (pending_left) means more is queued behind the batch cap,
+          // so stay fast until she has said everything she has to say.
+          if (msgs.length || d.pending_left) { feedMs = FEED_MIN_MS; } else { backOff(); }
         })
-        .catch(function () { /* network blip — next tick will retry */ })
-        .finally(function () { pollBusy = false; });
+        .catch(function () { backOff(); })   // don't hammer a broken endpoint
+        .finally(function () { pollBusy = false; scheduleFeed(feedMs); });
     }
     if (EP.greeting) {
       greeted = true;   // load() must not fire it a second time
       fetch(EP.greeting, { method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF }, body: '{}' })
         .then(function (r) { return r.json(); })
-        .then(function (g) { if (g.greeted && g.reply) deliver(g.reply, true); })
+        .then(function (g) { if (g.greeted && g.reply) deliver(g.reply, true, g.ai === false); })
         .catch(function () { /* greeting is a bonus, never an error */ })
         .finally(function () {
           // First feed drain a beat after the greeting so Aisha doesn't talk
@@ -346,9 +374,11 @@
         });
     }
     if (EP.feed) {
-      setInterval(pollFeed, FEED_MS);
+      scheduleFeed(feedMs);
+      // Back at the tab after a while? Check promptly — that's exactly when an
+      // agent expects to find out what happened while they were elsewhere.
       document.addEventListener('visibilitychange', function () {
-        if (!document.hidden && Date.now() - lastPoll > FEED_MS) setTimeout(pollFeed, 2000);
+        if (!document.hidden) feedNow();
       });
     }
 

@@ -199,6 +199,11 @@ class BuddyController
     /** POST — generates the once-per-business-day greeting if it is due. */
     public function agentGreeting(Request $request, Response $response): Response
     {
+        // The kill switch must cover this too: the greeting is the one buddy
+        // path that spends Gemini money without the agent typing anything.
+        if (!\App\Services\Buddy\BuddyService::enabled()) {
+            return $this->json($response, ['success' => false, 'greeted' => false], 503);
+        }
         $result = $this->service->agentGreeting(
             (int) $_SESSION['user_id'],
             (string) ($_SESSION['role'] ?? 'agent')
