@@ -21,10 +21,23 @@ dedupe check (was "any model message today" — feed messages would have
 suppressed the login greeting; now a stamp in buddy_settings.extra_json) and
 the silent bulk `markNudgesDelivered` on every chat turn (nudges could be
 swallowed unvoiced; the feed is now the only deliverer).
-Verify: `php scripts/buddy_feed_verify.php` (SQLite, no network, 28 checks).
-**TODO: push + `git pull origin dev` on server, then live Chrome drive:
-login as agent → greeting speaks after first click, seed a pending nudge →
-toast within ~75s.** No migration needed. Red-team unchanged (no new tools).
+**P6 companion polish (same session, `f62c9ab`):** lag nudges now ESCALATE
+(rounds at 4h/24h/72h e-ticket, 6h/24h/72h acceptance — round 1 keeps the old
+dedupe key so deploying does NOT re-nudge current laggards); praise carries
+SQL-decided personal-best flags ("biggest this month" / "biggest EVER");
+stale praise is framed as catching up rather than "just saw this land"; money
+reads `$1,240.50` (also fixes how it sounds aloud); the unread badge persists
+across page loads (boot counts pending+delivered, `seen` stamped on panel open
+or via `?open=1`); `get_my_nudges` is recency-windowed with an unread flag.
+
+Verify: `php scripts/buddy_feed_verify.php` (SQLite, no network, **58 checks**).
+
+**TODO — deploy + live drive.** On the server:
+`git pull origin dev && php hostinger_migrate.php` (no new migration, but the
+migrator is safe to run). Then, as an agent in Chrome: greeting should speak
+after the first click on the page (autoplay policy — it is queued until then);
+seed a pending nudge and confirm the toast appears by the orb within ~75s.
+Red-team unchanged (no new tools, no new model inputs).
 
 Original design (for reference — all of it is built):
 
