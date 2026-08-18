@@ -274,51 +274,101 @@ class BuddyService
 
         $convId = $this->openConversation($userId, 'agent');
 
-        $digest = self::renderAgentFallback($userId, $role);
+        // The ONE thing worth saying hello with, or nothing when today is
+        // simply a fresh page. Computed here in PHP, deliberately: "mention
+        // numbers only if they are notable" is a judgement call, and a model
+        // handed a digest full of figures reliably decides all of them are
+        // notable. Every figure it reaches for is also a tool hop and another
+        // sentence.
+        $hl        = self::greetingHighlight($userId, $role);
+        $highlight = (string) $hl['text'];
+        $urgent    = (bool) $hl['urgent'];
 
-        // Monday greetings open with the story of last week — a friend who
-        // watched the whole week, not just this morning's numbers. The data is
-        // deterministic; Gemini only phrases it.
-        $weekLine = '';
-        if ((int) date('N', strtotime($dayKey)) === 1) {
-            try {
-                $wk = AgentTools::weekRecap($userId, $role);
-                $l7 = $wk['last_7'];
-                $p7 = $wk['prior_7'];
-                $digest .= sprintf(
-                    "\nWEEK RECAP (last 7 days): %d sales, $%s revenue, $%s net MCO%s. Week before: %d sales, $%s revenue.",
-                    $l7['sales'], number_format($l7['revenue'], 2), number_format($l7['net_mco'], 2),
-                    $l7['best_day'] ? ', best day ' . $l7['best_day']['date'] . ' (' . $l7['best_day']['sales'] . ' sales)' : '',
-                    $p7['sales'], number_format($p7['revenue'], 2)
-                );
-                $weekLine = 'A WEEK RECAP block is present: open with a one-line story of their week — '
-                          . 'better, steady, or quieter than the week before; honest but kind. ';
-            } catch (Throwable $e) {
-                // the recap is a bonus — the greeting never fails over it
+        // ONE thing beyond the hello, and the candidates COMPETE — they never
+        // stack. Stacking is exactly how the original four-paragraph greeting
+        // happened. At a 35-word ceiling it fails differently but no better:
+        // the model silently drops whichever ask it likes least, and in
+        // testing that was the URGENT one — a flight departing inside 72 hours
+        // with no e-ticket lost its place to "what a busy week you just had".
+        // A short greeting that buries the one thing that mattered is worse
+        // than the essay was.
+        if ($highlight !== '') {
+            $bodyLine = "There is ONE thing to tell them and you MUST tell them, in half a sentence, in "
+                      . "your own warm words: " . $highlight . "\n";
+        } else {
+            // Nothing pending. Only now is there room for the shape of the
+            // week — and only on the first day of one.
+            //
+            // "the last seven days", never "last week": weekRecap measures a
+            // ROLLING window that includes today, so with two sales already on
+            // the board "last week was busier" credits last week with this
+            // morning's work. The old prompt hid that behind the figures it
+            // printed; a short greeting states it baldly and states it wrong.
+            //
+            // The weekday is not asserted either. The business day rolls over
+            // at 18:00, so the "Monday" greeting is what someone arriving on
+            // Tuesday morning hears, and telling them it is Monday is false.
+            $weekLine = '';
+            if ((int) date('N', strtotime($dayKey)) === 1) {
+                try {
+                    $wk    = AgentTools::weekRecap($userId, $role);
+                    $l7    = (int) $wk['last_7']['sales'];
+                    $p7    = (int) $wk['prior_7']['sales'];
+                    $shape = $l7 > $p7 ? 'busier' : ($l7 < $p7 ? 'quieter' : 'much the same');
+                    $weekLine = "You may nod to the last seven days in a few words — they were " . $shape
+                              . " than the seven before — but only if it lands naturally. No figures.\n";
+                } catch (Throwable $e) {
+                    // the recap is a bonus — the greeting never fails over it
+                }
             }
+            $bodyLine = "Nothing is pending and nothing is urgent, so this is purely a hello. Do not "
+                      . "reach for a single number.\n" . $weekLine;
         }
 
-        $registry = AgentTools::registry($userId, $role);   // greeting may call tools too
-        $registry->setConversation($convId);
-
-        // A greeting to a stranger is an introduction, not a report. While she
-        // still has knowledge gaps, the day's first words END with one
-        // get-to-know-you question — that is the proactive interview working
-        // even for an agent who never types a message first.
+        // While she still has knowledge gaps, a hello is also how she gets to
+        // know them. WOVEN IN, not appended: the old prompt said "after the
+        // numbers, END the greeting by warmly asking", and the model obeyed it
+        // literally — "And on a totally different note, I was wondering..."
+        // was the result, which reads like a form rather than a friend.
+        //
+        // ROTATED by day rather than always $gaps[0]: knowledgeGaps() returns
+        // a stable priority order, so an agent who never gets round to
+        // answering the goal question would be asked the identical thing every
+        // single morning until they did. Deterministic per day, so the probe
+        // and the verifier still see something reproducible.
+        //
+        // And it is the FIRST thing dropped when something actually needs
+        // their attention. A friend who leads with "that flight tomorrow still
+        // has no ticket" does not follow it with "so, what do you enjoy
+        // selling most?".
         $gaps    = AgentTools::knowledgeGaps($userId);
-        $gapLine = $gaps === []
+        $gapLine = ($urgent || $gaps === [])
             ? ''
-            : 'You are still getting to know them — after the numbers, END the greeting by warmly asking '
-            . 'about this one thing: ' . $gaps[0] . '. ';
+            : "Close with a light, curious question about this, asked the way a friend asks — folded "
+            . "into the same breath, never announced as a change of subject: "
+            . $gaps[(int) date('z', strtotime($dayKey)) % count($gaps)] . "\n";
 
-        $prompt = "It is the start of the agent's business day and they just opened their chat "
-                . "with you. Greet them warmly BY NAME like a close friend who's happy to see "
-                . "them, give a 3–5 sentence read on where they stand using ONLY this digest and "
-                . "any tools you need, and end with one concrete, encouraging focus for today. "
-                . $weekLine
-                . $gapLine
-                . "Mention open nudges if any. This greeting may be spoken aloud, so make it "
-                . "sound natural said out loud.\n\nDIGEST:\n" . $digest;
+        $prompt = "They just opened the app. Say hello.\n\n"
+                . "This is a HELLO, not a briefing. The rules are hard:\n"
+                . "- ONE short paragraph. 35 WORDS MAXIMUM. Two sentences is the target.\n"
+                . "- Warm, casual, spoken — the way you greet a friend walking in. Use contractions.\n"
+                . "- NO statistics. No revenue, no MCO, no targets, no percentages, and never a word "
+                . "about scoring, holds, policy or how performance is counted.\n"
+                . "- NEVER say that something is zero, empty, none or still at nothing. A quiet start "
+                . "is a fresh page — say it like one, or do not mention it at all.\n"
+                . "- No markdown, no bullets, no headings. This is read out loud.\n"
+                . "- Do not promise a rundown and do not offer a summary. If they want numbers they "
+                . "will ask, and you have every one of them a question away.\n\n"
+                . $bodyLine
+                . $gapLine;
+
+        // NO TOOLS on a greeting. An empty registry sends no
+        // functionDeclarations at all, which does two things at once: it
+        // removes every tool hop (seconds of latency, straight into the
+        // client's "the voice started 10-15 seconds later"), and it makes the
+        // numbers structurally unreachable rather than merely discouraged.
+        $registry = new BuddyToolRegistry($userId);
+        $registry->setConversation($convId);
 
         $result = $this->client->chat(
             self::agentPersona($userId),
@@ -328,13 +378,24 @@ class BuddyService
 
         // The claim is already ours, so a Gemini failure must still produce a
         // greeting — otherwise the claim would burn the agent's only greeting
-        // of the day on an error.
-        $reply = $result['success'] ? $result['text'] : "Good to see you! Here's where you stand:\n\n" . $digest;
+        // of the day on an error. The fallback is a hello too: a degraded
+        // brain is no reason to hand someone the wall of numbers this rewrite
+        // exists to delete.
+        $reply = $result['success'] && trim((string) $result['text']) !== ''
+            ? $result['text']
+            : self::plainGreetingFallback($userId);
         $this->storeMessage($convId, 'model', $reply);
         // Nudges are NOT marked delivered here — the P5 feed is the single
         // delivery channel; specifics follow the greeting on the next poll.
 
-        return ['greeted' => true, 'reply' => $reply, 'ai' => $result['success']];
+        return [
+            'greeted'   => true,
+            'reply'     => $reply,
+            'ai'        => $result['success'],
+            // Already synthesized, so the widget has the MP3 in hand the
+            // moment it renders the bubble. See prewarmVoice().
+            'audio_url' => self::prewarmVoice($reply),
+        ];
     }
 
     /**
@@ -402,7 +463,17 @@ class BuddyService
     }
 
     /** Deterministic agent digest — fallback text and greeting raw material. */
-    private static function renderAgentFallback(int $userId, string $role): string
+    /**
+     * The deterministic digest — every number Aisha is allowed to state.
+     *
+     * $forGreeting drops the PerformanceHold notice. That notice is management
+     * language ("performance scoring for this month only starts from August
+     * 10th") and it was landing verbatim in the middle of a hello, which is
+     * most of why the client called the greeting what he called it. It stays
+     * in the chat fallback, where an agent asking about their month genuinely
+     * needs to know why the number looks the way it does.
+     */
+    private static function renderAgentFallback(int $userId, string $role, bool $forGreeting = false): string
     {
         $reg   = AgentTools::registry($userId, $role);
         $today = $reg->execute('get_my_today', []);
@@ -420,7 +491,7 @@ class BuddyService
             $tm = $month['this_month'];
             $lines[] = sprintf('This month: %d sales, %s revenue, %s net MCO, %d refunds.',
                 $tm['sales'], number_format($tm['revenue'], 2), number_format($tm['net_mco'], 2), $tm['refunds']);
-            if (isset($month['hold_notice'])) {
+            if (isset($month['hold_notice']) && !$forGreeting) {
                 $lines[] = 'Note: ' . $month['hold_notice'];
             }
         }
@@ -438,6 +509,148 @@ class BuddyService
             }
         }
         return $lines === [] ? 'No activity recorded yet today.' : implode("\n", $lines);
+    }
+
+    /**
+     * The one thing, if any, worth mentioning inside a hello.
+     *
+     * Deterministic and deliberately stingy: at most ONE item, phrased as half
+     * a sentence, and empty whenever the honest answer is "nothing yet".
+     * Ranked by what would actually make someone glad to have been told —
+     * time-bound work first, then something a person flagged, then momentum
+     * they earned.
+     *
+     * Figures that merely describe the day (revenue, net MCO, month-to-date)
+     * never qualify. Those are what the chat is for, and reciting them at
+     * someone who has just walked in is the exact behaviour this replaces.
+     *
+     * 'urgent' separates "you need to do something about this" from "nice
+     * morning, isn't it". The caller uses it to drop the get-to-know-you
+     * question, which has no business following a flight that leaves tomorrow
+     * without a ticket.
+     *
+     * @return array{text: string, urgent: bool}
+     */
+    private static function greetingHighlight(int $userId, string $role): array
+    {
+        try {
+            $reg = AgentTools::registry($userId, $role);
+
+            // 1. A flight leaving without an e-ticket is the only thing worth
+            //    interrupting a hello for.
+            $dep = $reg->execute('get_my_upcoming_departures', []);
+            if (!isset($dep['error'])) {
+                $naked = 0;
+                foreach ($dep['upcoming'] ?? [] as $d) {
+                    if (empty($d['has_eticket'])) {
+                        $naked++;
+                    }
+                }
+                if ($naked > 0) {
+                    return ['urgent' => true, 'text' => $naked === 1
+                        ? 'a booking departs within three days and still has no e-ticket'
+                        : $naked . ' bookings depart within three days and still have no e-ticket'];
+                }
+            }
+
+            // 2. Something a human (or the nudge cron) raised and they have
+            //    not read yet. A person took the trouble; it outranks stats.
+            $nud = $reg->execute('get_my_nudges', []);
+            if (!isset($nud['error'])) {
+                $unread = 0;
+                foreach ($nud['nudges'] ?? [] as $n) {
+                    if (!empty($n['unread'])) {
+                        $unread++;
+                    }
+                }
+                if ($unread > 0) {
+                    return ['urgent' => true, 'text' => $unread === 1
+                        ? 'you have one thing flagged for them waiting in the chat'
+                        : 'you have ' . $unread . ' things flagged for them waiting in the chat'];
+                }
+            }
+
+            // 3. Work already in flight — a reason to feel ahead, not behind.
+            $pipe = $reg->execute('get_my_pipeline', []);
+            if (!isset($pipe['error'])) {
+                $ne = count($pipe['transactions_awaiting_eticket'] ?? []);
+                if ($ne > 0) {
+                    return ['urgent' => true, 'text' => $ne === 1
+                        ? 'one sale is still waiting on its e-ticket'
+                        : $ne . ' sales are still waiting on their e-tickets'];
+                }
+            }
+
+            // 4. Momentum they already earned today. Mentioned ONLY above
+            //    zero: a zero is not news, it is just morning. Not urgent —
+            //    nothing needs doing about it, so small talk still fits.
+            $today = $reg->execute('get_my_today', []);
+            if (!isset($today['error']) && (int) ($today['sales'] ?? 0) > 0) {
+                $n = (int) $today['sales'];
+                return ['urgent' => false, 'text' => $n === 1
+                    ? 'they have already got one on the board today'
+                    : 'they have already got ' . $n . ' on the board today'];
+            }
+        } catch (Throwable $e) {
+            // A highlight is a bonus. A hello never fails over one.
+        }
+
+        return ['urgent' => false, 'text' => ''];
+    }
+
+    /**
+     * A hello for when the brain is down. Still a hello.
+     *
+     * The old fallback pasted the entire digest under "Here's where you
+     * stand", which is the wall of numbers this rewrite exists to delete —
+     * and it fired precisely when Gemini was unavailable, i.e. when nobody was
+     * watching closely enough to catch it.
+     */
+    private static function plainGreetingFallback(int $userId): string
+    {
+        $name = '';
+        try {
+            $name = (string) (DB::table('buddy_settings')->where('user_id', $userId)->value('display_name')
+                ?: DB::table('users')->where('id', $userId)->value('name') ?: '');
+        } catch (Throwable $e) {
+            // nameless works fine — it is still warmer than a spreadsheet
+        }
+        $parts = preg_split('/\s+/', trim($name), -1, PREG_SPLIT_NO_EMPTY);
+        $first = $parts ? ' ' . $parts[0] : '';
+
+        return "Hey{$first}! Good to see you — shout if you need anything.";
+    }
+
+    /**
+     * Synthesize the greeting NOW, server-side, and hand the widget a URL.
+     *
+     * The old sequence was: text renders, widget waits for a click, widget
+     * POSTs /buddy/tts, Google synthesizes a four-paragraph block, audio
+     * finally plays. The client timed that gap at 10-15 seconds and said so.
+     * Doing it here collapses the middle of it: by the time the bubble is on
+     * screen the MP3 already exists, so the only wait left is the browser's
+     * own autoplay gesture, which nobody can remove.
+     *
+     * Normalized through TtsService::speakable() — the server-side mirror of
+     * the widget's plain() — so the cache key matches the one the widget would
+     * have produced. Without that, the same greeting gets synthesized twice
+     * and billed twice.
+     *
+     * Fail-soft in every direction: null simply puts the widget back on its
+     * old path, which still works.
+     */
+    private static function prewarmVoice(string $text): ?string
+    {
+        try {
+            if (!TtsService::isConfigured()) {
+                return null;
+            }
+            $file = TtsService::synthesize(TtsService::speakable($text));
+
+            return $file === null ? null : '/buddy/tts/' . $file;
+        } catch (Throwable $e) {
+            return null;   // voice is a bonus; it can never break the greeting
+        }
     }
 
     // =========================================================================
@@ -1218,19 +1431,30 @@ PROMPT;
         $convId   = $this->openConversation($adminId, 'admin');
         $snapshot = self::renderTeamFallback();
 
+        // Rotated per day for the same reason as the agent surface.
         $gaps    = AgentTools::knowledgeGaps($adminId, 'admin');
         $gapLine = $gaps === [] ? ''
-            : 'You are still learning how they like to work — after the briefing, ask warmly about this '
-            . 'one thing: ' . $gaps[0] . '. ';
+            : "If it fits in a few words, be curious about this — folded into the same breath, never "
+            . "announced as a change of subject: "
+            . $gaps[(int) date('z', strtotime($dayKey)) % count($gaps)] . "\n";
 
         $registry = AdminTools::registry($adminId);
         $registry->setConversation($convId);
 
-        $prompt = "Your admin just signed in. Give them a SHORT chief-of-staff briefing on the floor right "
-                . "now: 2–4 sentences, lead with the single most useful fact, name anyone genuinely "
-                . "notable (best or struggling), and flag anything that looks off. Use ONLY this snapshot "
-                . "and any tools you need — never estimate. Warm but efficient; they are about to start "
-                . "work, not read a report. This may be spoken aloud, so no markdown or bullets.\n"
+        // The admin case genuinely IS a briefing — they open the app to find
+        // out what the floor is doing, so unlike the agent greeting the
+        // snapshot stays and the numbers are the point. What it is NOT is a
+        // report: one short paragraph, the single most useful fact, done.
+        $prompt = "Your admin just opened the app. One breath on the floor right now.\n\n"
+                . "The rules are hard:\n"
+                . "- ONE short paragraph. 40 WORDS MAXIMUM. Three sentences is the ceiling.\n"
+                . "- Lead with the single most useful fact. Name a person only if they are genuinely "
+                . "notable today, best or struggling.\n"
+                . "- Use ONLY the snapshot below and the tools. Never estimate, never round for effect.\n"
+                . "- If the floor is quiet, \"quiet so far\" is the WHOLE sentence. NEVER follow it "
+                . "with a list of what there is none of — not \"no sales\", not \"zero revenue\", not "
+                . "\"nothing to report\". Never recite scoring rules, holds or policy.\n"
+                . "- No markdown, no bullets, no headings. This is read out loud.\n"
                 . $gapLine
                 . "\nTEAM SNAPSHOT:\n" . $snapshot;
 
@@ -1240,12 +1464,17 @@ PROMPT;
             $registry
         );
 
-        $reply = $result['success']
+        $reply = $result['success'] && trim((string) $result['text']) !== ''
             ? $result['text']
-            : "Welcome back. Here's the floor right now:\n\n" . $snapshot;
+            : self::plainGreetingFallback($adminId);
         $this->storeMessage($convId, 'model', $reply);
 
-        return ['greeted' => true, 'reply' => $reply, 'ai' => $result['success']];
+        return [
+            'greeted'   => true,
+            'reply'     => $reply,
+            'ai'        => $result['success'],
+            'audio_url' => self::prewarmVoice($reply),
+        ];
     }
 
     private static function renderTeamFallback(): string

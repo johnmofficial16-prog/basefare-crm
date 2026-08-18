@@ -1,4 +1,4 @@
-# Session Handoff — 19 August 2026 (early hours)
+# Session Handoff — 19 August 2026 (greeting rebuild)
 
 Written at the end of a very long session. Everything below is current and
 verified unless it says otherwise. `MEMORY.md` + `memory/ai-buddy-status.md`
@@ -6,110 +6,113 @@ carry the deep history; this is what the NEXT session needs to act.
 
 ---
 
-## 0. START HERE — the three things that are broken
+## 0. START HERE — the arrival experience (rebuilt 19 Aug; one thing left)
 
-Aisha (the AI buddy) is feature-complete and live. But the **greeting
-experience is bad**, and the client said so plainly. Fixing this is the whole
-job of the next session. Do not add features until these three are fixed.
+The greeting was rebuilt this session after the client's verdict. Bugs 1 and 3
+are **fixed and verified**. Bug 2 is **half done** — the code side is in, the
+voice pick needs John's ear and one command on the server.
 
-### Bug 1 — the greeting is an essay, not a greeting
+**The model was never the problem.** Greetings ran on `gemini-2.5-flash` the
+whole time and still do: `agentGreeting()` calls `$this->client->chat()`, the
+default client, and the smart router (`clientFor()`) is only wired into agent
+and admin *chat*. There was nothing to revert. The prompt was the bug.
 
-This is what she actually said on a fresh open (verbatim, production):
+### What she actually says now
 
-> Hey TJ, so good to see you! Chalo, let's get you set for a fantastic day.
->
-> You're off to a fresh start today with zero sales and revenue so far. This
-> month's numbers are still at zero too, but don't you worry, that's because
-> performance scoring for this month only starts from August 10th. So you've
-> got a clean slate and a whole lot of opportunity ahead!
->
-> Let's make today about setting up those first sales for the scoring period,
-> what do you say?
->
-> And on a totally different note, I was wondering, what do you enjoy selling
-> the most, TJ? Is there a particular type of trip or destination that really
-> gets you excited?
+Measured live with `php scripts/buddy_greeting_probe.php` (real Gemini, four
+situations, in-memory SQLite, hold deliberately left ON):
 
-Client's verdict: *"absolute shit of a greeting... is this how greetings are
-supposed to work."* He is right. Problems, in order of severity:
+> Hey Priya, so good to see you! Chalo, let's clear that e-ticket for the
+> booking that departs soon.  — **18 words**
 
-1. **Far too long.** Four paragraphs. A greeting is one or two sentences.
-2. **It recites internal policy.** "performance scoring for this month only
-   starts from August 10th" is the PerformanceHold notice leaking verbatim into
-   a hello. That is jargon from `PerformanceHold::notice()`, meaningful to
-   management, meaningless and cold to an agent walking in.
-3. **The get-to-know-you question is bolted on**, not woven in — "And on a
-   totally different note, I was wondering..." reads like a form.
-4. **It narrates zeroes.** Telling someone who just arrived that they have zero
-   sales, zero revenue and zero month is deflating and pointless.
+> Hey TJ! So glad you're here! Ready for a great day? I was wondering, have you
+> ever thought about setting a personal goal for your monthly sales?
+> — **27 words**
 
-**Root cause** is in `BuddyService::agentGreeting()`. The prompt stacks four
-competing instructions — greet warmly, give a 3–5 sentence read on the digest,
-end with a concrete focus, plus (conditionally) a week recap AND a knowledge-gap
-question. The model dutifully does all four, and four paragraphs is the correct
-output for that prompt. **The prompt is the bug, not the model.**
+> The floor is quiet so far, John. I'm curious, what are the key numbers you
+> look for first when you start your day?  — **24 words, admin**
 
-**The fix direction:** a greeting is a *hello*, not a briefing. Target:
+Four paragraphs became one, 18–39 words, ~2s.
 
-> "Morning TJ! Fresh page today — let's get one on the board. What kind of
-> trips do you like selling most?"
+### Bug 1 — the essay — FIXED
 
-Concretely: rewrite the greeting prompt to demand ONE short paragraph, max ~35
-words, no statistics unless something is genuinely notable (a personal best, a
-streak, something urgent today), never the hold notice, and the gap question
-folded in as natural conversation rather than appended. Consider dropping the
-digest from the greeting prompt entirely and letting her pull numbers only when
-asked — the numbers are always one question away.
+`BuddyService::agentGreeting()` and `adminGreeting()`:
 
-### Bug 2 — the voice is robotic and emotionless
+- The prompt now demands ONE paragraph, 35 words max (admin 40), no
+  statistics, no policy, and forbids narrating a zero.
+- **The digest is gone from the greeting entirely.** In its place
+  `greetingHighlight()` computes at most ONE notable thing in PHP, ranked:
+  naked departure inside 72h → unread flagged item → sale awaiting e-ticket →
+  sales already on the board today → nothing. It returns `['text', 'urgent']`.
+- **The hold notice can no longer reach a greeting.**
+  `renderAgentFallback($userId, $role, $forGreeting = true)` drops it. It is
+  still in the chat digest, where an agent asking about their month needs it.
+- **The candidates compete, they never stack.** This mattered: the first cut
+  still stacked highlight + week nod + get-to-know-you question, and at 35
+  words the model quietly dropped the *urgent* one — a flight departing inside
+  72h lost its place to "what a busy week you just had". Now an urgent
+  highlight suppresses both the week nod and the question.
+- The get-to-know-you question is **woven in and rotated by day**
+  (`$gaps[date('z') % count($gaps)]`), not always `$gaps[0]`. At 35 words it is
+  a third of the greeting, and an agent who never answers the goal question
+  would otherwise be asked it every single morning.
+- **No tools on a greeting.** An empty `BuddyToolRegistry` sends no
+  functionDeclarations, so a hello cannot become a research project — it
+  removes every tool hop (seconds) and makes the numbers structurally
+  unreachable rather than merely discouraged.
+- The degraded fallback is a hello too, not the old "Here's where you stand"
+  digest dump.
 
-Client: *"just the accent is different, no emotions, nothing... it's like the
-agent is reading a paragraph, not talking."*
+### Bug 3 — voice 10–15s behind the text — FIXED
 
-He is right, and there are three compounding causes:
+`prewarmVoice()` synthesizes the MP3 **while the greeting is being generated**
+and returns `audio_url` alongside `reply`. The widget plays it directly —
+`speak(text, kind, audioUrl)` skips the `/buddy/tts` round-trip entirely, and
+the URL is parked in sessionStorage so it survives a navigation.
 
-1. **The text is a paragraph.** Long declarative sentences with no contractions
-   read flat on ANY engine. Fixing Bug 1 fixes much of Bug 2 for free.
-2. **We send plain text, zero SSML.** No prosody, no pauses, no emphasis. See
-   `TtsService::synthesize()` — payload is `['input' => ['text' => $text]]`.
-   Switching to `ssml` with `<break>`, `<emphasis>` and prosody would add life.
-3. **`en-IN-Neural2-D` is a standard neural voice.** Google now has
-   **Chirp3-HD** and **Studio** voice families that are dramatically more
-   natural/emotive. These were NOT probed — we chose from a 4-voice flight of
-   Neural2 options only.
+`TtsService::speakable()` is the server-side mirror of the widget's `plain()`,
+so the pre-warm produces the *same cache key* the widget would have — one MP3,
+billed once. The verifier checks that pair against each other.
 
-**The fix direction:** extend `scripts/gemini_model_probe.php`'s pattern to a
-**voice probe** — enumerate what the live TTS key actually offers
-(`GET https://texttospeech.googleapis.com/v1/voices`), synthesize the same warm
-line across Chirp3-HD / Studio / Neural2 candidates, and let the client pick by
-ear again. That flight process worked well; reuse it. Voice is already fully
-env-tunable (`TTS_VOICE`, `TTS_RATE`, `TTS_PITCH`) so switching costs nothing.
+What is left is only the browser's autoplay gesture, which nobody can remove.
 
-### Bug 3 — the voice starts 10–15 seconds AFTER the text appears
+### Bug 2 — robotic voice — HALF DONE, needs John
 
-Client: *"when I opened the window the chat appeared and then after 10-15
-seconds the robotic voice started reading the paragraph.. wtf"*
+Done in code:
+- `TtsService` now sends **SSML** (`<speak>` + breaks after the name and
+  between sentences) instead of plain text. Minimal on purpose — heavy
+  `<emphasis>` lands theatrical, which is a different wrong from robotic.
+- `supportsSsml()` gates it: Chirp families are documented text-only, so they
+  get plain text and no `pitch`. Overridable with `TTS_SSML=on|off`.
+- The cache hash covers the markup decision, so text and SSML never collide.
 
-Sequence today (all in `buddy-widget.js`):
+**Still needs a human ear.** Run on the server:
 
-1. `POST /buddy/greeting` returns → text renders **immediately**
-2. `speak()` is called → but audio is blocked until the first user gesture, so
-   it parks in `speechQueue` / `sessionStorage`
-3. User clicks somewhere → `markInteracted()` fires
-4. ONLY THEN `POST /buddy/tts` → Google synthesizes a 4-paragraph block →
-   several seconds → audio finally plays
+```bash
+php scripts/tts_voice_probe.php
+```
 
-So the delay is: autoplay wait + synthesis of a long text. Both are real.
+It enumerates what the live key really offers, flies the same warm line across
+Chirp3-HD / Studio / Neural2, tests SSML **and** pitch per voice, and prints
+`/buddy/tts/<hash>.mp3` URLs to listen to while logged in. `--list` spends
+nothing. Then set `TTS_VOICE` in `.env` — no deploy, no pull.
 
-**The fix direction:** synthesize server-side **at greeting generation time** and
-return the audio URL alongside the text, so the widget has the MP3 in hand the
-moment it renders the bubble. Then either play immediately (if already
-interacted) or play the instant the gesture arrives — no synthesis round-trip in
-the middle. Shorter greeting text (Bug 1) also cuts synthesis time sharply.
-Consider rendering the text only as playback starts, so voice and text land
-together like a person talking.
+The probe also **verifies the Chirp/SSML assumption** baked into
+`supportsSsml()`. If its "SSML rejected by" line disagrees with the code, fix
+the code rather than leaving it to be rediscovered.
 
----
+### Verification
+
+- `php scripts/buddy_feed_verify.php` → **286 checks, all green** (was 253;
+  F30 is the new section). Offline, no API cost. Run it after every change.
+- `php scripts/buddy_greeting_probe.php` → the ear test the verifier
+  structurally cannot be. Four live calls, cents.
+- **Not verified locally: the actual Google TTS call.** This machine has no
+  `GOOGLE_TTS_API_KEY`, and the Vertex key returns `HTTP 401: API keys are not
+  supported by this API`. The pre-warm therefore returned null here and failed
+  soft exactly as designed. The wiring is proven offline by seeding the cache
+  file (synthesize short-circuits on a cache hit before curl), but **the first
+  real end-to-end voice test has to happen on production.**
 
 ## 1. Deploy — read this before anything
 
@@ -142,9 +145,10 @@ BUDDY_MODEL_THINKING=              # unset → defaults to gemini-3.5-flash (~8s
 BUDDY_PRICE_IN=1.50
 BUDDY_PRICE_OUT=9.00
 GOOGLE_TTS_API_KEY=<set>           # real voice is LIVE
-TTS_VOICE=en-IN-Neural2-D
+TTS_VOICE=en-IN-Neural2-D          # candidate for replacement — see §0 Bug 2
 TTS_RATE=0.96
-TTS_PITCH=-1
+TTS_PITCH=-1                       # ignored for Chirp voices (they self-intone)
+TTS_SSML=                          # unset → auto: SSML on, except Chirp
 ```
 
 Model routing is automatic (`BuddyService::isHardQuestion()`): small talk →
@@ -209,6 +213,12 @@ hard spend caps; only Gemini/Vertex/Cloud Run are.
   `fetch('/buddy/greeting',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:'{"fresh":1}'})`
 - `php scripts/gemini_model_probe.php` — model × thinking-level matrix WITH
   latency, using the real registry and a forced tool call. `--bare` for minimal.
+- `php scripts/buddy_greeting_probe.php` — what Aisha ACTUALLY says on arrival,
+  across four situations, with word counts and latency. `--repeat=N` for
+  variance. Four live calls.
+- `php scripts/tts_voice_probe.php` — live voice list + a Chirp3-HD/Studio/
+  Neural2 flight of the same line, with per-voice SSML and pitch support.
+  `--list` enumerates without spending.
 
 ---
 
@@ -233,15 +243,15 @@ hard spend caps; only Gemini/Vertex/Cloud Run are.
 
 ## 7. Suggested order for the next session
 
-1. **Fix Bug 1 (greeting prompt).** Cheapest, biggest perceived win. One prompt
-   rewrite in `BuddyService::agentGreeting()`, plus suppress the hold notice in
-   greetings. Same treatment for `adminGreeting()`.
-2. **Fix Bug 3 (audio/text desync).** Pre-synthesize server-side, return the URL
-   with the greeting, land text and voice together.
-3. **Fix Bug 2 (voice quality).** Probe the live TTS voice list, build a
-   Chirp3-HD / Studio flight, let John pick by ear, add SSML prosody.
-4. Re-test the whole arrival experience end-to-end with the test agent.
-5. Only then: the client showcase artifact may need updating —
+1. **Pull and re-test the arrival end-to-end** with the test agent. Bugs 1 and
+   3 are verified offline and against live Gemini, but the voice half of Bug 3
+   has never run against the real TTS key — see §0.
+2. **Fly the voices** (`php scripts/tts_voice_probe.php`), pick by ear, set
+   `TTS_VOICE`. This is the last piece of the client's three complaints, and it
+   is a `.env` change, not a deploy.
+3. Check the probe's SSML verdict against `TtsService::supportsSsml()` and fix
+   the code if the live API disagrees.
+4. Only then: the client showcase artifact may need updating —
    `https://claude.ai/code/artifact/cd9c9535-719d-4f54-ac02-636c391738d2`
    (source also at `Desktop\aisha-showcase.html`).
 

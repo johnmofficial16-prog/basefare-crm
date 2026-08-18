@@ -28,6 +28,12 @@
  *  F14. The greeting claim is atomic — concurrent tabs greet exactly once.
  *  F15. History is scrubbed on the way to Gemini. Relaying admin text verbatim
  *       to the agent must not become a PII path to Google.
+ *  F30. The greeting is a HELLO, not a briefing (19 Aug, after the client's
+ *       verdict on the arrival experience). The hold notice never reaches a
+ *       greeting; the highlight stays silent on an empty day and never
+ *       narrates a zero; the degraded fallback is still a hello rather than a
+ *       digest dump; and the voice text the server pre-synthesizes is
+ *       byte-identical to what the widget would have sent.
  *
  * The Gemini praise call is structurally absent here (no VERTEX_API_KEY), so
  * the template fallback path is what runs — the same path production takes
@@ -937,6 +943,147 @@ check('admin persona uses the learned name', str_contains($persona, 'Chief'));
 check('admin persona carries remembered preferences', str_contains($persona, 'headlines'));
 check('agent gaps still include the goal offer',
     str_contains(json_encode(\App\Services\Buddy\AgentTools::knowledgeGaps($A)), 'monthly goal'));
+
+echo "F30. The greeting is a hello, not a briefing\n";
+
+// upcomingDepartures()/today()/monthSummary() need columns the earlier
+// sections never added. Without refund_status the month query throws, the
+// registry swallows it as ['error'], and the digest silently loses its month
+// block — which would have made the hold-notice check below pass for entirely
+// the wrong reason.
+foreach (['currency TEXT', 'pnr TEXT', 'travel_date TEXT', 'departure_time TEXT', 'refund_status TEXT'] as $col) {
+    try { Capsule::connection()->getPdo()->exec('ALTER TABLE transactions ADD COLUMN ' . $col); }
+    catch (\Throwable $e) { /* already there */ }
+}
+
+$G2 = 501;
+Capsule::table('users')->insert(['id' => $G2, 'name' => 'TJ Singh']);
+
+// ── the PerformanceHold leak — the "August 10th" sentence in a hello ────────
+Capsule::table('system_config')->insert([
+    ['key' => 'performance.hold_enabled', 'value' => '1'],
+    ['key' => 'performance.hold_from',    'value' => '2026-08-01 00:00:00'],
+    ['key' => 'performance.hold_until',   'value' => '2026-08-09 23:59:59'],
+    ['key' => 'performance.hold_notice',  'value' => 'Performance scoring for this month starts from August 10th.'],
+]);
+\App\Services\PerformanceHold::flush();
+
+$fallbackM = $ref->getMethod('renderAgentFallback');
+$forChat     = $fallbackM->invoke(null, $G2, 'agent', false);
+$forGreeting = $fallbackM->invoke(null, $G2, 'agent', true);
+check('chat digest still carries the hold notice honestly',
+    str_contains($forChat, 'August 10th'));
+check('greeting digest does NOT — this is the sentence the client quoted',
+    !str_contains($forGreeting, 'August 10th'));
+check('greeting digest keeps the real numbers it is given',
+    str_contains($forGreeting, 'This month:'));
+
+// ── the highlight: at most one thing, and silence when there is nothing ─────
+$hl = $ref->getMethod('greetingHighlight');
+$hlEmpty = $hl->invoke(null, $G2, 'agent');
+check('empty day yields NO highlight at all', $hlEmpty['text'] === '');
+check('and an empty day is not urgent', $hlEmpty['urgent'] === false);
+
+// A flight inside 72h with no e-ticket outranks everything else.
+Capsule::table('transactions')->insert([
+    'id' => 9001, 'agent_id' => $G2, 'status' => 'approved', 'total_amount' => 900,
+    'created_at' => date('Y-m-d H:i:s'), 'currency' => 'USD',
+    'pnr' => 'ZZ9001', 'travel_date' => date('Y-m-d', time() + 86400), 'departure_time' => '09:40',
+]);
+$hlDep = $hl->invoke(null, $G2, 'agent');
+check('a naked departure IS worth mentioning', str_contains($hlDep['text'], 'no e-ticket'), $hlDep['text']);
+check('and it is half a sentence, not a report', str_word_count($hlDep['text']) <= 14, $hlDep['text']);
+check('a departing flight is flagged URGENT, which drops the small talk',
+    $hlDep['urgent'] === true);
+
+// Ticket it, and today's own sale becomes the (gentler) highlight instead.
+Capsule::table('etickets')->insert(['transaction_id' => 9001, 'created_at' => date('Y-m-d H:i:s')]);
+$hlToday = $hl->invoke(null, $G2, 'agent');
+check('with nothing urgent left it falls back to momentum',
+    str_contains($hlToday['text'], 'on the board today'), $hlToday['text']);
+check('momentum is NOT urgent — nothing needs doing about it',
+    $hlToday['urgent'] === false);
+check('a highlight never narrates a zero',
+    !str_contains(strtolower($hlDep['text'] . ' ' . $hlToday['text']), 'zero'));
+
+// ── the degraded path is still a hello (VERTEX_API_KEY is unset up top) ─────
+$g = $svc->agentGreeting($G2, 'agent', true);
+check('greeting still fires with the brain down', ($g['greeted'] ?? false) === true);
+check('and it is honest that the AI did not answer', ($g['ai'] ?? true) === false);
+$reply = (string) ($g['reply'] ?? '');
+check('the fallback greets by first name', str_contains($reply, 'TJ'));
+check('the fallback is ONE short line, not a digest',
+    str_word_count($reply) <= 20, $reply);
+check('the fallback states no figures at all',
+    preg_match('/\d/', $reply) === 0, $reply);
+check('the fallback never leaks the hold notice',
+    !str_contains($reply, 'August 10th'));
+check('no "here is where you stand" briefing framing',
+    stripos($reply, 'where you stand') === false, $reply);
+
+// The widget reads g.audio_url on every greeting, so the key must always be
+// present — null when TTS is unconfigured, never missing.
+check('the response always carries an audio_url key', array_key_exists('audio_url', $g));
+check('unconfigured TTS pre-warms to null rather than throwing', $g['audio_url'] === null);
+
+// ── Bug 3: the pre-synthesized URL actually reaches the widget ─────────────
+// Still no network. synthesize() short-circuits on a cache hit BEFORE it ever
+// reaches curl, so seeding the exact file the greeting would have produced
+// exercises the whole pre-warm path — speakable() → cache key → URL — with no
+// Google call and no key. The dummy key below is only there to get past
+// isConfigured(); it is never sent anywhere.
+$_ENV['GOOGLE_TTS_API_KEY'] = 'verifier-only-never-transmitted';
+
+$voiceText = \App\Services\Buddy\TtsService::speakable($reply);
+$vVoice = $_ENV['TTS_VOICE'] ?? 'en-IN-Neural2-A';
+$vRate  = max(0.7, min(1.3, (float) ($_ENV['TTS_RATE'] ?? 1.04)));
+$vPitch = max(-10.0, min(10.0, (float) ($_ENV['TTS_PITCH'] ?? 1.5)));
+$vSsml  = \App\Services\Buddy\TtsService::supportsSsml($vVoice) ? 'ssml' : 'txt';
+$vHash  = md5($vVoice . '|' . $vRate . '|' . $vPitch . '|' . $vSsml . '|' . $voiceText);
+
+$vDir = \App\Services\Buddy\TtsService::cacheDir();
+@mkdir($vDir, 0755, true);
+$vFile = $vDir . '/' . $vHash . '.mp3';
+file_put_contents($vFile, str_repeat('x', 400));   // >200 bytes = a cache hit
+
+Capsule::table('buddy_settings')->where('user_id', $G2)->update(['extra_json' => null]);  // re-arm
+$g2 = $svc->agentGreeting($G2, 'agent', true);
+check('a configured voice returns a ready-to-play URL with the greeting',
+    ($g2['audio_url'] ?? null) === '/buddy/tts/' . $vHash . '.mp3',
+    var_export($g2['audio_url'] ?? null, true));
+check('the URL is the shape GET /buddy/tts/{file} will actually serve',
+    \App\Services\Buddy\TtsService::safeFile(basename((string) $g2['audio_url'])) !== null);
+
+@unlink($vFile);
+unset($_ENV['GOOGLE_TTS_API_KEY']);
+
+// ── voice text parity: server pre-synthesis must match the widget's plain() ──
+$speak = \App\Services\Buddy\TtsService::speakable("## Hi **TJ**\n\n* one\n* two\n\nUse `get_my_today` now.");
+check('speakable() strips markdown exactly like the widget does',
+    $speak === 'Hi TJ one two Use get_my_today now.', $speak);
+$clean = "Hey TJ! Fresh page today, let's get one on the board.";
+check('a clean greeting passes through untouched (so the cache key matches)',
+    \App\Services\Buddy\TtsService::speakable($clean) === $clean);
+
+// ── SSML: the thing that stops her reading a paragraph ──────────────────────
+$ssml = \App\Services\Buddy\TtsService::toSsml($clean);
+check('SSML is wrapped in <speak>', str_starts_with($ssml, '<speak>') && str_ends_with($ssml, '</speak>'));
+check('a beat lands after her name', str_contains($ssml, 'Hey TJ!<break'));
+check('and between sentences', substr_count($ssml, '<break') >= 1);
+$inject = \App\Services\Buddy\TtsService::toSsml('Careful <break time="9s"/> & co. Next.');
+check('caller markup cannot inject SSML',
+    str_contains($inject, '&lt;break') && substr_count($inject, '<break') <= 2, $inject);
+
+check('Neural2 takes SSML',  \App\Services\Buddy\TtsService::supportsSsml('en-IN-Neural2-D') === true);
+check('Studio takes SSML',   \App\Services\Buddy\TtsService::supportsSsml('en-US-Studio-O') === true);
+check('Chirp3-HD does not',  \App\Services\Buddy\TtsService::supportsSsml('en-IN-Chirp3-HD-Achernar') === false);
+$_ENV['TTS_SSML'] = 'off';
+check('TTS_SSML=off overrides the family rule',
+    \App\Services\Buddy\TtsService::supportsSsml('en-IN-Neural2-D') === false);
+$_ENV['TTS_SSML'] = 'on';
+check('TTS_SSML=on overrides it the other way',
+    \App\Services\Buddy\TtsService::supportsSsml('en-IN-Chirp3-HD-Achernar') === true);
+unset($_ENV['TTS_SSML']);
 
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

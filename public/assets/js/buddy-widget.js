@@ -226,15 +226,20 @@
     // happens. Pending speech is parked in sessionStorage and re-queued on the
     // next page, where the first click releases it. 10-minute staleness cap:
     // a greeting from an hour ago should stay unspoken.
-    function parkSpeech(text, kind) {
-      try { sessionStorage.setItem('bwPendingSpeech', JSON.stringify({ t: text, k: kind, at: Date.now() })); } catch (e) {}
+    function parkSpeech(text, kind, audioUrl) {
+      // The pre-synthesized URL is parked alongside the text. The MP3 is a
+      // real file on disk behind a 24h cache header, so a URL parked for the
+      // 10 minutes below is still good on the next page — and without it the
+      // greeting would re-synthesize after a navigation, which is the exact
+      // round-trip this change exists to remove.
+      try { sessionStorage.setItem('bwPendingSpeech', JSON.stringify({ t: text, k: kind, u: audioUrl || null, at: Date.now() })); } catch (e) {}
     }
     function unparkSpeech() {
       try {
         var raw = sessionStorage.getItem('bwPendingSpeech');
         if (!raw) return;
         var p = JSON.parse(raw);
-        if (p && p.t && Date.now() - (p.at || 0) < 600000) speechQueue.push([p.t, p.k]);
+        if (p && p.t && Date.now() - (p.at || 0) < 600000) speechQueue.push([p.t, p.k, p.u]);
         else sessionStorage.removeItem('bwPendingSpeech');
       } catch (e) {}
     }
@@ -250,7 +255,7 @@
         var q = speechQueue[0];
         speechQueue = [];
         clearParkedSpeech();
-        speak(q[0], q[1]);
+        speak(q[0], q[1], q[2]);
       }
     }
     document.addEventListener('pointerdown', markInteracted, true);
@@ -258,14 +263,14 @@
 
     /** @returns true when she WILL speak (so the convo loop waits for the end
      *  cue), false when this text stays silent (loop resumes immediately). */
-    function speak(text, kind) {
+    function speak(text, kind, audioUrl) {
       if (!voiceOn) return false;
       if (kind !== 'greeting' && MODE !== 'admin') return false;
       // Cap the queue: if the agent never clicks, only the first line matters
       // and an unbounded backlog would be a slow leak on a long-lived tab.
       if (!interacted) {
-        if (speechQueue.length < 3) speechQueue.push([text, kind]);
-        if (speechQueue.length === 1) parkSpeech(text, kind);   // survive navigation
+        if (speechQueue.length < 3) speechQueue.push([text, kind, audioUrl]);
+        if (speechQueue.length === 1) parkSpeech(text, kind, audioUrl);   // survive navigation
         return false;
       }
       clearParkedSpeech();
@@ -279,6 +284,13 @@
       // the MP3 is still being fetched and catch the start of her own line.
       speaking = true;
 
+      // ALREADY SYNTHESIZED (greetings). The server made the MP3 while it was
+      // generating the text, so there is no synthesis round-trip left between
+      // the bubble appearing and Aisha speaking — that gap is what the client
+      // clocked at 10-15 seconds. All that remains is the browser's own
+      // autoplay gesture, which nobody can remove.
+      if (audioUrl) { playUrl(audioUrl, payload); return true; }
+
       if (serverVoice === false) { browserSpeak(payload); return true; }
       fetch('/buddy/tts', {
         method: 'POST',
@@ -289,16 +301,7 @@
         .then(function (d) {
           if (d && d.ok && d.url) {
             serverVoice = true;
-            try {
-              if (currentAudio) { currentAudio.onended = null; currentAudio.pause(); }
-              currentAudio = new Audio(d.url);
-              // onerror too: an audio element that dies mid-play without it
-              // leaves `speaking` stuck true — which silently blocks the mic
-              // from ever arming again. Found while debugging "mic does
-              // nothing" in admin mode.
-              currentAudio.onended = currentAudio.onerror = speechDone;
-              currentAudio.play().catch(function () { browserSpeak(payload); });
-            } catch (e) { browserSpeak(payload); }
+            playUrl(d.url, payload);
           } else {
             serverVoice = false;               // not configured yet — remember
             browserSpeak(payload);
@@ -306,6 +309,23 @@
         })
         .catch(function () { browserSpeak(payload); });
       return true;
+    }
+
+    /**
+     * Play one server-side MP3, falling back to browser speech if the element
+     * refuses. Shared by the pre-synthesized path and the /buddy/tts path so
+     * both get the same error handling.
+     */
+    function playUrl(url, fallbackText) {
+      try {
+        if (currentAudio) { currentAudio.onended = null; currentAudio.pause(); }
+        currentAudio = new Audio(url);
+        // onerror too: an audio element that dies mid-play without it leaves
+        // `speaking` stuck true — which silently blocks the mic from ever
+        // arming again. Found while debugging "mic does nothing" in admin mode.
+        currentAudio.onended = currentAudio.onerror = speechDone;
+        currentAudio.play().catch(function () { browserSpeak(fallbackText); });
+      } catch (e) { browserSpeak(fallbackText); }
     }
     if (voiceBtn) {
       voiceBtn.addEventListener('click', function () {
@@ -506,11 +526,11 @@
      * is already built, so it's there on open). Spoken via the 'greeting'
      * voice class — everyone with voice on hears Aisha, per the client spec.
      */
-    function deliver(text, speakIt, degraded) {
+    function deliver(text, speakIt, degraded, audioUrl) {
       var dup = panel.__loaded && alreadyShown(text);
       if (panel.__loaded && !dup) addMsg('ai', text, degraded);
       if (!opened) { showToast(text); setBadge(nudgeCount + 1); }
-      if (speakIt && !dup) speak(text, 'greeting');
+      if (speakIt && !dup) speak(text, 'greeting', audioUrl);
     }
 
     // Greeting fires on PAGE LOAD, not on orb click — Aisha greets them by
@@ -590,7 +610,7 @@
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
         body: JSON.stringify({ fresh: freshArrival ? 1 : 0 }) })
         .then(function (r) { return r.json(); })
-        .then(function (g) { if (g.greeted && g.reply) deliver(g.reply, true, g.ai === false); })
+        .then(function (g) { if (g.greeted && g.reply) deliver(g.reply, true, g.ai === false, g.audio_url); })
         .catch(function () { /* greeting is a bonus, never an error */ })
         .finally(function () {
           // First feed drain a beat after the greeting so Aisha doesn't talk

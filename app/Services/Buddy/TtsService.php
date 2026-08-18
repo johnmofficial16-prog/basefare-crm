@@ -76,6 +76,7 @@ class TtsService
      *   TTS_VOICE  — Google voice name (default en-IN-Neural2-A)
      *   TTS_RATE   — speaking rate (default 1.04; lower = calmer, softer)
      *   TTS_PITCH  — semitones (default 1.5; NEGATIVE = warmer, lower voice)
+     *   TTS_SSML   — auto (default) | on | off — see supportsSsml()
      * plus per-call overrides (used by the admin's voice tasting) that are
      * whitelisted + clamped by the caller. The cache hash covers ALL knobs —
      * without that, two variants of one line would collide on one file.
@@ -99,7 +100,11 @@ class TtsService
             $rate  = max(0.7, min(1.3, $rate));
             $pitch = max(-10.0, min(10.0, $pitch));
 
-            $hash  = md5($voice . '|' . $rate . '|' . $pitch . '|' . $text);
+            // Markup is part of the recording: the same sentence sent as
+            // plain text and as SSML are two different MP3s and must never
+            // share one cache key.
+            $useSsml = self::supportsSsml($voice);
+            $hash    = md5($voice . '|' . $rate . '|' . $pitch . '|' . ($useSsml ? 'ssml' : 'txt') . '|' . $text);
             $dir   = self::cacheDir();
             $file  = $hash . '.mp3';
             $path  = $dir . '/' . $file;
@@ -111,17 +116,26 @@ class TtsService
                 return null;
             }
 
+            $audioConfig = [
+                'audioEncoding' => 'MP3',
+                'speakingRate'  => $rate,
+            ];
+            // Chirp-family voices model their own intonation and are
+            // documented as rejecting the pitch knob — and a rejected request
+            // costs the whole voice, not just the setting. Left off for them
+            // until scripts/tts_voice_probe.php says otherwise against the
+            // live API, which beats taking a blog post's word for it.
+            if (stripos($voice, 'chirp') === false) {
+                $audioConfig['pitch'] = $pitch;
+            }
+
             $payload = [
-                'input' => ['text' => $text],
+                'input'       => $useSsml ? ['ssml' => self::toSsml($text)] : ['text' => $text],
                 'voice' => [
                     'languageCode' => substr($voice, 0, 5),
                     'name'         => $voice,
                 ],
-                'audioConfig' => [
-                    'audioEncoding' => 'MP3',
-                    'speakingRate'  => $rate,
-                    'pitch'         => $pitch,
-                ],
+                'audioConfig' => $audioConfig,
             ];
 
             $ch = curl_init(self::ENDPOINT);
@@ -165,6 +179,77 @@ class TtsService
             ErrorLogService::log('warning', '[tts] ' . $e->getMessage());
             return null;
         }
+    }
+
+    /**
+     * Server-side mirror of the widget's plain(): markdown stripped,
+     * whitespace collapsed.
+     *
+     * It exists so the server can pre-synthesize the EXACT string the widget
+     * would otherwise have sent — same text in, same cache key out, one MP3
+     * instead of two. If this ever drifts from plain() in buddy-widget.js the
+     * only symptom is a silent doubling of the TTS bill, so the verifier
+     * checks the pair against each other.
+     */
+    public static function speakable(string $text): string
+    {
+        $t = (string) $text;
+        $t = preg_replace('/\\\\([\\\\$*_`#])/u', '$1', $t);
+        $t = preg_replace('/^\s{0,3}#{1,6}\s*/mu', '', $t);
+        $t = preg_replace('/\*\*([^*]+)\*\*/u', '$1', $t);
+        $t = preg_replace('/`([^`\n]+)`/u', '$1', $t);
+        $t = preg_replace('/^\s*[\*\-•]\s+/mu', '', $t);
+        $t = preg_replace('/\s+/u', ' ', $t);
+
+        return trim((string) $t);
+    }
+
+    /**
+     * Does this voice accept SSML?
+     *
+     * Google's Chirp / Chirp3-HD families are documented as text-only: they
+     * generate their own intonation and reject markup, so sending SSML to one
+     * loses the entire voice rather than merely losing the prosody. Everything
+     * else (Neural2, Studio, WaveNet, Standard) takes it.
+     *
+     * TTS_SSML=on|off forces the decision when reality disagrees with the
+     * documentation, and scripts/tts_voice_probe.php is what settles that
+     * argument — with real HTTP codes from the live key, per voice.
+     */
+    public static function supportsSsml(string $voice): bool
+    {
+        $mode = strtolower(trim((string) ($_ENV['TTS_SSML'] ?? getenv('TTS_SSML') ?: 'auto')));
+        if (in_array($mode, ['off', 'false', '0', 'no'], true)) {
+            return false;
+        }
+        if (in_array($mode, ['on', 'true', '1', 'yes'], true)) {
+            return true;
+        }
+
+        return stripos($voice, 'chirp') === false;
+    }
+
+    /**
+     * Wrap a line in the smallest SSML that makes it sound spoken rather than
+     * read aloud: a beat after the name, a longer one between sentences.
+     *
+     * Deliberately minimal. Heavy <emphasis> and prosody markup on a
+     * conversational line lands as theatrical, which is a different flavour of
+     * wrong from robotic. The breaks are the part that stops one flat run-on
+     * delivery — the client's "reading a paragraph, not talking".
+     */
+    public static function toSsml(string $text): string
+    {
+        $t = htmlspecialchars($text, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+
+        // The pause a person takes between saying your name and saying the
+        // thing — "Hey TJ," ... "fresh page today".
+        $t = preg_replace('/^([^,!?.]{1,30}[,!])\s+/u', '$1<break time="260ms"/> ', (string) $t, 1);
+
+        // And between sentences, where a person breathes and a robot does not.
+        $t = preg_replace('/([.!?])\s+/u', '$1<break time="380ms"/> ', (string) $t);
+
+        return '<speak>' . $t . '</speak>';
     }
 
     /** Validate a client-supplied cache filename (route: GET /buddy/tts/{file}). */
