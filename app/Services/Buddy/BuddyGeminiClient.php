@@ -29,7 +29,9 @@ class BuddyGeminiClient
     private const ENDPOINT = 'https://aiplatform.googleapis.com/v1/publishers/google/models/%s:generateContent';
     private const DEFAULT_MODEL     = 'gemini-2.5-flash';
     private const MAX_OUTPUT_TOKENS = 1200;
-    private const TIMEOUT_SECONDS   = 40;
+    // 40s killed real 3.x turns mid-think (measured live: a patterns question
+    // died at 41.7s). Wide enough for a thinking hop, still bounded.
+    private const TIMEOUT_SECONDS   = 75;
     private const MAX_HOPS          = 4;   // tool rounds before we force a text answer
 
     private string $apiKey;
@@ -37,11 +39,19 @@ class BuddyGeminiClient
     /** @var callable fn(array $payload): array{code:int, body:string} */
     private $transport;
 
-    public function __construct(?callable $transport = null, ?string $modelOverride = null)
+    private ?string $thinkingLevel;
+
+    public function __construct(?callable $transport = null, ?string $modelOverride = null, ?string $thinkingLevelOverride = null)
     {
         $this->apiKey    = $_ENV['VERTEX_API_KEY'] ?? getenv('VERTEX_API_KEY') ?: '';
         $this->model     = $modelOverride
             ?: ($_ENV['VERTEX_MODEL'] ?? getenv('VERTEX_MODEL') ?: self::DEFAULT_MODEL);
+        // 3.x thinking control (opt-in): BUDDY_THINKING_LEVEL in .env, e.g.
+        // 'low'. Only ever SENT when set — an unsupported value would 400 the
+        // brain, so silence means "let the model decide", which is today's
+        // behaviour. The probe validates a level before anyone opts in.
+        $envLevel = $_ENV['BUDDY_THINKING_LEVEL'] ?? getenv('BUDDY_THINKING_LEVEL') ?: '';
+        $this->thinkingLevel = $thinkingLevelOverride ?? ($envLevel !== '' ? $envLevel : null);
         $this->transport = $transport ?? [$this, 'httpTransport'];
     }
 
@@ -85,6 +95,10 @@ class BuddyGeminiClient
             if ($legacyThinking) {
                 // MANDATORY for 2.5-flash on the Express key (see GeminiService).
                 $generationConfig['thinkingConfig'] = ['thinkingBudget' => 0];
+            } elseif ($this->thinkingLevel !== null) {
+                // 3.x: bound the pondering. Unbounded thinking measured 12s on
+                // trivial turns and 41.7s (timeout) on multi-tool ones.
+                $generationConfig['thinkingConfig'] = ['thinkingLevel' => $this->thinkingLevel];
             }
             $payload = [
                 'systemInstruction' => ['parts' => [['text' => $systemInstruction]]],

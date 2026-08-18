@@ -54,27 +54,39 @@ if (!in_array('--bare', $argv, true)) {
     $capsule->setAsGlobal();
     $capsule->bootEloquent();
 
-    $loopModels = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-3.7-flash'];
-    echo "FULL TOOL-LOOP probe (real registry, forced function call):\n\n";
-    foreach ($loopModels as $model) {
-        $client   = new \App\Services\Buddy\BuddyGeminiClient(null, $model);
+    // Model × thinking-level matrix, WITH LATENCY — because the live lesson of
+    // 19 Aug was that a smarter answer arriving after the timeout is a dumber
+    // answer. 'low' is the candidate that could make 3.x usable in a chat
+    // bubble; '(default)' shows what unbounded thinking costs.
+    $matrix = [
+        ['gemini-2.5-flash', null],
+        ['gemini-3.5-flash', null], ['gemini-3.5-flash', 'low'],
+        ['gemini-3.6-flash', null], ['gemini-3.6-flash', 'low'],
+        ['gemini-3.7-flash', 'low'],   // default-thinking 3.7 already proven to time out
+    ];
+    echo "FULL TOOL-LOOP probe (real registry, forced function call, latency):\n\n";
+    foreach ($matrix as [$model, $level]) {
+        $client   = new \App\Services\Buddy\BuddyGeminiClient(null, $model, $level);
         $registry = \App\Services\Buddy\MaintenanceTools::registry(0);
+        $t0 = microtime(true);
         $res = $client->chat(
             'You are a terse system assistant. You MUST call get_system_pulse before answering anything.',
             [['role' => 'user', 'parts' => [['text' => 'How many users are active right now? One short sentence.']]]],
             $registry
         );
+        $ms = (int) round((microtime(true) - $t0) * 1000);
+        $label = $model . ' ' . ($level ?? '(default)');
         if ($res['success']) {
-            printf("%-20s ✓ hops=%d tools=%d out_tokens=%d reply=\"%s\"\n",
-                $model, $res['hops'], count($res['tool_calls']),
-                $res['tokens_out'], trim(mb_substr((string) $res['text'], 0, 60)));
+            printf("%-32s ✓ %5dms hops=%d tools=%d out_tokens=%d reply=\"%s\"\n",
+                $label, $ms, $res['hops'], count($res['tool_calls']),
+                $res['tokens_out'], trim(mb_substr((string) $res['text'], 0, 50)));
         } else {
-            printf("%-20s ✗ hops=%d tools=%d %s\n",
-                $model, $res['hops'], count($res['tool_calls']),
-                $res['api_error'] ?? $res['error']);
+            printf("%-32s ✗ %5dms %s\n", $label, $ms, $res['api_error'] ?? $res['error']);
         }
     }
-    echo "\n";
+    echo "\nReading it: pick the smartest ✓ row with latency you would accept in a chat\n"
+       . "bubble (2.5's row is the baseline). Then set VERTEX_MODEL and, if the row\n"
+       . "used a level, BUDDY_THINKING_LEVEL in .env. No deploy.\n";
     exit(0);
 }
 
