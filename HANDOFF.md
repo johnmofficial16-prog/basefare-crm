@@ -76,7 +76,7 @@ billed once. The verifier checks that pair against each other.
 
 What is left is only the browser's autoplay gesture, which nobody can remove.
 
-### Bug 2 — robotic voice — CODE DONE, voice pick is the last step
+### Bug 2 — robotic voice — DONE (voice adopted 19 Aug)
 
 In code:
 - `TtsService` sends **SSML** (`<speak>` + a beat after the name, a longer one
@@ -106,17 +106,22 @@ Chirp, and was already right.
 Neither Studio nor Chirp3-HD-with-pitch exists for en-IN. `TTS_PITCH=-1` will
 simply be ignored if a Chirp3-HD voice is adopted.
 
-**What is left: listen and choose.** The probe writes the same warm line as
-`/buddy/tts/<hash>.mp3` and prints the URLs — play them logged in, same browser
-session. The candidates that matter are the three Chirp3-HD females in their
-**SSML** versions (Achernar, Aoede, Autonoe), against the incumbent
-`en-IN-Neural2-D`. Re-run `php scripts/tts_voice_probe.php` for fresh URLs.
+**Adopted: `en-IN-Chirp3-HD-Aoede`**, chosen by ear from the flight against the
+incumbent `en-IN-Neural2-D`. Live since 19 Aug — a `.env` edit, no deploy, no
+pull (`.env` is read per request). Confirmed with
+`php scripts/tts_voice_probe.php --list`, which prints the running voice and
+spends nothing.
 
-Then, `.env` only — no deploy, no pull:
+Consequences of that choice, all measured:
+- **`TTS_PITCH=-1` is now inert.** Chirp3-HD rejects pitch, so the code omits
+  it. The line is still in `.env` and does nothing; leave it or don't.
+- **Synthesis is ~2x slower** than Neural2 (1.1–2.4s vs 0.5–1.0s), so a
+  greeting costs roughly 4s server-side instead of 3s. Deliberate trade for
+  the voice quality.
+- The old Neural2-D MP3s are not reused — the cache key includes the voice.
 
-```
-TTS_VOICE=en-IN-Chirp3-HD-<name>
-```
+To change it again: re-run the probe for fresh clips, listen, edit `.env`.
+Rollback is the same edit, or the `.env.bak.<timestamp>` written at the time.
 
 A future family (Chirp4?) is unknown territory: run the probe rather than
 extending the pattern on a hunch, which is the exact mistake this section
@@ -171,7 +176,7 @@ BUDDY_MODEL_THINKING=              # unset → defaults to gemini-3.5-flash (~8s
 BUDDY_PRICE_IN=1.50
 BUDDY_PRICE_OUT=9.00
 GOOGLE_TTS_API_KEY=<set>           # real voice is LIVE
-TTS_VOICE=en-IN-Neural2-D          # candidate for replacement — see §0 Bug 2
+TTS_VOICE=en-IN-Chirp3-HD-Aoede    # adopted 19 Aug, by ear — see §0 Bug 2
 TTS_RATE=0.96
 TTS_PITCH=-1                       # ignored for Chirp voices (they self-intone)
 TTS_SSML=                          # unset → auto: SSML on, except Chirp
@@ -269,14 +274,16 @@ hard spend caps; only Gemini/Vertex/Cloud Run are.
 
 ## 7. Suggested order for the next session
 
-1. **Pull and re-test the arrival end-to-end** with the test agent. Bugs 1 and
-   3 are verified offline and against live Gemini, but the voice half of Bug 3
-   has never run against the real TTS key — see §0.
-2. **Pick the voice by ear.** The flight has already been flown (§0 Bug 2) and
-   the code corrected from its results; what is left is listening to the
-   Chirp3-HD SSML clips against `en-IN-Neural2-D` and setting `TTS_VOICE`. A
-   `.env` change, not a deploy.
-4. Only then: the client showcase artifact may need updating —
+All three greeting bugs are closed and verified server-side. What remains is
+the one thing no script can see:
+
+1. **Watch a real arrival in the browser**, logged in as the test agent. The
+   probe proves the SERVER emits text and a playable URL together; it cannot
+   see whether the autoplay gesture actually releases the MP3 on first click,
+   whether the parked URL survives navigating to another page, or whether
+   Aoede sounds right saying a real greeting rather than the probe's fixed
+   line. That is the last unverified link in the chain.
+2. Only then: the client showcase artifact may need updating —
    `https://claude.ai/code/artifact/cd9c9535-719d-4f54-ac02-636c391738d2`
    (source also at `Desktop\aisha-showcase.html`).
 
