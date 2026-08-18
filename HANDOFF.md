@@ -128,12 +128,17 @@ records.
   F30 is the new section). Offline, no API cost. Run it after every change.
 - `php scripts/buddy_greeting_probe.php` → the ear test the verifier
   structurally cannot be. Four live calls, cents.
-- **Not verified locally: the actual Google TTS call.** This machine has no
-  `GOOGLE_TTS_API_KEY`, and the Vertex key returns `HTTP 401: API keys are not
-  supported by this API`. The pre-warm therefore returned null here and failed
-  soft exactly as designed. The wiring is proven offline by seeding the cache
-  file (synthesize short-circuits on a cache hit before curl), but **the first
-  real end-to-end voice test has to happen on production.**
+- **Confirmed on production, 19 Aug.** The same probe run on the server reports
+  `audio:pre-synthesized` on all four greetings — the pre-warm reaches the real
+  Google TTS key and hands the widget a playable URL alongside the text.
+  End-to-end cost **2.8-3.1s per greeting including synthesis**, against
+  1.9-2.4s text-only on a dev box. So pre-synthesizing buys ~0.5-1s and deletes
+  the 10-15s gap it replaced.
+- The dev machine has no `GOOGLE_TTS_API_KEY` and the Vertex key returns
+  `HTTP 401: API keys are not supported by this API`, so the pre-warm fails
+  soft there. Offline the wiring is covered by seeding the cache file
+  (synthesize short-circuits on a hit before curl) — but any voice work still
+  needs a probe run on the SERVER before it is believed.
 
 ## 1. Deploy — read this before anything
 
