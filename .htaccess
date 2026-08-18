@@ -33,3 +33,15 @@
 
 # ── No directory listings ────────────────────────────────────────────────────
 Options -Indexes
+
+# ── Permissions-Policy: mic for our own voice feature, nothing else ─────────
+# The host injects `camera=(), microphone=(), geolocation=()` at server level,
+# which silently killed Aisha's voice input: Chrome reports "not-allowed"
+# without even prompting, whatever the user's own settings say (diagnosed live
+# 19 Aug — the header was visible on every response, origin unknown but
+# upstream of this file). `Header always set` replaces the inherited value.
+# Camera and geolocation stay denied; microphone opens to SAME-ORIGIN only —
+# no embedded third party can reach it.
+<IfModule mod_headers.c>
+    Header always set Permissions-Policy "camera=(), microphone=(self), geolocation=()"
+</IfModule>
