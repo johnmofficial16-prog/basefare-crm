@@ -57,7 +57,8 @@
     //    else the personal agent buddy. Server decides via /buddy/boot.
     var MODE = boot.mode === 'admin' ? 'admin' : 'agent';
     var EP = MODE === 'admin'
-      ? { history: '/buddy/admin/history', chat: '/buddy/admin/chat', greeting: null, feed: null,
+      ? { history: '/buddy/admin/history', chat: '/buddy/admin/chat',
+          greeting: '/buddy/admin/greeting', feed: null,
           confirm: '/buddy/admin/confirm-action', cancel: '/buddy/admin/cancel-action' }
       : { history: '/buddy/history', chat: '/buddy/chat', greeting: '/buddy/greeting',
           feed: '/buddy/feed', confirm: null, cancel: null };

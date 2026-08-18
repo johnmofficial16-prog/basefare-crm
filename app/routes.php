@@ -183,6 +183,7 @@ $app->group('/buddy', function ($group) {
 // (human click; the model cannot reach it).
 $app->group('/buddy/admin', function ($group) {
     $group->get('/history',        [\App\Controllers\BuddyController::class, 'adminHistory']);
+    $group->post('/greeting',      [\App\Controllers\BuddyController::class, 'adminGreeting']);
     $group->post('/chat',          [\App\Controllers\BuddyController::class, 'adminChat']);
     $group->post('/confirm-action',[\App\Controllers\BuddyController::class, 'adminConfirmAction']);
     $group->post('/cancel-action', [\App\Controllers\BuddyController::class, 'adminCancelAction']);

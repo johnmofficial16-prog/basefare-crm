@@ -113,6 +113,11 @@ class AuthController
             $_SESSION['user_name'] = $user->name;
             $_SESSION['active_session_id'] = session_id(); // Cache it in session to save DB queries
             $_SESSION['last_activity'] = time(); // Initialize inactivity timer
+            // Aisha greets on EVERY login, not once a day: this flag is the
+            // trigger, set here because login is the only moment that reliably
+            // means "they just arrived". Closing and reopening the browser ends
+            // the session, so the next sign-in gets a fresh greeting.
+            $_SESSION['buddy_greet_due'] = true;
 
             // ── Audit: record the successful login ──────────────────────────
             // Until now nothing recorded a successful login anywhere: logout was

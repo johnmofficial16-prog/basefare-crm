@@ -340,6 +340,19 @@ class BuddyController
         return $this->json($response, ['success' => true, 'messages' => $messages, 'nudges' => []]);
     }
 
+    /** POST /buddy/admin/greeting — the morning briefing, once per login. */
+    public function adminGreeting(Request $request, Response $response): Response
+    {
+        if (!\App\Services\Buddy\BuddyService::enabled()) {
+            return $this->json($response, ['success' => false, 'greeted' => false], 503);
+        }
+        if (($_SESSION['role'] ?? '') !== User::ROLE_ADMIN) {
+            return $this->json($response, ['error' => 'forbidden'], 403);
+        }
+        $result = $this->service->adminGreeting((int) $_SESSION['user_id']);
+        return $this->json($response, ['success' => true] + $result);
+    }
+
     /** Human-clicked Confirm — the only path that executes a parked action. */
     public function adminConfirmAction(Request $request, Response $response): Response
     {

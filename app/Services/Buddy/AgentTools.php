@@ -176,7 +176,7 @@ class AgentTools
      *
      * Ordered by importance: the name shapes every single line she says.
      */
-    public static function knowledgeGaps(int $userId): array
+    public static function knowledgeGaps(int $userId, string $surface = 'agent'): array
     {
         $gaps = [];
         try {
@@ -187,13 +187,24 @@ class AgentTools
                 $gaps[] = 'their preferred name — what they like to be called (save with set_my_name)';
             }
 
+            $factCount = (int) DB::table('buddy_agent_facts')
+                ->where('user_id', $userId)->where('active', 1)->count();
+
+            if ($surface === 'admin') {
+                // An admin has no sales goal to chase — what she needs to learn
+                // is how this person wants to be briefed and what they watch.
+                if ($factCount < 2) {
+                    $gaps[] = 'what they check first each day and which numbers matter most to them (remember_fact)';
+                } elseif ($factCount < 5) {
+                    $gaps[] = 'how they prefer briefings — short headlines or full detail — and what tends to worry them (remember_fact)';
+                }
+                return $gaps;
+            }
+
             $extra = json_decode((string) ($settings->extra_json ?? ''), true) ?: [];
             if (empty($extra['goal'])) {
                 $gaps[] = 'whether they want a monthly goal to chase (set_my_goal — offer, never impose)';
             }
-
-            $factCount = (int) DB::table('buddy_agent_facts')
-                ->where('user_id', $userId)->where('active', 1)->count();
             if ($factCount < 2) {
                 $gaps[] = 'what keeps them motivated — what they are working toward in life (remember_fact)';
             } elseif ($factCount < 6) {
@@ -203,6 +214,17 @@ class AgentTools
             // no gaps on error — she just skips the interview this turn
         }
         return $gaps;
+    }
+
+    /** Shared with the admin surface — same storage, different registry. */
+    public static function setNameFor(int $userId, string $name): array
+    {
+        return self::setName($userId, $name);
+    }
+
+    public static function rememberFactFor(int $userId, string $fact): array
+    {
+        return self::rememberFact($userId, $fact);
     }
 
     private static function setName(int $userId, string $name): array

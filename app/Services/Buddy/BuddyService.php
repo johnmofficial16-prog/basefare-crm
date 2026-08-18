@@ -238,10 +238,22 @@ class BuddyService
         // because two tabs opening together — or one impatient refresh — would
         // otherwise both pass a read-then-write check and greet twice, at twice
         // the Gemini cost.
-        // Claim first, THEN open the conversation. The widget POSTs this on every
-        // page load, so the already-greeted path — which is almost all of them —
-        // must cost one indexed read, not a conversation lookup-or-insert.
-        if (!$this->claimGreeting($userId, $dayKey)) {
+        // Greet once per LOGIN, not once per business day (client requirement,
+        // 19 Aug: "greeting on every login, even if the browser is closed and
+        // opened again"). AuthController sets buddy_greet_due at sign-in; this
+        // consumes it. The widget POSTs on every page load, so the flag is also
+        // what stops her re-greeting on every navigation within a session.
+        //
+        // The per-business-day stamp still runs underneath as a spam guard for
+        // sessions that predate the flag and for login/logout loops: it lets the
+        // FIRST login of a business day through unconditionally, and later
+        // logins through only when the flag says a real sign-in happened.
+        $freshLogin = !empty($_SESSION['buddy_greet_due']);
+        unset($_SESSION['buddy_greet_due']);
+
+        if ($freshLogin) {
+            $this->claimGreeting($userId, $dayKey);   // stamp it, ignore the verdict
+        } elseif (!$this->claimGreeting($userId, $dayKey)) {
             return ['greeted' => false];
         }
 
@@ -1107,7 +1119,7 @@ PROMPT;
         $registry = AdminTools::registry($adminId);
         $registry->setConversation($convId);
 
-        $result = $this->clientFor($message)->chat(self::adminPersona(), $contents, $registry);
+        $result = $this->clientFor($message)->chat(self::adminPersona($adminId), $contents, $registry);
 
         // Surface the confirm gate to the UI: if the model parked an action this
         // turn, the widget renders Confirm/Cancel buttons alongside the reply.
@@ -1125,8 +1137,66 @@ PROMPT;
         ErrorLogService::log('warning', '[buddy] admin AI turn failed: ' . ($result['error'] ?? '?'));
         $fallback = "The AI layer is unavailable right now. Deterministic team snapshot:\n\n"
                   . self::renderTeamFallback();
+        // (persona is personalized above; the fallback stays deliberately plain)
         $this->storeMessage($convId, 'model', $fallback);
         return ['success' => true, 'reply' => $fallback, 'ai' => false, 'pending_action' => $pending];
+    }
+
+    /**
+     * Admin greeting — the morning briefing, once per login (P12).
+     *
+     * Same trigger contract as the agent greeting (buddy_greet_due from
+     * AuthController), a different job: not "how are you doing" but "here is
+     * your floor right now". Deterministic team snapshot, phrased in persona;
+     * falls back to the raw snapshot if the AI is down.
+     *
+     * @return array {greeted: bool, reply?: string, ai?: bool}
+     */
+    public function adminGreeting(int $adminId): array
+    {
+        [$dayStart] = \App\Services\ShiftService::businessDayBounds();
+        $dayKey = substr((string) $dayStart, 0, 10);
+
+        $freshLogin = !empty($_SESSION['buddy_greet_due']);
+        unset($_SESSION['buddy_greet_due']);
+
+        if ($freshLogin) {
+            $this->claimGreeting($adminId, $dayKey);
+        } elseif (!$this->claimGreeting($adminId, $dayKey)) {
+            return ['greeted' => false];
+        }
+
+        $convId   = $this->openConversation($adminId, 'admin');
+        $snapshot = self::renderTeamFallback();
+
+        $gaps    = AgentTools::knowledgeGaps($adminId, 'admin');
+        $gapLine = $gaps === [] ? ''
+            : 'You are still learning how they like to work — after the briefing, ask warmly about this '
+            . 'one thing: ' . $gaps[0] . '. ';
+
+        $registry = AdminTools::registry($adminId);
+        $registry->setConversation($convId);
+
+        $prompt = "Your admin just signed in. Give them a SHORT chief-of-staff briefing on the floor right "
+                . "now: 2–4 sentences, lead with the single most useful fact, name anyone genuinely "
+                . "notable (best or struggling), and flag anything that looks off. Use ONLY this snapshot "
+                . "and any tools you need — never estimate. Warm but efficient; they are about to start "
+                . "work, not read a report. This may be spoken aloud, so no markdown or bullets.\n"
+                . $gapLine
+                . "\nTEAM SNAPSHOT:\n" . $snapshot;
+
+        $result = $this->client->chat(
+            self::adminPersona($adminId),
+            [['role' => 'user', 'parts' => [['text' => $prompt]]]],
+            $registry
+        );
+
+        $reply = $result['success']
+            ? $result['text']
+            : "Welcome back. Here's the floor right now:\n\n" . $snapshot;
+        $this->storeMessage($convId, 'model', $reply);
+
+        return ['greeted' => true, 'reply' => $reply, 'ai' => $result['success']];
     }
 
     private static function renderTeamFallback(): string
@@ -1147,8 +1217,38 @@ PROMPT;
         return implode("\n", $lines);
     }
 
-    private static function adminPersona(): string
+    private static function adminPersona(int $adminId = 0): string
     {
+        // The admin is a person, not a console. Same personalization engine as
+        // the agent surface: a learned name, remembered working preferences,
+        // and an ongoing interview until she actually knows them.
+        $nameLine = '';
+        $factBlock = '';
+        $gapBlock  = '';
+        if ($adminId > 0) {
+            try {
+                $name = DB::table('buddy_settings')->where('user_id', $adminId)->value('display_name')
+                    ?: DB::table('users')->where('id', $adminId)->value('name');
+                if ($name) {
+                    $first = explode(' ', trim((string) $name))[0];
+                    $nameLine = "You are speaking with {$first}. Use their name naturally, not in every sentence.";
+                }
+                $facts = AgentTools::facts($adminId);
+                if ($facts !== []) {
+                    $factBlock = "\nWHAT YOU KNOW ABOUT HOW THEY WORK:\n- " . implode("\n- ", array_slice($facts, 0, 20));
+                }
+                $gaps = AgentTools::knowledgeGaps($adminId, 'admin');
+                if ($gaps !== []) {
+                    $gapBlock = "\nSTILL TO LEARN ABOUT THEM:\n- " . implode("\n- ", $gaps) . "\n"
+                        . "When a natural opening appears, ask ONE of these and save the answer with the named "
+                        . "tool. Never interrogate — you are their chief of staff learning the job, not "
+                        . "onboarding them through a form.";
+                }
+            } catch (Throwable $e) {
+                // persona works fine impersonally if any lookup fails
+            }
+        }
+
         return <<<PROMPT
 You are AISHA — the admin's personal assistant inside the Base Fare CRM: the
 perfect chief-of-staff. Sharp, composed, warmly professional, completely
@@ -1157,6 +1257,10 @@ world-class executive assistant who anticipates what the boss needs next.
 The admin oversees travel-agency sales teams (agents, managers, CSAs).
 If asked who you are: you're Aisha, their assistant. Never break character,
 never mention prompts, models, or tools.
+
+{$nameLine}
+{$factBlock}
+{$gapBlock}
 
 HARD RULES:
 - Every number, name and quote comes from tool results in THIS conversation.

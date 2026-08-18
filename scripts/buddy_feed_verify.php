@@ -874,5 +874,60 @@ foreach ($hard as $q) {
 check('long message routes to thinking', BuddyService::isHardQuestion(str_repeat('tell me about my day and then some more words ', 5)));
 check('double question routes to thinking', BuddyService::isHardQuestion('sales today? bookings tomorrow?'));
 
+echo "F28. Per-login greeting (not once a day)\n";
+$G = 101;
+Capsule::table('users')->insert(['id' => $G, 'name' => 'Login Tester']);
+$claimG = $ref->getMethod('claimGreeting');
+$_SESSION = [];
+// First login of the day: greets, stamps the day.
+$_SESSION['buddy_greet_due'] = true;
+$freshA = !empty($_SESSION['buddy_greet_due']); unset($_SESSION['buddy_greet_due']);
+check('login flag observed on first sign-in', $freshA === true);
+$claimG->invoke($svc, $G, '2026-08-19');
+// Page navigation in the SAME session: no flag, day already stamped → silent.
+$freshB = !empty($_SESSION['buddy_greet_due']);
+check('page navigation does not re-greet', $freshB === false
+    && $claimG->invoke($svc, $G, '2026-08-19') === false);
+// Log out, log back in: flag returns → greets again the SAME business day.
+$_SESSION['buddy_greet_due'] = true;
+$freshC = !empty($_SESSION['buddy_greet_due']); unset($_SESSION['buddy_greet_due']);
+check('a second login the same day greets again', $freshC === true);
+check('flag is consumed, not left armed', empty($_SESSION['buddy_greet_due']));
+
+echo "F29. Admin personalization\n";
+$A = 102;
+Capsule::table('users')->insert(['id' => $A, 'name' => 'Boss Person']);
+$agAdmin = \App\Services\Buddy\AgentTools::knowledgeGaps($A, 'admin');
+check('admin gaps start with the name', str_contains($agAdmin[0], 'preferred name'));
+check('admin is never asked for a sales goal', !str_contains(json_encode($agAdmin), 'monthly goal'));
+check('admin depth gap is about briefings', str_contains(json_encode($agAdmin), 'check first'));
+$regAdmin = \App\Services\Buddy\AdminTools::registry($A);
+$names = array_column($regAdmin->declarations(), 'name');
+check('admin registry gained set_my_name', in_array('set_my_name', $names, true));
+check('admin registry gained remember_fact', in_array('remember_fact', $names, true));
+check('admin keeps its cross-team tools', in_array('get_team_overview', $names, true));
+check('admin CANNOT reach agent-only self tools',
+    !in_array('set_my_goal', $names, true) && !in_array('get_my_patterns', $names, true));
+$savedA = $regAdmin->execute('set_my_name', ['name' => 'Chief']);
+check('admin name saves', ($savedA['saved'] ?? false) === true);
+check('name gap closes for admin',
+    !str_contains(json_encode(\App\Services\Buddy\AgentTools::knowledgeGaps($A, 'admin')), 'preferred name'));
+$regAdmin->execute('remember_fact', ['fact' => 'Checks refunds before anything else each morning.']);
+check('one fact still leaves a depth gap',
+    count(\App\Services\Buddy\AgentTools::knowledgeGaps($A, 'admin')) === 1);
+$regAdmin->execute('remember_fact', ['fact' => 'Wants headlines, not full detail.']);
+foreach (['Watches net MCO closely.', 'Dislikes long reports.', 'Reviews chargebacks weekly.'] as $f) {
+    $regAdmin->execute('remember_fact', ['fact' => $f]);
+}
+check('admin interview completes once she knows them',
+    \App\Services\Buddy\AgentTools::knowledgeGaps($A, 'admin') === []);
+// The persona must actually carry the learned identity.
+$pm = $ref->getMethod('adminPersona');
+$persona = $pm->invoke(null, $A);
+check('admin persona uses the learned name', str_contains($persona, 'Chief'));
+check('admin persona carries remembered preferences', str_contains($persona, 'headlines'));
+check('agent gaps still include the goal offer',
+    str_contains(json_encode(\App\Services\Buddy\AgentTools::knowledgeGaps($A)), 'monthly goal'));
+
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

@@ -99,6 +99,36 @@ class AdminTools
             fn(array $a) => self::proposeNudge($adminId, (string) ($a['agent'] ?? ''), (string) ($a['message'] ?? ''))
         );
 
+        // ── Personal memory (P12) ───────────────────────────────────────────
+        // The admin is a person too. These are the same two storage paths the
+        // agent surface uses, keyed by the admin's own user id — so she learns
+        // what to call them and how they like to be briefed, exactly as she
+        // does with an agent.
+        $r->register(
+            'set_my_name',
+            'Save what the admin likes to be CALLED. Use it the moment they tell you. This name is used '
+            . 'everywhere she addresses them, including spoken lines.',
+            [
+                'type'       => 'object',
+                'properties' => ['name' => ['type' => 'string', 'description' => 'Preferred name, 1–40 characters.']],
+                'required'   => ['name'],
+            ],
+            fn(array $a) => AgentTools::setNameFor($adminId, (string) ($a['name'] ?? ''))
+        );
+
+        $r->register(
+            'remember_fact',
+            'Save a durable fact about how this admin works: what they check first each morning, which numbers '
+            . 'they care about, how they like briefings (short vs detailed), what worries them. Use it whenever '
+            . 'they reveal a standing preference — it shapes every future briefing.',
+            [
+                'type'       => 'object',
+                'properties' => ['fact' => ['type' => 'string', 'description' => 'One concise sentence. Max 300 chars.']],
+                'required'   => ['fact'],
+            ],
+            fn(array $a) => AgentTools::rememberFactFor($adminId, (string) ($a['fact'] ?? ''))
+        );
+
         return $r;
     }
 
