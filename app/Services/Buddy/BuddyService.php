@@ -418,6 +418,25 @@ class BuddyService
     private const GREET_COOLDOWN_SECONDS = 600;
 
     /**
+     * The cooldown, overridable with BUDDY_GREET_COOLDOWN (seconds).
+     *
+     * Added during UAT: testers open the app over and over expecting to be
+     * greeted, and ten minutes of enforced silence reads as "she's broken"
+     * rather than "she's polite". Drop it to 30 while people are testing, put
+     * it back afterwards — a .env change, no deploy. Clamped so a typo cannot
+     * turn the spam guard off entirely.
+     */
+    private static function greetCooldown(): int
+    {
+        $v = $_ENV['BUDDY_GREET_COOLDOWN'] ?? getenv('BUDDY_GREET_COOLDOWN');
+        if ($v === false || $v === null || !is_numeric($v)) {
+            return self::GREET_COOLDOWN_SECONDS;
+        }
+
+        return max(5, min(86400, (int) $v));
+    }
+
+    /**
      * Claim a greeting for a real arrival. No calendar opinion — the cooldown
      * is the only thing standing between an eager client signal and Aisha
      * greeting the same person twice in a minute.
@@ -429,7 +448,7 @@ class BuddyService
 
         return BuddySettings::mutate($userId, function (array $extra) use ($dayKey) {
             $last = (int) ($extra['last_greeted_at'] ?? 0);
-            if (time() - $last < self::GREET_COOLDOWN_SECONDS) {
+            if (time() - $last < self::greetCooldown()) {
                 return [$extra, false];
             }
             $extra['last_greeted_at'] = time();

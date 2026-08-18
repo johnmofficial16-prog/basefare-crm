@@ -45,6 +45,12 @@ use Illuminate\Database\Capsule\Manager as Capsule;
 $dotenv = Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->load();
 
+// Same clock the web app and every cron run on. Without this a CLI script sits
+// in the server default (UTC) while created_at strings were written in IST —
+// and ShiftService::businessDayBounds() then computes the WRONG business day,
+// which is a quietly wrong answer rather than an error.
+date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'Asia/Kolkata');
+
 // ── args ────────────────────────────────────────────────────────────────────
 $email        = null;
 $surface      = 'both';

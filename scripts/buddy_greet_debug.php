@@ -33,6 +33,12 @@ use App\Services\Buddy\TtsService;
 $dotenv = Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->load();
 
+// Same clock the web app and every cron run on. Without this a CLI script sits
+// in the server default (UTC) while created_at strings were written in IST —
+// and ShiftService::businessDayBounds() then computes the WRONG business day,
+// which is a quietly wrong answer rather than an error.
+date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'Asia/Kolkata');
+
 $email = null;
 foreach (array_slice($argv, 1) as $a) {
     if (str_starts_with($a, '--user=')) {
@@ -109,7 +115,11 @@ if ($lastMsg !== null) {
 echo "\n";
 
 // ── what would happen right now ─────────────────────────────────────────────
-$cooldown  = 600;   // BuddyService::GREET_COOLDOWN_SECONDS
+// Read the live value, including any BUDDY_GREET_COOLDOWN override, rather
+// than hard-coding 600 and reporting a gate that is not the one in force.
+$cdRef = new ReflectionMethod(BuddyService::class, 'greetCooldown');
+$cdRef->setAccessible(true);
+$cooldown = (int) $cdRef->invoke(null);
 $freshOk   = $lastAt === 0 || $ago >= $cooldown;
 $dayOk     = $lastBday !== $dayKey;
 

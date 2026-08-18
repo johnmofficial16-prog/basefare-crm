@@ -30,6 +30,12 @@ use App\Services\Buddy\BuddyService;
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->load();
 
+// Same clock the web app and every cron run on. Without this a CLI script sits
+// in the server default (UTC) while created_at strings were written in IST —
+// and ShiftService::businessDayBounds() then computes the WRONG business day,
+// which is a quietly wrong answer rather than an error.
+date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'Asia/Kolkata');
+
 if (($_ENV['VERTEX_API_KEY'] ?? '') === '') {
     fwrite(STDERR, "No VERTEX_API_KEY in .env — this probe needs the real brain.\n");
     exit(1);
