@@ -171,15 +171,37 @@
       pickVoice();
       if ('onvoiceschanged' in window.speechSynthesis) window.speechSynthesis.onvoiceschanged = pickVoice;
     }
+    // ── Speech lifecycle ────────────────────────────────────────────────────
+    // A conversation needs to know when Aisha STOPS talking — that's the cue
+    // to reopen the mic. `speaking` is true from the moment we commit to
+    // saying something until the audio actually ends, across every path
+    // (cloud MP3, browser fallback, fallback-of-fallback).
+    var speaking = false;
+    var onAishaDoneSpeaking = null;   // assigned by the conversation loop below
+
+    function speechDone() {
+      speaking = false;
+      if (typeof onAishaDoneSpeaking === 'function') onAishaDoneSpeaking();
+    }
+
+    /** Barge-in: cut her off mid-sentence, instantly, on every engine. */
+    function stopSpeaking() {
+      try { if (currentAudio) { currentAudio.onended = null; currentAudio.pause(); } } catch (e) {}
+      try { if (ttsOk) window.speechSynthesis.cancel(); } catch (e) {}
+      speaking = false;
+    }
+
     function browserSpeak(text) {
-      if (!ttsOk) return;
+      if (!ttsOk) { speechDone(); return; }   // silent path still ends the turn
       try {
         window.speechSynthesis.cancel();
         var u = new SpeechSynthesisUtterance(String(text).slice(0, 600));
         if (chosenVoice) u.voice = chosenVoice;
         u.rate = 1.04;
+        u.onend = u.onerror = speechDone;
+        speaking = true;
         window.speechSynthesis.speak(u);
-      } catch (e) { /* never break chat over audio */ }
+      } catch (e) { speechDone(); /* never break chat over audio */ }
     }
 
     var currentAudio = null;
@@ -233,22 +255,29 @@
     document.addEventListener('pointerdown', markInteracted, true);
     document.addEventListener('keydown', markInteracted, true);
 
+    /** @returns true when she WILL speak (so the convo loop waits for the end
+     *  cue), false when this text stays silent (loop resumes immediately). */
     function speak(text, kind) {
-      if (!voiceOn) return;
-      if (kind !== 'greeting' && MODE !== 'admin') return;
+      if (!voiceOn) return false;
+      if (kind !== 'greeting' && MODE !== 'admin') return false;
       // Cap the queue: if the agent never clicks, only the first line matters
       // and an unbounded backlog would be a slow leak on a long-lived tab.
       if (!interacted) {
         if (speechQueue.length < 3) speechQueue.push([text, kind]);
         if (speechQueue.length === 1) parkSpeech(text, kind);   // survive navigation
-        return;
+        return false;
       }
       clearParkedSpeech();
       // Strip markdown before it reaches any voice engine, or she reads the
       // syntax out loud.
       var payload = plain(text).slice(0, 600);
 
-      if (serverVoice === false) { browserSpeak(payload); return; }
+      // Committed to speaking from here — the flag goes up BEFORE the fetch,
+      // or the conversation loop would open the mic into the silent gap while
+      // the MP3 is still being fetched and catch the start of her own line.
+      speaking = true;
+
+      if (serverVoice === false) { browserSpeak(payload); return true; }
       fetch('/buddy/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
@@ -259,8 +288,9 @@
           if (d && d.ok && d.url) {
             serverVoice = true;
             try {
-              if (currentAudio) currentAudio.pause();
+              if (currentAudio) { currentAudio.onended = null; currentAudio.pause(); }
               currentAudio = new Audio(d.url);
+              currentAudio.onended = speechDone;
               currentAudio.play().catch(function () { browserSpeak(payload); });
             } catch (e) { browserSpeak(payload); }
           } else {
@@ -269,37 +299,98 @@
           }
         })
         .catch(function () { browserSpeak(payload); });
+      return true;
     }
     if (voiceBtn) {
       voiceBtn.addEventListener('click', function () {
         voiceOn = !voiceOn;
         voiceBtn.textContent = voiceOn ? '🔊' : '🔇';
         try { localStorage.setItem('bwVoiceOn', voiceOn ? '1' : '0'); } catch (e) {}
-        if (!voiceOn) { try { if (currentAudio) currentAudio.pause(); if (ttsOk) window.speechSynthesis.cancel(); } catch (e) {} }
+        if (!voiceOn) { stopSpeaking(); speechDone(); }   // muting mid-sentence ends her turn cleanly
       });
     }
 
-    // Mic (admin): push-to-toggle SpeechRecognition → transcript → normal send.
+    // ── Conversation mode (admin) ───────────────────────────────────────────
+    // One mic click starts a CONVERSATION, not one utterance: listen → send →
+    // she answers aloud → mic reopens by itself → repeat. Click again to end.
+    //
+    // Turn-taking rules that make it feel like two people:
+    //  - The mic is CLOSED while she talks. Speakers + open mic = she hears
+    //    herself and answers herself; browser echo cancellation is not to be
+    //    trusted with this. Barge-in is therefore a click (mic or send), which
+    //    cuts her off instantly and listens — deliberate, reliable interruption
+    //    rather than a feedback loop.
+    //  - The mic reopens ~0.4s after her last word — the beat a person leaves.
+    //  - Silence isn't a hang-up: recognition timeouts quietly re-arm. But two
+    //    minutes with nothing heard ends the conversation — nobody wants a
+    //    forgotten hot mic.
+    //  - A denied mic permission ends it immediately and for good.
     var micBtn = panel.querySelector('.bw-mic');
-    var rec = null, listening = false;
+    var convo = false, listening = false, rec = null, restartTimer = null;
+    var lastHeard = 0, convoStartedAt = 0;
+
+    function setMicUi() {
+      if (!micBtn) return;
+      micBtn.classList.toggle('bw-mic-on', listening);
+      micBtn.classList.toggle('bw-mic-convo', convo && !listening);
+      micBtn.title = convo ? 'Conversation on — click to end' : 'Click to start talking';
+    }
+    function stopRec() {
+      listening = false;
+      try { if (rec) { rec.onresult = rec.onend = rec.onerror = null; rec.stop(); } } catch (e) {}
+      setMicUi();
+    }
+    function convoOff() {
+      convo = false;
+      clearTimeout(restartTimer);
+      stopRec();
+    }
+    function startListening() {
+      if (!convo || listening || speaking || send.disabled) return;
+      try {
+        rec = new SR();
+        rec.lang = 'en-IN';
+        rec.interimResults = false;
+        rec.maxAlternatives = 1;
+        rec.onresult = function (ev) {
+          lastHeard = Date.now();
+          var text = (((ev.results || [])[0] || [])[0] || {}).transcript || '';
+          stopRec();
+          if (text.trim()) { input.value = text.trim(); sendCurrent(); }
+          else if (convo) { restartTimer = setTimeout(startListening, 300); }
+        };
+        rec.onerror = function (ev) {
+          listening = false;
+          setMicUi();
+          if (ev && (ev.error === 'not-allowed' || ev.error === 'service-not-allowed')) convoOff();
+          // other errors (no-speech, network blip) fall through to onend re-arm
+        };
+        rec.onend = function () {
+          listening = false;
+          setMicUi();
+          if (!convo || speaking || send.disabled) return;   // her turn / reply in flight
+          if (Date.now() - Math.max(lastHeard, convoStartedAt) > 120000) { convoOff(); return; }
+          restartTimer = setTimeout(startListening, 350);
+        };
+        rec.start();
+        listening = true;
+        setMicUi();
+      } catch (e) { listening = false; setMicUi(); }
+    }
+    // Her side of the turn-taking: the moment she finishes a sentence, the
+    // floor is yours again.
+    onAishaDoneSpeaking = function () {
+      if (convo) { clearTimeout(restartTimer); restartTimer = setTimeout(startListening, 400); }
+    };
     if (micBtn && SR) {
       micBtn.addEventListener('click', function () {
-        if (listening) { try { rec.stop(); } catch (e) {} return; }
-        try {
-          rec = new SR();
-          rec.lang = 'en-IN';
-          rec.interimResults = false;
-          rec.maxAlternatives = 1;
-          rec.onresult = function (ev) {
-            var text = (((ev.results || [])[0] || [])[0] || {}).transcript || '';
-            if (text.trim()) { input.value = text.trim(); sendCurrent(); }
-          };
-          rec.onend = function () { listening = false; micBtn.classList.remove('bw-mic-on'); };
-          rec.onerror = function () { listening = false; micBtn.classList.remove('bw-mic-on'); };
-          rec.start();
-          listening = true;
-          micBtn.classList.add('bw-mic-on');
-        } catch (e) { listening = false; micBtn.classList.remove('bw-mic-on'); }
+        if (convo) { convoOff(); return; }
+        convo = true;
+        convoStartedAt = Date.now();
+        lastHeard = 0;
+        stopSpeaking();       // barge-in: the click cuts her off mid-word
+        startListening();
+        setMicUi();
       });
     }
 
@@ -482,6 +573,9 @@
     function sendCurrent() {
       var text = input.value.trim();
       if (!text || send.disabled) return;
+      // Sending is a barge-in: whatever she was saying, the human moved on.
+      stopSpeaking();
+      stopRec();
       addMsg('user', text);
       input.value = '';
       send.disabled = true;
@@ -494,13 +588,21 @@
           t.remove();
           if (d.success) {
             addMsg('ai', d.reply, d.ai === false);
-            speak(d.reply, 'reply');
+            var willSpeak = speak(d.reply, 'reply');
+            // Silent reply (voice muted / no TTS): her turn ends the moment
+            // the text lands, so hand the floor straight back to the mic.
+            if (!willSpeak && typeof onAishaDoneSpeaking === 'function') onAishaDoneSpeaking();
             if (d.pending_action && EP.confirm) renderConfirm(d.pending_action);
           } else {
             addMsg('ai', d.error || 'Something went wrong — try again.');
+            if (typeof onAishaDoneSpeaking === 'function') onAishaDoneSpeaking();
           }
         })
-        .catch(function () { t.remove(); addMsg('ai', 'Network hiccup — try again.'); })
+        .catch(function () {
+          t.remove();
+          addMsg('ai', 'Network hiccup — try again.');
+          if (typeof onAishaDoneSpeaking === 'function') onAishaDoneSpeaking();
+        })
         .finally(function () { send.disabled = false; input.focus(); });
     }
 
@@ -644,6 +746,7 @@
 '.bw-mic svg{width:18px;height:18px}' +
 '.bw-mic:hover{background:rgba(91,140,255,.25)}' +
 '.bw-mic-on{background:linear-gradient(135deg,#ef4444,#f97316);color:#fff;border-color:transparent;animation:bw-pulse 1s infinite}' +
+'.bw-mic-convo{background:rgba(52,211,153,.18);border-color:rgba(52,211,153,.55);color:#6ee7b7}' +
 '.bw-confirm-btns{display:flex;gap:8px;margin-top:10px}' +
 '.bw-btn{border:0;border-radius:9px;font:700 12px/1 Inter;padding:9px 13px;cursor:pointer;transition:filter .15s}' +
 '.bw-btn:hover{filter:brightness(1.15)}' +
