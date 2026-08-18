@@ -82,11 +82,12 @@ class AgentTools
 
         $r->register(
             'get_my_patterns',
-            "Working patterns mined from THIS AGENT'S OWN last 90 days: which weekday they sell best, how fast "
-            . 'and how often their approved acceptances convert to sales, how quickly e-tickets follow sales, '
-            . 'average sale size this month vs last, and their current daily-sale streak. Use it to COACH — '
-            . '"when am I most effective?", "what should I improve?". Every section carries sample_size: when it '
-            . 'is small, say the pattern is tentative rather than presenting it as fact.',
+            "ALWAYS call this when the agent asks about patterns, trends, their conversion rate, their best day "
+            . 'or time to sell, their speed, or how to improve. Working patterns mined from THIS AGENT\'S OWN '
+            . 'last 90 days: best weekday, acceptance-to-sale conversion rate and average hours to convert, '
+            . 'sale-to-e-ticket speed, average sale size this month vs last. Even when their history is thin, '
+            . 'call it and report honestly what little there is. Every section carries sample_size: when it is '
+            . 'small, say the pattern is tentative rather than presenting it as fact.',
             [],
             fn() => self::patterns($userId, $role)
         );
