@@ -195,12 +195,38 @@
     // and the FIRST queued line (the greeting) is released on first gesture —
     // the rest stay visible as toast/panel text rather than a speech barrage.
     var interacted = false, speechQueue = [];
+
+    // An unspoken line must survive navigation. The queue used to die with the
+    // page: greeting lands on the dashboard, agent clicks through to
+    // Transactions before touching anything, and the one greeting of the day
+    // is silently lost — which is exactly how "I didn't hear her greet me"
+    // happens. Pending speech is parked in sessionStorage and re-queued on the
+    // next page, where the first click releases it. 10-minute staleness cap:
+    // a greeting from an hour ago should stay unspoken.
+    function parkSpeech(text, kind) {
+      try { sessionStorage.setItem('bwPendingSpeech', JSON.stringify({ t: text, k: kind, at: Date.now() })); } catch (e) {}
+    }
+    function unparkSpeech() {
+      try {
+        var raw = sessionStorage.getItem('bwPendingSpeech');
+        if (!raw) return;
+        var p = JSON.parse(raw);
+        if (p && p.t && Date.now() - (p.at || 0) < 600000) speechQueue.push([p.t, p.k]);
+        else sessionStorage.removeItem('bwPendingSpeech');
+      } catch (e) {}
+    }
+    function clearParkedSpeech() {
+      try { sessionStorage.removeItem('bwPendingSpeech'); } catch (e) {}
+    }
+    unparkSpeech();
+
     function markInteracted() {
       if (interacted) return;
       interacted = true;
       if (speechQueue.length) {
         var q = speechQueue[0];
         speechQueue = [];
+        clearParkedSpeech();
         speak(q[0], q[1]);
       }
     }
@@ -212,7 +238,12 @@
       if (kind !== 'greeting' && MODE !== 'admin') return;
       // Cap the queue: if the agent never clicks, only the first line matters
       // and an unbounded backlog would be a slow leak on a long-lived tab.
-      if (!interacted) { if (speechQueue.length < 3) speechQueue.push([text, kind]); return; }
+      if (!interacted) {
+        if (speechQueue.length < 3) speechQueue.push([text, kind]);
+        if (speechQueue.length === 1) parkSpeech(text, kind);   // survive navigation
+        return;
+      }
+      clearParkedSpeech();
       // Strip markdown before it reaches any voice engine, or she reads the
       // syntax out loud.
       var payload = plain(text).slice(0, 600);

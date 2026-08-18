@@ -755,5 +755,47 @@ check('recap has both windows', isset($wr['last_7']['sales'], $wr['prior_7']['sa
 check('recap counts something recent', $wr['last_7']['sales'] >= 1);
 check('best day named with its count', !empty($wr['last_7']['best_day']['date']));
 
+echo "F25. Proactive personalization — the interview is a system, not a hope\n";
+$N = 95;
+Capsule::table('users')->insert(['id' => $N, 'name' => 'Newbie Kumar']);
+$regN = \App\Services\Buddy\AgentTools::registry($N, 'agent');
+
+$gaps0 = \App\Services\Buddy\AgentTools::knowledgeGaps($N);
+check('stranger has all three gaps', count($gaps0) === 3, json_encode($gaps0));
+check('name is the FIRST gap (it shapes every line)', str_contains($gaps0[0], 'preferred name'));
+check('goal gap is offer-not-impose', str_contains($gaps0[1], 'never impose'));
+
+// She learns the name → toasts and templates immediately use it.
+$saved = $regN->execute('set_my_name', ['name' => 'Nina']);
+check('set_my_name saves', ($saved['saved'] ?? false) === true);
+check('tool result says it applies everywhere', str_contains((string) ($saved['note'] ?? ''), 'spoken line'));
+Capsule::table('buddy_nudges')->insert(['user_id' => $N, 'type' => 'eticket_lag',
+    'payload_json' => json_encode(['ref' => 'NN1', 'waiting_hours' => 5]),
+    'status' => 'pending', 'dedupe_key' => 'nn:1', 'created_at' => $now]);
+$nf = $svc->agentFeed($N, true);
+check('feed template now greets by the learned name', str_contains($nf['messages'][0]['content'] ?? '', 'Nina'));
+
+$gaps1 = \App\Services\Buddy\AgentTools::knowledgeGaps($N);
+check('name gap closes once learned', count($gaps1) === 2 && !str_contains(json_encode($gaps1), 'preferred name'));
+
+// Goal + facts close the rest.
+$regN->execute('set_my_goal', ['sales' => 10]);
+$regN->execute('remember_fact', ['fact' => 'Saving for a bike.']);
+$regN->execute('remember_fact', ['fact' => 'Loves closing Dubai routes.']);
+$gaps2 = \App\Services\Buddy\AgentTools::knowledgeGaps($N);
+check('goal gap closes', !str_contains(json_encode($gaps2), 'monthly goal'));
+check('with 2 facts she still wants more depth', count($gaps2) === 1 && str_contains($gaps2[0], 'more of who they are'));
+for ($i = 0; $i < 4; $i++) {
+    $regN->execute('remember_fact', ['fact' => "Durable fact number {$i}."]);
+}
+check('knowing them well = interview over', \App\Services\Buddy\AgentTools::knowledgeGaps($N) === []);
+
+check('set_my_name rejects empty', isset($regN->execute('set_my_name', ['name' => '  '])['error']));
+check('set_my_name rejects a novel', isset($regN->execute('set_my_name', ['name' => str_repeat('x', 41)])['error']));
+// A name must never smuggle PII into every future prompt.
+$regN->execute('set_my_name', ['name' => 'raj@example.com']);
+check('a PII-shaped name is scrubbed before storage',
+    !str_contains((string) Capsule::table('buddy_settings')->where('user_id', $N)->value('display_name'), '@example.com'));
+
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

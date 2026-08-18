@@ -81,6 +81,21 @@ class AgentTools
         );
 
         $r->register(
+            'set_my_name',
+            'Save what the agent likes to be CALLED — their preferred name or nickname. Use it the moment they '
+            . 'tell you ("call me TJ"). This name is used EVERYWHERE: greetings, toasts, spoken lines, not just '
+            . 'this chat — so saving it here is what makes Aisha greet them right tomorrow morning.',
+            [
+                'type'       => 'object',
+                'properties' => [
+                    'name' => ['type' => 'string', 'description' => 'The preferred name, 1–40 characters.'],
+                ],
+                'required'   => ['name'],
+            ],
+            fn(array $a) => self::setName($userId, (string) ($a['name'] ?? ''))
+        );
+
+        $r->register(
             'get_my_patterns',
             "ALWAYS call this when the agent asks about patterns, trends, their conversion rate, their best day "
             . 'or time to sell, their speed, or how to improve. Working patterns mined from THIS AGENT\'S OWN '
@@ -149,6 +164,64 @@ class AgentTools
         return DB::table('buddy_agent_facts')
             ->where('user_id', $userId)->where('active', 1)
             ->orderBy('id')->limit(20)->pluck('fact')->all();
+    }
+
+    /**
+     * What Aisha does NOT yet know about this agent — the engine behind
+     * proactive personalization. Until now "get to know them" was a hope
+     * buried in the persona; this makes it a computed, ordered list that the
+     * persona AND the greeting consume every turn, so she keeps interviewing
+     * — one natural question at a time — until she actually knows her person,
+     * and stops the moment she does.
+     *
+     * Ordered by importance: the name shapes every single line she says.
+     */
+    public static function knowledgeGaps(int $userId): array
+    {
+        $gaps = [];
+        try {
+            $settings = DB::table('buddy_settings')->where('user_id', $userId)
+                ->first(['display_name', 'extra_json']);
+
+            if (empty($settings->display_name)) {
+                $gaps[] = 'their preferred name — what they like to be called (save with set_my_name)';
+            }
+
+            $extra = json_decode((string) ($settings->extra_json ?? ''), true) ?: [];
+            if (empty($extra['goal'])) {
+                $gaps[] = 'whether they want a monthly goal to chase (set_my_goal — offer, never impose)';
+            }
+
+            $factCount = (int) DB::table('buddy_agent_facts')
+                ->where('user_id', $userId)->where('active', 1)->count();
+            if ($factCount < 2) {
+                $gaps[] = 'what keeps them motivated — what they are working toward in life (remember_fact)';
+            } elseif ($factCount < 6) {
+                $gaps[] = 'more of who they are — how they like to work, what they enjoy selling, life outside work (remember_fact)';
+            }
+        } catch (\Throwable $e) {
+            // no gaps on error — she just skips the interview this turn
+        }
+        return $gaps;
+    }
+
+    private static function setName(int $userId, string $name): array
+    {
+        $name = trim($name);
+        if ($name === '' || mb_strlen($name) > 40) {
+            return ['error' => 'Name must be 1–40 characters.'];
+        }
+        [$name] = BuddyPromptBuilder::scrub($name);
+        try {
+            DB::table('buddy_settings')->updateOrInsert(
+                ['user_id' => $userId],
+                ['display_name' => $name]
+            );
+            return ['saved' => true, 'name' => $name,
+                    'note'  => 'From now on every greeting, toast and spoken line uses this name.'];
+        } catch (\Throwable $e) {
+            return ['error' => 'Could not save the name right now.'];
+        }
     }
 
     // =========================================================================

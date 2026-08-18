@@ -211,11 +211,22 @@ class BuddyService
         $registry = AgentTools::registry($userId, $role);   // greeting may call tools too
         $registry->setConversation($convId);
 
+        // A greeting to a stranger is an introduction, not a report. While she
+        // still has knowledge gaps, the day's first words END with one
+        // get-to-know-you question — that is the proactive interview working
+        // even for an agent who never types a message first.
+        $gaps    = AgentTools::knowledgeGaps($userId);
+        $gapLine = $gaps === []
+            ? ''
+            : 'You are still getting to know them — after the numbers, END the greeting by warmly asking '
+            . 'about this one thing: ' . $gaps[0] . '. ';
+
         $prompt = "It is the start of the agent's business day and they just opened their chat "
                 . "with you. Greet them warmly BY NAME like a close friend who's happy to see "
                 . "them, give a 3–5 sentence read on where they stand using ONLY this digest and "
                 . "any tools you need, and end with one concrete, encouraging focus for today. "
                 . $weekLine
+                . $gapLine
                 . "Mention open nudges if any. This greeting may be spoken aloud, so make it "
                 . "sound natural said out loud.\n\nDIGEST:\n" . $digest;
 
@@ -894,11 +905,19 @@ class BuddyService
 
         $facts = AgentTools::facts($userId);
         $factBlock = $facts === []
-            ? "You don't know them personally yet. Early in the conversation (not all at once), "
-              . "ask what they like to be called and what keeps them motivated — save each answer "
-              . "with remember_fact. Ask what they're aiming for this month too, and save THAT with "
-              . "set_my_goal (not remember_fact) so you can actually track it with them."
+            ? "You don't know them personally yet — the gaps below are your guide."
             : "WHAT YOU REMEMBER ABOUT THEM:\n- " . implode("\n- ", array_slice($facts, 0, 20));
+
+        // Proactive personalization: a computed list of what she does NOT yet
+        // know, refreshed every turn. She interviews until she knows her
+        // person, then the block disappears and she simply IS their friend.
+        $gaps = AgentTools::knowledgeGaps($userId);
+        $gapBlock = $gaps === []
+            ? ''
+            : "\nGETTING TO KNOW THEM — you still don't know:\n- " . implode("\n- ", $gaps) . "\n"
+            . "Whenever the moment is natural, weave in ONE question from this list (top first) and SAVE "
+            . "the answer with the tool named next to it. One question per reply at most — you're a friend "
+            . "getting to know someone, never a form. If they deflect, drop it warmly and try another day.";
 
         return <<<PROMPT
 You are AISHA — the agent's personal work buddy inside the Base Fare CRM, and
@@ -908,6 +927,7 @@ you're on THEIR side.
 
 {$nameLine}
 {$factBlock}
+{$gapBlock}
 
 HARD RULES (non-negotiable):
 - Every number you state comes from a tool call in THIS conversation. Never
