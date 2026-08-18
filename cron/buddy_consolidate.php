@@ -78,15 +78,33 @@ foreach ($candidates as $userId => $msgCount) {
         // Transcripts were scrubbed on write; scrub again anyway (choke point).
         [$transcript] = BuddyPromptBuilder::scrub($transcript);
 
+        // Feedback loop (P11): the agent's thumbs-downs are the clearest
+        // statement of preference they will ever make. Show the disliked
+        // lines so a durable "how to talk to this person" fact can emerge
+        // ("prefers short answers", "doesn't want pep talk on slow days").
+        $disliked = Capsule::table('buddy_messages AS m')
+            ->join('buddy_conversations AS c', 'c.id', '=', 'm.conversation_id')
+            ->where('c.user_id', $userId)->where('c.kind', 'agent')
+            ->where('m.feedback', -1)
+            ->where('m.created_at', '>=', $since)
+            ->orderByDesc('m.id')->limit(3)
+            ->pluck('m.content')
+            ->map(fn($t) => mb_substr((string) $t, 0, 200))
+            ->all();
+        $dislikedBlock = $disliked === [] ? ''
+            : "\n\nMESSAGES THE AGENT DISLIKED (thumbs-down — infer a communication "
+            . "preference only if a clear pattern shows):\n- " . implode("\n- ", $disliked);
+
         $system = "You extract DURABLE personal facts about a sales agent from their chat "
                 . "with their work buddy. Durable = still true months from now: preferred "
-                . "name, goals, motivators, standing commitments, strong preferences. NOT "
-                . "durable: one-off numbers, moods, individual bookings, anything about "
-                . "customers. Reply with ONLY a JSON array of 0-3 short fact strings "
-                . "(max 200 chars each). Do NOT repeat anything from KNOWN FACTS. Reply [] "
-                . "if nothing new and durable was said.";
+                . "name, goals, motivators, standing commitments, strong preferences — "
+                . "including how they like to be spoken to, when disliked-message patterns "
+                . "make that clear. NOT durable: one-off numbers, moods, individual "
+                . "bookings, anything about customers. Reply with ONLY a JSON array of 0-3 "
+                . "short fact strings (max 200 chars each). Do NOT repeat anything from "
+                . "KNOWN FACTS. Reply [] if nothing new and durable was said.";
         $user = "KNOWN FACTS:\n" . ($existing ? '- ' . implode("\n- ", $existing) : '(none)')
-              . "\n\nTRANSCRIPT (last 7 days):\n" . $transcript;
+              . "\n\nTRANSCRIPT (last 7 days):\n" . $transcript . $dislikedBlock;
 
         // Plain generation call (no tools) via the existing email-AI client.
         $gemini = new \App\Services\GeminiService();

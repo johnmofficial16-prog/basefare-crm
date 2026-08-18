@@ -169,6 +169,7 @@ $app->group('/buddy', function ($group) {
     // which only validates state-changing verbs.
     $group->post('/feed',     [\App\Controllers\BuddyController::class, 'feed']);
     $group->post('/greeting', [\App\Controllers\BuddyController::class, 'agentGreeting']);
+    $group->post('/feedback', [\App\Controllers\BuddyController::class, 'feedback']);
     $group->post('/chat',     [\App\Controllers\BuddyController::class, 'agentChat']);
     $group->post('/tts',      [\App\Controllers\BuddyController::class, 'ttsSynthesize']);
     $group->get('/tts/{file}',[\App\Controllers\BuddyController::class, 'ttsAudio']);

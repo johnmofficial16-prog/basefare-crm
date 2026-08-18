@@ -32,6 +32,19 @@ if (!function_exists('lagRound')) {
     }
 }
 
+if (!function_exists('lagEntityId')) {
+    /**
+     * Recover the entity id a lag nudge points at from its dedupe key —
+     * 'eticket_lag:txn:91' or 'acceptance_lag:acc:88:r2' → 91 / 88. The key is
+     * the one place the id is guaranteed to live for every historical row
+     * (acceptance nudges never populated ref_id). Returns 0 when unparseable.
+     */
+    function lagEntityId(string $dedupeKey): int
+    {
+        return preg_match('/^[a-z_]+:(?:txn|acc):(\d+)(?::r\d+)?$/', $dedupeKey, $m) ? (int) $m[1] : 0;
+    }
+}
+
 if (!function_exists('lagKey')) {
     /**
      * Dedupe key for a lag nudge.

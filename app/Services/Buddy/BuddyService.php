@@ -872,6 +872,42 @@ class BuddyService
         }
     }
 
+    /**
+     * Record 👍/👎 on Aisha's most recent message in this user's conversation.
+     *
+     * "Most recent model message" rather than a message id because the widget
+     * renders content, not ids, and the thumb always sits on the newest bubble
+     * — a stale double-click can only ever re-mark the same message, never a
+     * wrong one. This is the only true learning signal available without
+     * fine-tuning: the weekly consolidator reads the dislikes and distills
+     * durable preferences ("shorter replies", "no morning pep talk") into
+     * facts that reshape every future prompt.
+     *
+     * @param int $value 1 (up) or -1 (down); anything else is rejected.
+     */
+    public function recordFeedback(int $userId, string $kind, int $value): bool
+    {
+        if ($value !== 1 && $value !== -1) {
+            return false;
+        }
+        $kind = $kind === 'admin' ? 'admin' : 'agent';
+        try {
+            $msgId = DB::table('buddy_messages AS m')
+                ->join('buddy_conversations AS c', 'c.id', '=', 'm.conversation_id')
+                ->where('c.user_id', $userId)->where('c.kind', $kind)
+                ->where('m.role', 'model')
+                ->orderByDesc('m.id')
+                ->value('m.id');
+            if ($msgId === null) {
+                return false;
+            }
+            DB::table('buddy_messages')->where('id', $msgId)->update(['feedback' => $value]);
+            return true;
+        } catch (Throwable $e) {
+            return false;   // feedback is a nicety — never an error the user sees
+        }
+    }
+
     /** First name for feed phrasing — display_name override, else CRM name. */
     private static function agentFirstName(int $userId): ?string
     {

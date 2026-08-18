@@ -543,6 +543,50 @@ class AgentTools
             $out['momentum'] = ['error' => 'unavailable'];
         }
 
+        // ── The Aisha effect — what happens after she speaks up ─────────────
+        // Built from nudge outcomes recorded by the trigger cron. Self-scoped
+        // like everything else, and honest: resolution counts and speeds are
+        // only stated when they exist, never projected.
+        try {
+            $rows = DB::table('buddy_nudges')
+                ->where('user_id', $userId)
+                ->whereIn('type', ['eticket_lag', 'acceptance_lag', 'dry_spell'])
+                ->whereNotNull('outcome')
+                ->where('created_at', '>=', $since)
+                ->get(['type', 'outcome', 'outcome_hours']);
+
+            $eff = [];
+            foreach ($rows as $r) {
+                $t = (string) $r->type;
+                $eff[$t] ??= ['nudged' => 0, 'resolved' => 0, 'hours' => []];
+                $eff[$t]['nudged']++;
+                if ($r->outcome === 'resolved') {
+                    $eff[$t]['resolved']++;
+                    if ($r->outcome_hours !== null) {
+                        $eff[$t]['hours'][] = (float) $r->outcome_hours;
+                    }
+                }
+            }
+            $effect = [];
+            foreach ($eff as $t => $v) {
+                $effect[$t] = [
+                    'nudged'                   => $v['nudged'],
+                    'resolved_after_nudge'     => $v['resolved'],
+                    'avg_hours_after_nudge'    => $v['hours'] !== []
+                        ? round(array_sum($v['hours']) / count($v['hours']), 1) : null,
+                ];
+            }
+            $out['after_my_nudges'] = [
+                'sample_size' => count($rows),
+                'by_type'     => $effect,
+                'note'        => count($rows) < self::PATTERN_MIN_SAMPLE
+                    ? 'small sample — treat as tentative'
+                    : 'use this to show the agent that acting on nudges pays off — never to scold',
+            ];
+        } catch (\Throwable $e) {
+            $out['after_my_nudges'] = ['error' => 'unavailable'];
+        }
+
         $notice = PerformanceHold::notice($role);
         if ($notice !== null) {
             $out['hold_notice'] = $notice;

@@ -255,6 +255,23 @@ class BuddyController
         return $this->json($response, ['ok' => true] + $result);
     }
 
+    /** POST /buddy/feedback {value: 1|-1, kind: 'agent'|'admin'} — thumb on her latest message. */
+    public function feedback(Request $request, Response $response): Response
+    {
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0) {
+            return $this->json($response, ['ok' => false], 401);
+        }
+        $body = $request->getParsedBody() ?? [];
+        $kind = (string) ($body['kind'] ?? 'agent');
+        // Admin kind only for actual admins — an agent cannot rate the Super Buddy's messages.
+        if ($kind === 'admin' && ($_SESSION['role'] ?? '') !== User::ROLE_ADMIN) {
+            $kind = 'agent';
+        }
+        $ok = $this->service->recordFeedback($userId, $kind, (int) ($body['value'] ?? 0));
+        return $this->json($response, ['ok' => $ok]);
+    }
+
     public function agentChat(Request $request, Response $response): Response
     {
         if (!\App\Services\Buddy\BuddyService::enabled()) {

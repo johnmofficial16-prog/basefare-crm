@@ -69,15 +69,26 @@ class BuddyGeminiClient
         $tokensIn  = 0;   // accumulated across hops — every hop bills separately
         $tokensOut = 0;
 
+        // Model-generation awareness (added Aug 2026 ahead of the 3.x upgrade):
+        // - gemini-2.5-* REQUIRES thinkingBudget 0 on the Express key; 3.x
+        //   models think by default, may reject the parameter, and BILL those
+        //   thinking tokens as output — so for 3.x we omit thinkingConfig and
+        //   raise maxOutputTokens, or a short visible answer dies at the cap
+        //   with an empty reply after the thinking spend.
+        // Upgrading the brain stays a one-line .env change (VERTEX_MODEL);
+        // this branch is what makes that flip safe rather than a silent 400.
+        $legacyThinking = str_starts_with($this->model, 'gemini-2.5');
+
         for ($hop = 0; $hop <= self::MAX_HOPS; $hop++) {
+            $generationConfig = ['maxOutputTokens' => $legacyThinking ? self::MAX_OUTPUT_TOKENS : 2048];
+            if ($legacyThinking) {
+                // MANDATORY for 2.5-flash on the Express key (see GeminiService).
+                $generationConfig['thinkingConfig'] = ['thinkingBudget' => 0];
+            }
             $payload = [
                 'systemInstruction' => ['parts' => [['text' => $systemInstruction]]],
                 'contents'          => $contents,
-                'generationConfig'  => [
-                    'maxOutputTokens' => self::MAX_OUTPUT_TOKENS,
-                    // MANDATORY for 2.5-flash on the Express key (see GeminiService).
-                    'thinkingConfig'  => ['thinkingBudget' => 0],
-                ],
+                'generationConfig'  => $generationConfig,
             ];
             $declarations = $registry->declarations();
             if ($declarations !== []) {
@@ -120,6 +131,9 @@ class BuddyGeminiClient
             // turn really billed, not just the final hop.
             $tokensIn  += (int) ($decoded['usageMetadata']['promptTokenCount'] ?? 0);
             $tokensOut += (int) ($decoded['usageMetadata']['candidatesTokenCount'] ?? 0);
+            // 3.x models bill internal reasoning as output — count it, or the
+            // cost tile understates real spend by the exact amount that hurts.
+            $tokensOut += (int) ($decoded['usageMetadata']['thoughtsTokenCount'] ?? 0);
 
             $functionCalls = [];
             $textOut       = '';

@@ -55,12 +55,13 @@ CREATE TABLE buddy_conversations (
   title TEXT, created_at TEXT, last_message_at TEXT);
 CREATE TABLE buddy_messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER, role TEXT,
-  content TEXT, tokens_in INTEGER, tokens_out INTEGER, created_at TEXT);
+  content TEXT, tokens_in INTEGER, tokens_out INTEGER, feedback INTEGER, created_at TEXT);
 CREATE TABLE buddy_nudges (
   id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT,
   ref_table TEXT, ref_id INTEGER, payload_json TEXT,
   status TEXT DEFAULT 'pending', dedupe_key TEXT UNIQUE,
-  created_at TEXT, delivered_at TEXT);
+  created_at TEXT, delivered_at TEXT,
+  outcome TEXT, outcome_at TEXT, outcome_hours REAL);
 CREATE TABLE buddy_settings (
   user_id INTEGER PRIMARY KEY, enabled INTEGER DEFAULT 1,
   voice_enabled INTEGER DEFAULT 1, display_name TEXT,
@@ -796,6 +797,53 @@ check('set_my_name rejects a novel', isset($regN->execute('set_my_name', ['name'
 $regN->execute('set_my_name', ['name' => 'raj@example.com']);
 check('a PII-shaped name is scrubbed before storage',
     !str_contains((string) Capsule::table('buddy_settings')->where('user_id', $N)->value('display_name'), '@example.com'));
+
+echo "F26. Learning loop — nudge outcomes and the Aisha effect\n";
+require_once __DIR__ . '/../cron/buddy_triggers_rules.php';
+check('entity id from txn key', lagEntityId('eticket_lag:txn:91') === 91);
+check('entity id from escalated acc key', lagEntityId('acceptance_lag:acc:88:r2') === 88);
+check('garbage key yields 0', lagEntityId('dry_spell:user:5:2026-08-19') === 0 && lagEntityId('') === 0);
+
+// Aisha-effect stats: outcomes recorded by the cron → honest self-scoped section.
+$L = 97;
+$mkOutcome = function (string $type, ?string $outcome, ?float $hours, string $key) use ($L, $now) {
+    Capsule::table('buddy_nudges')->insert([
+        'user_id' => $L, 'type' => $type, 'payload_json' => '{}',
+        'status' => 'seen', 'dedupe_key' => $key, 'created_at' => $now,
+        'delivered_at' => $now, 'outcome' => $outcome, 'outcome_hours' => $hours,
+    ]);
+};
+$mkOutcome('eticket_lag', 'resolved', 2.0, 'lo:1');
+$mkOutcome('eticket_lag', 'resolved', 4.0, 'lo:2');
+$mkOutcome('eticket_lag', 'unresolved', null, 'lo:3');
+$mkOutcome('dry_spell',  'resolved', 20.0, 'lo:4');
+$regL = \App\Services\Buddy\AgentTools::registry($L, 'agent');
+$patL = $regL->execute('get_my_patterns', []);
+$aeff = $patL['after_my_nudges'] ?? [];
+check('effect section present', ($aeff['sample_size'] ?? 0) === 4, json_encode($aeff));
+check('e-ticket nudges: 3 nudged, 2 resolved', ($aeff['by_type']['eticket_lag']['nudged'] ?? 0) === 3
+    && ($aeff['by_type']['eticket_lag']['resolved_after_nudge'] ?? 0) === 2);
+check('avg hours after nudge = 3', ($aeff['by_type']['eticket_lag']['avg_hours_after_nudge'] ?? 0) == 3.0);
+check('small sample flagged honest', str_contains((string) ($aeff['note'] ?? ''), 'tentative'));
+check('outcome rows with NULL outcome are excluded', !isset($aeff['by_type']['acceptance_lag']));
+$flatL = json_encode($patL);
+check('effect section carries no customer fields', !preg_match('/customer|email|phone|card/i', $flatL));
+
+echo "F26b. Feedback thumbs\n";
+// Build a conversation with two model messages; feedback must land on the newest.
+$convL = Capsule::table('buddy_conversations')->insertGetId(['user_id' => $L, 'kind' => 'agent',
+    'created_at' => $now, 'last_message_at' => $now]);
+Capsule::table('buddy_messages')->insert(['conversation_id' => $convL, 'role' => 'model', 'content' => 'older', 'created_at' => $now]);
+$newest = Capsule::table('buddy_messages')->insertGetId(['conversation_id' => $convL, 'role' => 'model', 'content' => 'newest', 'created_at' => $now]);
+check('thumbs-down recorded', $svc->recordFeedback($L, 'agent', -1) === true);
+check('lands on the NEWEST model message',
+    (int) Capsule::table('buddy_messages')->where('id', $newest)->value('feedback') === -1);
+check('older message untouched',
+    Capsule::table('buddy_messages')->where('conversation_id', $convL)->where('content', 'older')->value('feedback') === null);
+check('changing your mind overwrites', $svc->recordFeedback($L, 'agent', 1) === true
+    && (int) Capsule::table('buddy_messages')->where('id', $newest)->value('feedback') === 1);
+check('garbage value rejected', $svc->recordFeedback($L, 'agent', 5) === false);
+check('no conversation = graceful false', $svc->recordFeedback(98765, 'agent', 1) === false);
 
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

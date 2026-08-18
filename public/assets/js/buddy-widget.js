@@ -621,6 +621,30 @@
       var b = el('div', 'bw-msg bw-msg-' + kind);
       // Aisha's side gets markdown rendered; the agent's own text stays literal.
       if (kind === 'ai') { b.innerHTML = rich(text); } else { b.textContent = text; }
+      // Feedback thumbs — the learning signal. Rating always applies to her
+      // NEWEST message, which is the one the thumbs sit under.
+      if (kind === 'ai') {
+        var fb = el('div', 'bw-fb');
+        ['👍', '👎'].forEach(function (glyph, gi) {
+          var btn = el('button', 'bw-fb-btn');
+          btn.type = 'button';
+          btn.textContent = glyph;
+          btn.addEventListener('click', function () {
+            if (fb.__done) return;
+            fb.__done = true;
+            fb.querySelectorAll('.bw-fb-btn').forEach(function (x) { x.classList.remove('bw-fb-sel'); });
+            btn.classList.add('bw-fb-sel');
+            fetch('/buddy/feedback', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+              body: JSON.stringify({ value: gi === 0 ? 1 : -1, kind: MODE === 'admin' ? 'admin' : 'agent' }),
+            }).catch(function () {});
+            setTimeout(function () { fb.__done = false; }, 400);   // allow changing your mind
+          });
+          fb.appendChild(btn);
+        });
+        b.appendChild(fb);
+      }
       if (degraded) {
         var tag = el('div', 'bw-degraded');
         tag.textContent = 'AI offline — raw numbers';
@@ -726,6 +750,11 @@
 '.bw-msg-ai{background:rgba(255,255,255,.07);color:#e7ecff;border:1px solid rgba(120,150,255,.14);border-bottom-left-radius:5px}' +
 '.bw-msg-user{background:linear-gradient(135deg,#3b62c4,#5b8cff);color:#fff;border-bottom-right-radius:5px;box-shadow:0 4px 14px rgba(91,140,255,.3)}' +
 '.bw-degraded{margin-top:7px;font-size:9.5px;color:#93a5d9;letter-spacing:.04em}' +
+'.bw-fb{display:flex;gap:2px;margin-top:6px;opacity:0;transition:opacity .15s}' +
+'.bw-msg-ai:hover .bw-fb{opacity:.85}' +
+'.bw-fb-btn{background:none;border:0;cursor:pointer;font-size:12px;padding:1px 4px;border-radius:6px;filter:grayscale(1);opacity:.6}' +
+'.bw-fb-btn:hover{filter:none;opacity:1;background:rgba(255,255,255,.08)}' +
+'.bw-fb-sel{filter:none;opacity:1;background:rgba(91,140,255,.25)}' +
 '.bw-msg-ai b{color:#fff;font-weight:700}' +
 '.bw-msg-ai code{background:rgba(255,255,255,.1);border-radius:4px;padding:1px 5px;font:600 11.5px/1.4 ui-monospace,Menlo,Consolas,monospace}' +
 '.bw-typing{display:flex;gap:4px;align-items:center;padding:13px 15px}' +

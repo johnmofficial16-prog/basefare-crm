@@ -490,6 +490,68 @@ foreach ($goalRows as $g) {
     }
 }
 
+// ── 8. OUTCOME PASS — did the nudges work? ───────────────────────────────────
+// For every delivered lag/dry-spell nudge with no outcome yet: check whether
+// the thing it asked for actually happened, and how long after delivery. This
+// is the learning loop's evidence layer — get_my_patterns turns it into
+// "after I flag an e-ticket you close it in Xh", and it is the only honest
+// basis for ever claiming Aisha improves productivity.
+//
+// Nudges still open after 7 days are closed as 'unresolved' so the statistics
+// stabilise instead of dangling forever. Fail-soft per row; capped per run.
+$outcomes = 0;
+try {
+    $open = Capsule::table('buddy_nudges')
+        ->whereIn('type', ['eticket_lag', 'acceptance_lag', 'dry_spell'])
+        ->whereIn('status', ['delivered', 'seen'])
+        ->whereNull('outcome')
+        ->whereNotNull('delivered_at')
+        ->orderBy('id')
+        ->limit(300)
+        ->get(['id', 'user_id', 'type', 'ref_id', 'dedupe_key', 'delivered_at']);
+
+    foreach ($open as $n) {
+        $resolvedAt = null;
+
+        if ($n->type === 'eticket_lag') {
+            $txnId = $n->ref_id ?: lagEntityId((string) $n->dedupe_key);
+            if ($txnId > 0) {
+                $resolvedAt = Capsule::table('etickets')
+                    ->where('transaction_id', $txnId)->min('created_at');
+            }
+        } elseif ($n->type === 'acceptance_lag') {
+            $accId = lagEntityId((string) $n->dedupe_key);
+            if ($accId > 0) {
+                $resolvedAt = Capsule::table('transactions')
+                    ->where('acceptance_id', $accId)->where('status', '!=', 'voided')
+                    ->min('created_at');
+            }
+        } elseif ($n->type === 'dry_spell') {
+            $resolvedAt = Capsule::table('transactions')
+                ->where('agent_id', $n->user_id)->where('status', 'approved')
+                ->where('created_at', '>', (string) $n->delivered_at)
+                ->min('created_at');
+        }
+
+        $deliveredTs = strtotime((string) $n->delivered_at);
+        if ($resolvedAt !== null) {
+            $hours = max(0, round((strtotime((string) $resolvedAt) - $deliveredTs) / 3600, 1));
+            Capsule::table('buddy_nudges')->where('id', $n->id)->update([
+                'outcome'       => 'resolved',
+                'outcome_at'    => (string) $resolvedAt,
+                'outcome_hours' => $hours,
+            ]);
+            $outcomes++;
+        } elseif (time() - $deliveredTs > 7 * 86400) {
+            Capsule::table('buddy_nudges')->where('id', $n->id)->update(['outcome' => 'unresolved']);
+            $outcomes++;
+        }
+    }
+} catch (\Throwable $e) {
+    error_log('[buddy_triggers] outcome pass failed: ' . $e->getMessage());
+}
+echo "  outcomes recorded: {$outcomes}\n";
+
 echo "  nudges created: {$created}\n";
 
 /**
