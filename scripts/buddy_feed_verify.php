@@ -1074,15 +1074,22 @@ $inject = \App\Services\Buddy\TtsService::toSsml('Careful <break time="9s"/> & c
 check('caller markup cannot inject SSML',
     str_contains($inject, '&lt;break') && substr_count($inject, '<break') <= 2, $inject);
 
-check('Neural2 takes SSML',  \App\Services\Buddy\TtsService::supportsSsml('en-IN-Neural2-D') === true);
-check('Studio takes SSML',   \App\Services\Buddy\TtsService::supportsSsml('en-US-Studio-O') === true);
-check('Chirp3-HD does not',  \App\Services\Buddy\TtsService::supportsSsml('en-IN-Chirp3-HD-Achernar') === false);
+// The three families below are not guesses — tts_voice_probe.php put each of
+// them through the live API on 19 Aug 2026 and these are the answers it got.
+// The first cut of supportsSsml() failed the Chirp3-HD case.
+check('Neural2 takes SSML',   \App\Services\Buddy\TtsService::supportsSsml('en-IN-Neural2-D') === true);
+check('Wavenet takes SSML',   \App\Services\Buddy\TtsService::supportsSsml('en-IN-Wavenet-E') === true);
+check('Standard takes SSML',  \App\Services\Buddy\TtsService::supportsSsml('en-IN-Standard-A') === true);
+check('Chirp3-HD takes SSML too (measured, 200 — NOT what the docs implied)',
+    \App\Services\Buddy\TtsService::supportsSsml('en-IN-Chirp3-HD-Achernar') === true);
+check('the older Chirp-HD is the one that refuses it (measured, 400)',
+    \App\Services\Buddy\TtsService::supportsSsml('en-IN-Chirp-HD-F') === false);
 $_ENV['TTS_SSML'] = 'off';
 check('TTS_SSML=off overrides the family rule',
     \App\Services\Buddy\TtsService::supportsSsml('en-IN-Neural2-D') === false);
 $_ENV['TTS_SSML'] = 'on';
 check('TTS_SSML=on overrides it the other way',
-    \App\Services\Buddy\TtsService::supportsSsml('en-IN-Chirp3-HD-Achernar') === true);
+    \App\Services\Buddy\TtsService::supportsSsml('en-IN-Chirp-HD-F') === true);
 unset($_ENV['TTS_SSML']);
 
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";

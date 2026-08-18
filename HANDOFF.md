@@ -76,34 +76,55 @@ billed once. The verifier checks that pair against each other.
 
 What is left is only the browser's autoplay gesture, which nobody can remove.
 
-### Bug 2 — robotic voice — HALF DONE, needs John
+### Bug 2 — robotic voice — CODE DONE, voice pick is the last step
 
-Done in code:
-- `TtsService` now sends **SSML** (`<speak>` + breaks after the name and
+In code:
+- `TtsService` sends **SSML** (`<speak>` + a beat after the name, a longer one
   between sentences) instead of plain text. Minimal on purpose — heavy
   `<emphasis>` lands theatrical, which is a different wrong from robotic.
-- `supportsSsml()` gates it: Chirp families are documented text-only, so they
-  get plain text and no `pitch`. Overridable with `TTS_SSML=on|off`.
 - The cache hash covers the markup decision, so text and SSML never collide.
+- `supportsSsml()` and the pitch gate are **measured, not assumed** — see below.
 
-**Still needs a human ear.** Run on the server:
+**The probe corrected the code.** `scripts/tts_voice_probe.php` ran against the
+live key on 19 Aug and disproved the rule the first cut shipped with. Results,
+en-IN, 49 voices across 5 families:
 
-```bash
-php scripts/tts_voice_probe.php
+| Family | Voices | SSML | Pitch | Synthesis |
+|---|---|---|---|---|
+| **Chirp3-HD** | 30 | **HTTP 200** | rejected | 1.1–2.4s, ~24–31kB |
+| Chirp-HD | 3 | **HTTP 400** | rejected | ~1.0s, ~24kB |
+| Neural2 | 4 | 200 | ok | 0.5–1.0s, ~54–59kB |
+| Wavenet | 6 | 200 | ok | 0.5–0.8s |
+| Standard | 6 | 200 | ok | 0.5–0.8s |
+
+The first `supportsSsml()` excluded anything matching "chirp" and so denied
+SSML to all thirty Chirp3-HD voices — precisely the ones most likely to fix
+"no emotions". **The split is Chirp3 versus the older Chirp, not the word
+"Chirp".** Fixed and locked into the verifier. The *pitch* gate really is all
+Chirp, and was already right.
+
+Neither Studio nor Chirp3-HD-with-pitch exists for en-IN. `TTS_PITCH=-1` will
+simply be ignored if a Chirp3-HD voice is adopted.
+
+**What is left: listen and choose.** The probe writes the same warm line as
+`/buddy/tts/<hash>.mp3` and prints the URLs — play them logged in, same browser
+session. The candidates that matter are the three Chirp3-HD females in their
+**SSML** versions (Achernar, Aoede, Autonoe), against the incumbent
+`en-IN-Neural2-D`. Re-run `php scripts/tts_voice_probe.php` for fresh URLs.
+
+Then, `.env` only — no deploy, no pull:
+
+```
+TTS_VOICE=en-IN-Chirp3-HD-<name>
 ```
 
-It enumerates what the live key really offers, flies the same warm line across
-Chirp3-HD / Studio / Neural2, tests SSML **and** pitch per voice, and prints
-`/buddy/tts/<hash>.mp3` URLs to listen to while logged in. `--list` spends
-nothing. Then set `TTS_VOICE` in `.env` — no deploy, no pull.
-
-The probe also **verifies the Chirp/SSML assumption** baked into
-`supportsSsml()`. If its "SSML rejected by" line disagrees with the code, fix
-the code rather than leaving it to be rediscovered.
+A future family (Chirp4?) is unknown territory: run the probe rather than
+extending the pattern on a hunch, which is the exact mistake this section
+records.
 
 ### Verification
 
-- `php scripts/buddy_feed_verify.php` → **286 checks, all green** (was 253;
+- `php scripts/buddy_feed_verify.php` → **288 checks, all green** (was 253;
   F30 is the new section). Offline, no API cost. Run it after every change.
 - `php scripts/buddy_greeting_probe.php` → the ear test the verifier
   structurally cannot be. Four live calls, cents.
@@ -246,11 +267,10 @@ hard spend caps; only Gemini/Vertex/Cloud Run are.
 1. **Pull and re-test the arrival end-to-end** with the test agent. Bugs 1 and
    3 are verified offline and against live Gemini, but the voice half of Bug 3
    has never run against the real TTS key — see §0.
-2. **Fly the voices** (`php scripts/tts_voice_probe.php`), pick by ear, set
-   `TTS_VOICE`. This is the last piece of the client's three complaints, and it
-   is a `.env` change, not a deploy.
-3. Check the probe's SSML verdict against `TtsService::supportsSsml()` and fix
-   the code if the live API disagrees.
+2. **Pick the voice by ear.** The flight has already been flown (§0 Bug 2) and
+   the code corrected from its results; what is left is listening to the
+   Chirp3-HD SSML clips against `en-IN-Neural2-D` and setting `TTS_VOICE`. A
+   `.env` change, not a deploy.
 4. Only then: the client showcase artifact may need updating —
    `https://claude.ai/code/artifact/cd9c9535-719d-4f54-ac02-636c391738d2`
    (source also at `Desktop\aisha-showcase.html`).

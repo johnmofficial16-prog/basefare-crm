@@ -120,11 +120,11 @@ class TtsService
                 'audioEncoding' => 'MP3',
                 'speakingRate'  => $rate,
             ];
-            // Chirp-family voices model their own intonation and are
-            // documented as rejecting the pitch knob — and a rejected request
-            // costs the whole voice, not just the setting. Left off for them
-            // until scripts/tts_voice_probe.php says otherwise against the
-            // live API, which beats taking a blog post's word for it.
+            // MEASURED 19 Aug 2026: EVERY Chirp family rejects the pitch knob
+            // — Chirp3-HD as well as the older Chirp-HD — and a rejected
+            // request costs the whole voice, not just the setting. Unlike
+            // SSML, this one really is "all Chirp"; see supportsSsml() for the
+            // neighbouring rule that looks identical and is not.
             if (stripos($voice, 'chirp') === false) {
                 $audioConfig['pitch'] = $pitch;
             }
@@ -207,14 +207,23 @@ class TtsService
     /**
      * Does this voice accept SSML?
      *
-     * Google's Chirp / Chirp3-HD families are documented as text-only: they
-     * generate their own intonation and reject markup, so sending SSML to one
-     * loses the entire voice rather than merely losing the prosody. Everything
-     * else (Neural2, Studio, WaveNet, Standard) takes it.
+     * MEASURED against the live key on 19 Aug 2026 by
+     * scripts/tts_voice_probe.php — because the first version of this method
+     * reasoned from the documentation and got it wrong. It excluded anything
+     * matching "chirp", which silently denied SSML to the entire Chirp3-HD
+     * family: the thirty voices most likely to fix the client's "no emotions,
+     * it's like reading a paragraph".
      *
-     * TTS_SSML=on|off forces the decision when reality disagrees with the
-     * documentation, and scripts/tts_voice_probe.php is what settles that
-     * argument — with real HTTP codes from the live key, per voice.
+     *   Chirp3-HD (30 voices)          SSML HTTP 200      pitch REJECTED
+     *   Chirp-HD  (3 voices)           SSML HTTP 400      pitch REJECTED
+     *   Neural2 / Wavenet / Standard   SSML HTTP 200      pitch ok
+     *
+     * So the split is Chirp3 versus the older Chirp — not the word "Chirp".
+     * A future family (Chirp4?) is unknown territory: run the probe rather
+     * than extending the pattern on a hunch, which is the mistake this
+     * comment exists to record.
+     *
+     * TTS_SSML=on|off forces the decision without a deploy if the API moves.
      */
     public static function supportsSsml(string $voice): bool
     {
@@ -226,7 +235,11 @@ class TtsService
             return true;
         }
 
-        return stripos($voice, 'chirp') === false;
+        if (stripos($voice, 'chirp') === false) {
+            return true;                              // Neural2, Wavenet, Standard, Studio
+        }
+
+        return stripos($voice, 'chirp3') !== false;   // Chirp3-HD yes, the older Chirp-HD no
     }
 
     /**
