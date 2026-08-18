@@ -71,9 +71,18 @@ class TtsService
 
     /**
      * Synthesize (or fetch cached) speech for $text.
+     *
+     * Voice character is tunable three ways, all without a deploy:
+     *   TTS_VOICE  — Google voice name (default en-IN-Neural2-A)
+     *   TTS_RATE   — speaking rate (default 1.04; lower = calmer, softer)
+     *   TTS_PITCH  — semitones (default 1.5; NEGATIVE = warmer, lower voice)
+     * plus per-call overrides (used by the admin's voice tasting) that are
+     * whitelisted + clamped by the caller. The cache hash covers ALL knobs —
+     * without that, two variants of one line would collide on one file.
+     *
      * @return string|null  cache filename (hash.mp3) or null when unavailable.
      */
-    public static function synthesize(string $text): ?string
+    public static function synthesize(string $text, ?string $voice = null, ?float $rate = null, ?float $pitch = null): ?string
     {
         try {
             if (!self::isConfigured()) {
@@ -84,8 +93,13 @@ class TtsService
                 return null;
             }
 
-            $voice = $_ENV['TTS_VOICE'] ?? self::DEFAULT_VOICE;
-            $hash  = md5($voice . '|' . $text);
+            $voice = $voice ?: ($_ENV['TTS_VOICE'] ?? self::DEFAULT_VOICE);
+            $rate  = $rate  ?? (float) ($_ENV['TTS_RATE']  ?? 1.04);
+            $pitch = $pitch ?? (float) ($_ENV['TTS_PITCH'] ?? 1.5);
+            $rate  = max(0.7, min(1.3, $rate));
+            $pitch = max(-10.0, min(10.0, $pitch));
+
+            $hash  = md5($voice . '|' . $rate . '|' . $pitch . '|' . $text);
             $dir   = self::cacheDir();
             $file  = $hash . '.mp3';
             $path  = $dir . '/' . $file;
@@ -105,9 +119,8 @@ class TtsService
                 ],
                 'audioConfig' => [
                     'audioEncoding' => 'MP3',
-                    // Slightly quicker + brighter = friendly, not newsreader.
-                    'speakingRate'  => 1.04,
-                    'pitch'         => 1.5,
+                    'speakingRate'  => $rate,
+                    'pitch'         => $pitch,
                 ],
             ];
 

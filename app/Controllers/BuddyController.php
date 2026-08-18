@@ -347,11 +347,26 @@ class BuddyController
     // the widget falls back to browser speech, then silence.
     // =========================================================================
 
-    /** POST /buddy/tts {text} → {ok, url?, reason?} */
+    /**
+     * POST /buddy/tts {text, voice?, rate?, pitch?} → {ok, url?, reason?}
+     *
+     * The optional knobs exist for voice TASTING — auditioning candidates back
+     * to back before committing one to TTS_VOICE in .env. Whitelisted to
+     * Google's voice-name shape and clamped, so the worst any caller can do is
+     * cache a few extra MP3s of Aisha's own lines.
+     */
     public function ttsSynthesize(Request $request, Response $response): Response
     {
         $body = $request->getParsedBody() ?? [];
-        $file = \App\Services\Buddy\TtsService::synthesize((string) ($body['text'] ?? ''));
+
+        $voice = null;
+        if (isset($body['voice']) && preg_match('/^[a-z]{2,3}-[A-Z]{2}-[A-Za-z0-9-]{1,40}$/', (string) $body['voice'])) {
+            $voice = (string) $body['voice'];
+        }
+        $rate  = isset($body['rate'])  ? (float) $body['rate']  : null;
+        $pitch = isset($body['pitch']) ? (float) $body['pitch'] : null;
+
+        $file = \App\Services\Buddy\TtsService::synthesize((string) ($body['text'] ?? ''), $voice, $rate, $pitch);
         if ($file === null) {
             // Google's reason (SERVICE_DISABLED, key restriction, quota) —
             // diagnostic text only, never key material. Without it, "voice
