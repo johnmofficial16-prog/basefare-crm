@@ -291,7 +291,11 @@
             try {
               if (currentAudio) { currentAudio.onended = null; currentAudio.pause(); }
               currentAudio = new Audio(d.url);
-              currentAudio.onended = speechDone;
+              // onerror too: an audio element that dies mid-play without it
+              // leaves `speaking` stuck true — which silently blocks the mic
+              // from ever arming again. Found while debugging "mic does
+              // nothing" in admin mode.
+              currentAudio.onended = currentAudio.onerror = speechDone;
               currentAudio.play().catch(function () { browserSpeak(payload); });
             } catch (e) { browserSpeak(payload); }
           } else {
@@ -363,8 +367,21 @@
         rec.onerror = function (ev) {
           listening = false;
           setMicUi();
-          if (ev && (ev.error === 'not-allowed' || ev.error === 'service-not-allowed')) convoOff();
-          // other errors (no-speech, network blip) fall through to onend re-arm
+          var code = ev && ev.error ? ev.error : 'unknown';
+          try { console.warn('[buddy] mic error:', code); } catch (e) {}
+          if (code === 'not-allowed' || code === 'service-not-allowed') {
+            convoOff();
+            // Silent failure here looked like a dead button. Say what's wrong
+            // and how to fix it, in the chat where the click just happened.
+            addMsg('ai', "I can't hear you — the browser has microphone access blocked for this site. "
+              + 'Click the lock/tune icon next to the address bar → Site settings → allow Microphone, '
+              + 'then reload and tap the mic again.');
+          }
+          if (code === 'audio-capture') {
+            convoOff();
+            addMsg('ai', "I can't find a microphone on this device — plug one in or check your input settings, then tap the mic again.");
+          }
+          // no-speech / network blips fall through to onend, which re-arms
         };
         rec.onend = function () {
           listening = false;
@@ -376,7 +393,14 @@
         rec.start();
         listening = true;
         setMicUi();
-      } catch (e) { listening = false; setMicUi(); }
+        try { console.log('[buddy] listening'); } catch (e) {}
+      } catch (e) {
+        listening = false;
+        setMicUi();
+        convoOff();
+        try { console.warn('[buddy] mic start failed:', e); } catch (e2) {}
+        addMsg('ai', 'Voice input failed to start in this browser — you can keep typing, and tell John: "mic start failed".');
+      }
     }
     // ── Thinking out loud ──────────────────────────────────────────────────
     // Humans buy processing time by narrating it ("hmm, give me a second…").
