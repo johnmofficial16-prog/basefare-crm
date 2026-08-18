@@ -606,12 +606,14 @@ class BuddyService
      * and it fired precisely when Gemini was unavailable, i.e. when nobody was
      * watching closely enough to catch it.
      */
-    private static function plainGreetingFallback(int $userId): string
+    private static function plainGreetingFallback(int $userId, bool $mayUseAccountName = true): string
     {
         $name = '';
         try {
-            $name = (string) (DB::table('buddy_settings')->where('user_id', $userId)->value('display_name')
-                ?: DB::table('users')->where('id', $userId)->value('name') ?: '');
+            $name = (string) (DB::table('buddy_settings')->where('user_id', $userId)->value('display_name') ?: '');
+            if ($name === '' && $mayUseAccountName) {
+                $name = (string) (DB::table('users')->where('id', $userId)->value('name') ?: '');
+            }
         } catch (Throwable $e) {
             // nameless works fine — it is still warmer than a spreadsheet
         }
@@ -1428,35 +1430,74 @@ PROMPT;
             return ['greeted' => false];
         }
 
-        $convId   = $this->openConversation($adminId, 'admin');
-        $snapshot = self::renderTeamFallback();
+        $convId = $this->openConversation($adminId, 'admin');
 
-        // Rotated per day for the same reason as the agent surface.
-        $gaps    = AgentTools::knowledgeGaps($adminId, 'admin');
-        $gapLine = $gaps === [] ? ''
-            : "If it fits in a few words, be curious about this — folded into the same breath, never "
-            . "announced as a change of subject: "
-            . $gaps[(int) date('z', strtotime($dayKey)) % count($gaps)] . "\n";
+        // HAS SHE EVER MET THIS PERSON? Not "is there history" — history was
+        // just as likely wiped for a demo — but "has she been told anything
+        // about them". No learned name and nothing remembered means no.
+        $known = '';
+        try {
+            $known = (string) (DB::table('buddy_settings')->where('user_id', $adminId)->value('display_name') ?: '');
+        } catch (Throwable $e) {
+            // treated as a first meeting, which is the safe direction
+        }
+        $firstMeeting = $known === '' && AgentTools::facts($adminId) === [];
 
-        $registry = AdminTools::registry($adminId);
-        $registry->setConversation($convId);
+        if ($firstMeeting) {
+            // An introduction, not a briefing. Floor numbers mean nothing to
+            // someone who has not yet been told who is talking to them, and
+            // this is the first thing a new admin ever hears from her — so it
+            // gets its own branch rather than a clause bolted onto the report.
+            //
+            // No snapshot is even computed: there is nothing here she is
+            // allowed to say about it.
+            $prompt = "This is the FIRST time you have ever spoken to this person. Introduce yourself.\n\n"
+                    . "The rules are hard:\n"
+                    . "- ONE short paragraph. 40 WORDS MAXIMUM.\n"
+                    . "- Say you are Aisha, and in ONE clause what you are for: you keep an eye on the "
+                    . "floor and they can ask you anything about the team.\n"
+                    . "- You do NOT know their name. Do not guess it, do not take it off their account, "
+                    . "never call them 'Admin'. END by asking what you should call them.\n"
+                    . "- NO numbers, no briefing, no team names, no lists. They have not even told you "
+                    . "who they are yet.\n"
+                    . "- Warm and spoken, no markdown. This is read out loud.\n";
 
-        // The admin case genuinely IS a briefing — they open the app to find
-        // out what the floor is doing, so unlike the agent greeting the
-        // snapshot stays and the numbers are the point. What it is NOT is a
-        // report: one short paragraph, the single most useful fact, done.
-        $prompt = "Your admin just opened the app. One breath on the floor right now.\n\n"
-                . "The rules are hard:\n"
-                . "- ONE short paragraph. 40 WORDS MAXIMUM. Three sentences is the ceiling.\n"
-                . "- Lead with the single most useful fact. Name a person only if they are genuinely "
-                . "notable today, best or struggling.\n"
-                . "- Use ONLY the snapshot below and the tools. Never estimate, never round for effect.\n"
-                . "- If the floor is quiet, \"quiet so far\" is the WHOLE sentence. NEVER follow it "
-                . "with a list of what there is none of — not \"no sales\", not \"zero revenue\", not "
-                . "\"nothing to report\". Never recite scoring rules, holds or policy.\n"
-                . "- No markdown, no bullets, no headings. This is read out loud.\n"
-                . $gapLine
-                . "\nTEAM SNAPSHOT:\n" . $snapshot;
+            // No tools on an introduction — same reasoning as the agent
+            // greeting, and there is nothing to look up.
+            $registry = new BuddyToolRegistry($adminId);
+            $registry->setConversation($convId);
+        } else {
+            $snapshot = self::renderTeamFallback();
+
+            // Rotated per day for the same reason as the agent surface.
+            $gaps    = AgentTools::knowledgeGaps($adminId, 'admin');
+            $gapLine = $gaps === [] ? ''
+                : "If it fits in a few words, be curious about this — folded into the same breath, never "
+                . "announced as a change of subject: "
+                . $gaps[(int) date('z', strtotime($dayKey)) % count($gaps)] . "\n";
+
+            $registry = AdminTools::registry($adminId);
+            $registry->setConversation($convId);
+
+            // Once she knows them, the admin case genuinely IS a briefing —
+            // they open the app to find out what the floor is doing, so unlike
+            // the agent greeting the snapshot stays and the numbers are the
+            // point. What it is NOT is a report: one short paragraph, the
+            // single most useful fact, done.
+            $prompt = "Your admin just opened the app. One breath on the floor right now.\n\n"
+                    . "The rules are hard:\n"
+                    . "- ONE short paragraph. 40 WORDS MAXIMUM. Three sentences is the ceiling.\n"
+                    . "- Lead with the single most useful fact. Name a person only if they are genuinely "
+                    . "notable today, best or struggling.\n"
+                    . "- Use ONLY the snapshot below and the tools. Never estimate, never round for effect.\n"
+                    . "- A quiet floor is worth saying plainly and ONCE — \"quiet so far, nothing on "
+                    . "the board yet\" is the whole of it. State the zero if it is the useful fact; do "
+                    . "not stack up a list of everything there is none of. Never recite scoring rules, "
+                    . "holds or policy.\n"
+                    . "- No markdown, no bullets, no headings. This is read out loud.\n"
+                    . $gapLine
+                    . "\nTEAM SNAPSHOT:\n" . $snapshot;
+        }
 
         $result = $this->client->chat(
             self::adminPersona($adminId),
@@ -1464,9 +1505,11 @@ PROMPT;
             $registry
         );
 
+        // false: never fall back to the account label, which on this surface is
+        // usually "Super Admin" and would greet a person as "Super".
         $reply = $result['success'] && trim((string) $result['text']) !== ''
             ? $result['text']
-            : self::plainGreetingFallback($adminId);
+            : self::plainGreetingFallback($adminId, false);
         $this->storeMessage($convId, 'model', $reply);
 
         return [
@@ -1505,11 +1548,23 @@ PROMPT;
         $gapBlock  = '';
         if ($adminId > 0) {
             try {
-                $name = DB::table('buddy_settings')->where('user_id', $adminId)->value('display_name')
-                    ?: DB::table('users')->where('id', $adminId)->value('name');
+                // The LEARNED name only. The CRM account name is deliberately
+                // not a fallback on this surface: admin logins are usually
+                // role labels — "Super Admin", "Owner", "Head Office" — and
+                // greeting a person as "Super" while asking what to call them
+                // is worse than using no name at all.
+                //
+                // The agent surface keeps its fallback on purpose: those
+                // accounts are created one per person, with a real name typed
+                // in by whoever set them up. See agentPersona().
+                $name = DB::table('buddy_settings')->where('user_id', $adminId)->value('display_name');
                 if ($name) {
                     $first = explode(' ', trim((string) $name))[0];
                     $nameLine = "You are speaking with {$first}. Use their name naturally, not in every sentence.";
+                } else {
+                    $nameLine = "You do NOT know their name yet. Do not guess it, do not read it off the "
+                              . "account, and never address them as 'Admin'. Speak to them without a name "
+                              . "until they tell you, then save it with set_my_name and use it from then on.";
                 }
                 $facts = AgentTools::facts($adminId);
                 if ($facts !== []) {

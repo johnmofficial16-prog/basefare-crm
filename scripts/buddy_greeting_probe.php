@@ -106,11 +106,24 @@ $svc = new BuddyService();
  */
 const BANNED_AGENT = ['zero', 'net mco', 'revenue', 'august 10', 'scoring', 'performance scoring',
                       'here\'s where you stand', 'on a totally different note'];
-const BANNED_ADMIN = ['zero', 'august 10', 'scoring', 'performance scoring', 'no sales',
-                      'no revenue', 'nothing to report', 'here\'s where you stand',
+// Note what is NOT banned here: "no sales". An admin opening the app on a
+// quiet morning is trying to find out exactly that, and suppressing it makes
+// her less useful, not kinder. The agent rule does not transfer — the client's
+// complaint was about deflating an AGENT, not about informing a manager. What
+// stays banned is the policy recital and the padded list of absences.
+const BANNED_ADMIN = ['zero', 'august 10', 'scoring', 'performance scoring',
+                      'nothing to report', 'here\'s where you stand',
                       'on a totally different note'];
 
-function report(string $label, array $g, float $ms, array $banned = BANNED_AGENT): void
+/**
+ * An admin account is usually a role label ("Super Admin"), so the leak to
+ * watch for on a first meeting is her reading that off the account and using
+ * it as a person's name.
+ */
+const BANNED_FIRST = ['zero', 'august 10', 'scoring', 'no sales', 'no revenue', 'nothing to report',
+                      'super', 'here\'s where you stand', 'on a totally different note'];
+
+function report(string $label, array $g, float $ms, array $banned = BANNED_AGENT, ?string $mustMatch = null): void
 {
     $reply = trim((string) ($g['reply'] ?? ''));
     $words = str_word_count($reply);
@@ -135,6 +148,9 @@ function report(string $label, array $g, float $ms, array $banned = BANNED_AGENT
     $verdict[] = ($words <= 45 ? '✓' : '✗') . " length (target ≤35, hard fail >45)";
     $verdict[] = ($paras <= 1 ? '✓' : '✗') . " single paragraph";
     $verdict[] = ($hits === [] ? '✓' : '✗') . " no banned content" . ($hits ? ' — FOUND: ' . implode(', ', $hits) : '');
+    if ($mustMatch !== null) {
+        $verdict[] = (preg_match($mustMatch, $reply) ? '✓' : '✗') . " asks for their name";
+    }
     echo '   ' . implode("\n   ", $verdict) . "\n\n";
 }
 
@@ -191,6 +207,16 @@ for ($run = 1; $run <= $repeat; $run++) {
     $t0 = microtime(true);
     $g  = $svc->adminGreeting($a, true);
     report('ADMIN — the floor briefing (40-word ceiling)', $g, (microtime(true) - $t0) * 1000, BANNED_ADMIN);
+
+    // ── 5. the very first thing a new admin ever hears. No buddy_settings row
+    //       at all: no learned name, nothing remembered. She must introduce
+    //       herself and ASK — never read the name off the account.
+    $a2 = $u + 4;
+    Capsule::table('users')->insert(['id' => $a2, 'name' => 'Super Admin', 'role' => 'admin']);
+    $t0 = microtime(true);
+    $g  = $svc->adminGreeting($a2, true);
+    report('ADMIN, FIRST EVER — introduce yourself and ask, never assume',
+        $g, (microtime(true) - $t0) * 1000, BANNED_FIRST, '/\?/');
 }
 
 echo str_repeat('=', 78) . "\n";

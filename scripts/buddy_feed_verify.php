@@ -1092,5 +1092,42 @@ check('TTS_SSML=on overrides it the other way',
     \App\Services\Buddy\TtsService::supportsSsml('en-IN-Chirp-HD-F') === true);
 unset($_ENV['TTS_SSML']);
 
+echo "F31. The admin is asked who they are, never assumed\n";
+
+// A CRM admin login is usually a role label, not a person. Reading a name off
+// the account and greeting someone as "Super" — while asking what to call them
+// — is the bug this section exists to prevent.
+$AD = 611;
+Capsule::table('users')->insert(['id' => $AD, 'name' => 'Super Admin']);
+
+$pm2 = $ref->getMethod('adminPersona');
+$p0  = $pm2->invoke(null, $AD);
+check('with no learned name she is TOLD she does not know it',
+    str_contains($p0, 'do NOT know their name'));
+check('and the account label never reaches the prompt',
+    !str_contains($p0, 'Super'), 'account name leaked into the persona');
+check('she is told not to fall back on "Admin" either',
+    str_contains($p0, "never address them as 'Admin'"));
+
+// The greeting itself, brain down: the fallback must not use the label either.
+$gAdmin = $svc->adminGreeting($AD, true);
+$rAdmin = (string) ($gAdmin['reply'] ?? '');
+check('the first admin greeting still fires', ($gAdmin['greeted'] ?? false) === true);
+check('and it does not greet a person as "Super"',
+    !str_contains($rAdmin, 'Super'), $rAdmin);
+check('nor as "Admin"', stripos($rAdmin, 'admin') === false, $rAdmin);
+
+// Once they tell her, she uses it — and the warning disappears.
+\App\Services\Buddy\AgentTools::setNameFor($AD, 'Rahul');
+$p1 = $pm2->invoke(null, $AD);
+check('the name they gave her is used', str_contains($p1, 'speaking with Rahul'));
+check('and the "you do not know it" instruction is gone',
+    !str_contains($p1, 'do NOT know their name'));
+
+// Knowing the name means this is no longer a first meeting, so the greeting
+// goes back to being the floor briefing.
+check('the name gap closes once she is told',
+    !str_contains(json_encode(\App\Services\Buddy\AgentTools::knowledgeGaps($AD, 'admin')), 'preferred name'));
+
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);
