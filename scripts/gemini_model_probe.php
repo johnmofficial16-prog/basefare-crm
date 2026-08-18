@@ -37,7 +37,48 @@ $candidates = [
 ];
 $candidates = array_values(array_unique($candidates));
 
-echo "Probing " . count($candidates) . " model ids against aiplatform.googleapis.com ...\n\n";
+// ── FULL-LOOP MODE (default): reproduce the buddy's real payload ─────────────
+// The bare probe proved 3.x models answer a naked prompt while the buddy still
+// failed — so the breakage lives in what the buddy ADDS: system instruction,
+// tool declarations, and the function-call echo hop. This mode runs the actual
+// BuddyGeminiClient with the actual MaintenanceTools registry and a prompt
+// that FORCES a tool round trip, then prints the verbatim API error on
+// failure. `--bare` keeps the old minimal probe.
+if (!in_array('--bare', $argv, true)) {
+    $capsule = new \Illuminate\Database\Capsule\Manager;
+    $capsule->addConnection([
+        'driver' => 'mysql', 'host' => $_ENV['DB_HOST'], 'database' => $_ENV['DB_DATABASE'],
+        'username' => $_ENV['DB_USERNAME'], 'password' => $_ENV['DB_PASSWORD'],
+        'charset' => 'utf8mb4', 'collation' => 'utf8mb4_unicode_ci',
+    ]);
+    $capsule->setAsGlobal();
+    $capsule->bootEloquent();
+
+    $loopModels = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-3.7-flash'];
+    echo "FULL TOOL-LOOP probe (real registry, forced function call):\n\n";
+    foreach ($loopModels as $model) {
+        $client   = new \App\Services\Buddy\BuddyGeminiClient(null, $model);
+        $registry = \App\Services\Buddy\MaintenanceTools::registry(0);
+        $res = $client->chat(
+            'You are a terse system assistant. You MUST call get_system_pulse before answering anything.',
+            [['role' => 'user', 'parts' => [['text' => 'How many users are active right now? One short sentence.']]]],
+            $registry
+        );
+        if ($res['success']) {
+            printf("%-20s ✓ hops=%d tools=%d out_tokens=%d reply=\"%s\"\n",
+                $model, $res['hops'], count($res['tool_calls']),
+                $res['tokens_out'], trim(mb_substr((string) $res['text'], 0, 60)));
+        } else {
+            printf("%-20s ✗ hops=%d tools=%d %s\n",
+                $model, $res['hops'], count($res['tool_calls']),
+                $res['api_error'] ?? $res['error']);
+        }
+    }
+    echo "\n";
+    exit(0);
+}
+
+echo "Probing " . count($candidates) . " model ids against aiplatform.googleapis.com (bare)...\n\n";
 
 foreach ($candidates as $model) {
     $config = ['maxOutputTokens' => 300];

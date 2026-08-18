@@ -37,10 +37,11 @@ class BuddyGeminiClient
     /** @var callable fn(array $payload): array{code:int, body:string} */
     private $transport;
 
-    public function __construct(?callable $transport = null)
+    public function __construct(?callable $transport = null, ?string $modelOverride = null)
     {
         $this->apiKey    = $_ENV['VERTEX_API_KEY'] ?? getenv('VERTEX_API_KEY') ?: '';
-        $this->model     = $_ENV['VERTEX_MODEL']   ?? getenv('VERTEX_MODEL')   ?: self::DEFAULT_MODEL;
+        $this->model     = $modelOverride
+            ?: ($_ENV['VERTEX_MODEL'] ?? getenv('VERTEX_MODEL') ?: self::DEFAULT_MODEL);
         $this->transport = $transport ?? [$this, 'httpTransport'];
     }
 
@@ -116,6 +117,9 @@ class BuddyGeminiClient
                 return [
                     'success' => false,
                     'error'   => 'The AI service returned an error.',
+                    // Verbatim Google message for operators/probes — the
+                    // generic line above stays what users might ever see.
+                    'api_error'  => 'HTTP ' . ($resp['code'] ?? '?') . ': ' . mb_substr((string) $apiMsg, 0, 300),
                     'hops'    => $hop,
                     'tool_calls' => $toolCalls,
                     'tokens_in'  => $tokensIn,
@@ -141,6 +145,13 @@ class BuddyGeminiClient
                 if (isset($part['functionCall']['name'])) {
                     $functionCalls[] = $part['functionCall'];
                 } elseif (isset($part['text'])) {
+                    // 3.x thinking models may emit thought-summary parts
+                    // (flagged "thought": true). That is internal reasoning,
+                    // not the reply — letting it through would leak chain-of-
+                    // thought into Aisha's mouth.
+                    if (!empty($part['thought'])) {
+                        continue;
+                    }
                     $textOut .= $part['text'];
                 }
             }
@@ -168,12 +179,27 @@ class BuddyGeminiClient
             $echoParts = [];
             foreach ($parts as $part) {
                 if (isset($part['functionCall']['name'])) {
-                    $echoParts[] = ['functionCall' => [
+                    $echo = ['functionCall' => [
                         'name' => $part['functionCall']['name'],
                         'args' => (object) ($part['functionCall']['args'] ?? []),
                     ]];
-                } elseif (isset($part['text'])) {
-                    $echoParts[] = ['text' => $part['text']];
+                    // Gemini 3.x thinking models sign their function calls;
+                    // the signature MUST travel back with the echoed turn or
+                    // the follow-up request is rejected. Same bug class as
+                    // the 16 Aug empty-args {} incident: rebuild-and-drop
+                    // loses a field the proto considers load-bearing. Absent
+                    // on 2.5, harmless to pass through when present.
+                    if (isset($part['thoughtSignature'])) {
+                        $echo['thoughtSignature'] = $part['thoughtSignature'];
+                    }
+                    $echoParts[] = $echo;
+                } elseif (isset($part['text']) && empty($part['thought'])) {
+                    // Thought-summary text is internal — never echoed back.
+                    $echo = ['text' => $part['text']];
+                    if (isset($part['thoughtSignature'])) {
+                        $echo['thoughtSignature'] = $part['thoughtSignature'];
+                    }
+                    $echoParts[] = $echo;
                 }
             }
             $contents[] = ['role' => 'model', 'parts' => $echoParts];
