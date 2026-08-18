@@ -1,331 +1,251 @@
-# Session Handoff — 10 August 2026
+# Session Handoff — 19 August 2026 (early hours)
 
-Working notes for picking this up in a fresh session. Memory files
-(`MEMORY.md`) cover the durable project facts; this covers *today's* state.
-
-> **⚠️ §1–5 below are from 10 Aug and are now STALE.** The server is many
-> commits ahead. See the "17 August update" block immediately below for
-> current state; the memory files are the source of truth.
+Written at the end of a very long session. Everything below is current and
+verified unless it says otherwise. `MEMORY.md` + `memory/ai-buddy-status.md`
+carry the deep history; this is what the NEXT session needs to act.
 
 ---
 
-## 17 Aug (later) — P5 BUILT ✓ (offline-tested 28/28; needs deploy + live drive)
+## 0. START HERE — the three things that are broken
 
-P5 is implemented exactly per the spec below, on local `dev`:
-`BuddyService::agentFeed` + `GET /buddy/feed` (atomic claim, batch cap 3,
-priority praise→urgency, quota-exempt), widget greeting-on-page-load, 75s
-visibility-gated polling, toast-by-orb + badge + spoken delivery with an
-autoplay-unlock queue (speech queued until first click/keydown — Chrome
-blocks it before a gesture). Two latent bugs fixed en route: the greeting
-dedupe check (was "any model message today" — feed messages would have
-suppressed the login greeting; now a stamp in buddy_settings.extra_json) and
-the silent bulk `markNudgesDelivered` on every chat turn (nudges could be
-swallowed unvoiced; the feed is now the only deliverer).
-**P6 companion polish (same session, `f62c9ab`):** lag nudges now ESCALATE
-(rounds at 4h/24h/72h e-ticket, 6h/24h/72h acceptance — round 1 keeps the old
-dedupe key so deploying does NOT re-nudge current laggards); praise carries
-SQL-decided personal-best flags ("biggest this month" / "biggest EVER");
-stale praise is framed as catching up rather than "just saw this land"; money
-reads `$1,240.50` (also fixes how it sounds aloud); the unread badge persists
-across page loads (boot counts pending+delivered, `seen` stamped on panel open
-or via `?open=1`); `get_my_nudges` is recency-windowed with an unread flag.
+Aisha (the AI buddy) is feature-complete and live. But the **greeting
+experience is bad**, and the client said so plainly. Fixing this is the whole
+job of the next session. Do not add features until these three are fixed.
 
-Verify: `php scripts/buddy_feed_verify.php` (SQLite, no network, **58 checks**).
+### Bug 1 — the greeting is an essay, not a greeting
 
-**Self-audit round (`8fc359d`, `a849c07`, + CSRF fix).** Re-reviewing P5/P6
-against the rest of the system turned up four real defects, all fixed:
+This is what she actually said on a fresh open (verbatim, production):
 
-1. **Admin messages were being destroyed.** The Super Buddy writes nudges with
-   `type=admin_message` and the admin's text in `payload.message`. The feed had
-   no case for it, so it fell through to the generic branch — the admin pressed
-   Confirm, saw "sent", and the agent received *"I noticed something on that
-   booking worth a look."* Admin text is now relayed verbatim and outranks
-   every other nudge type.
-2. **Greeting race.** Read-then-write meant two tabs could both greet, at twice
-   the Gemini cost. Now an atomic claim (conditional UPDATE, decided by
-   affected rows), taken *before* the API call, failing closed.
-3. **PII path to Google.** Relaying admin text made an existing gap reachable:
-   `buildContents` never scrubbed history, so an admin's free-typed message —
-   which no scrubber had ever seen — would reach Gemini on the agent's next
-   turn. History is now scrubbed on the way out for every message class. The
-   stored transcript stays intact, so the agent still reads what was written.
-4. **`/buddy/feed` was a mutating GET.** CsrfMiddleware only validates
-   POST/PUT/DELETE/PATCH, so any page an agent visited could have drained their
-   nudges to `seen` with a bare `<img>` tag — Aisha would go quiet with no
-   trace. Now POST + CSRF header.
+> Hey TJ, so good to see you! Chalo, let's get you set for a fantastic day.
+>
+> You're off to a fresh start today with zero sales and revenue so far. This
+> month's numbers are still at zero too, but don't you worry, that's because
+> performance scoring for this month only starts from August 10th. So you've
+> got a clean slate and a whole lot of opportunity ahead!
+>
+> Let's make today about setting up those first sales for the scoring period,
+> what do you say?
+>
+> And on a totally different note, I was wondering, what do you enjoy selling
+> the most, TJ? Is there a particular type of trip or destination that really
+> gets you excited?
 
-Plus: personal-best flags were recomputed ~96× per sale (24h window, 15-min
-cron) with no composite index to lean on — now skipped via a dedupe-key
-pre-check; the greeting no longer opens a conversation row on every page load;
-feed polling backs off 75s → 5 min while quiet and snaps back on
-delivery/backlog/tab-focus/panel-open.
+Client's verdict: *"absolute shit of a greeting... is this how greetings are
+supposed to work."* He is right. Problems, in order of severity:
 
-**P7 — pacing + self-set goals (`8b585fb`, `fe4b701`, `0f98b99`).**
+1. **Far too long.** Four paragraphs. A greeting is one or two sentences.
+2. **It recites internal policy.** "performance scoring for this month only
+   starts from August 10th" is the PerformanceHold notice leaking verbatim into
+   a hello. That is jargon from `PerformanceHold::notice()`, meaningful to
+   management, meaningless and cold to an agent walking in.
+3. **The get-to-know-you question is bolted on**, not woven in — "And on a
+   totally different note, I was wondering..." reads like a form.
+4. **It narrates zeroes.** Telling someone who just arrived that they have zero
+   sales, zero revenue and zero month is deflating and pointless.
 
-*Pacing (defect fix).* The batch cap of 3 never actually paced anything: the
-widget keeps polling fast while `pending_left > 0`, so a backlog of twelve
-nudges arrived as twelve messages in ~5 minutes. Now server-side (client-side
-would be bypassable and would double across tabs): a **cooldown** between
-unsolicited batches — bypassed when the panel is open, because then the agent
-is *asking* — and a **daily ceiling** on how much she initiates, counted over
-the business day. The server returns `hold_seconds` so the widget waits rather
-than polling into a gate. `admin_message` ignores both.
+**Root cause** is in `BuddyService::agentGreeting()`. The prompt stacks four
+competing instructions — greet warmly, give a 3–5 sentence read on the digest,
+end with a concrete focus, plus (conditionally) a week recap AND a knowledge-gap
+question. The model dutifully does all four, and four paragraphs is the correct
+output for that prompt. **The prompt is the bug, not the model.**
 
-*Self-set goals.* Her persona always told her to ask each agent's monthly goal,
-but the answer landed in `buddy_agent_facts` as free text where nothing could
-measure against it. Now `set_my_goal` / `get_my_goal_progress` (structured, in
-`extra_json`, PerformanceHold-compliant, carries forward month to month), plus
-two proactive nudges: `goal_hit` (once per month per metric, ranks just under a
-human message, never expires) and `goal_pace` (weekly at most, only after the
-7th, only when >15% behind, expires like other time-sensitive nudges).
-**Boundary that matters:** this is the agent's *own* goal. Tests assert the
-phrasing never drifts into management-target language and never promises a
-bonus or a consequence.
+**The fix direction:** a greeting is a *hello*, not a briefing. Target:
 
-Verify: **132 checks** via `php scripts/buddy_feed_verify.php`.
+> "Morning TJ! Fresh page today — let's get one on the board. What kind of
+> trips do you like selling most?"
 
-**TODO — deploy + live drive.** On the server:
-`git pull origin dev && php hostinger_migrate.php` (no new migration, but the
-migrator is safe to run). Then, as an agent in Chrome: greeting should speak
-after the first click on the page (autoplay policy — it is queued until then);
-seed a pending nudge and confirm the toast appears by the orb within ~75s.
-Red-team unchanged (no new tools, no new model inputs).
+Concretely: rewrite the greeting prompt to demand ONE short paragraph, max ~35
+words, no statistics unless something is genuinely notable (a personal best, a
+streak, something urgent today), never the hold notice, and the gap question
+folded in as natural conversation rather than appended. Consider dropping the
+digest from the greeting prompt entirely and letting her pull numbers only when
+asked — the numbers are always one question away.
 
-Original design (for reference — all of it is built):
+### Bug 2 — the voice is robotic and emotionless
 
-1. **Nudge feed endpoint** `GET /buddy/feed`: drains this user's `pending`
-   buddy_nudges → phrases each AS AISHA (template-first for token economy:
-   payload has ref/amount/hours; optionally one Gemini call for praise tiers)
-   → stores as `model` messages in their agent conversation (history stays
-   coherent) → marks delivered → returns the new messages.
-2. **Widget polling**: every ~75s while the tab is visible (document.
-   visibilitychange gate). New messages: panel open → append + speak
-   ('greeting'-class voice); panel closed → toast bubble by the orb with the
-   first line + badge + spoken line if voice on. Click toast → open panel.
-3. **Greeting fires on page load, not on orb click**: on boot (agent mode),
-   call /buddy/greeting; if greeted → auto-open panel briefly or toast +
-   SPEAK it. This is the client's "greets him by name when he logs in".
-4. Quota note: feed phrasing must not eat the agent's 40/day chat quota —
-   nudge deliveries are Aisha-initiated, exclude from quotaCheck.
-5. Test plan: offline (feed drains + idempotent, poll gating), then live
-   drive via Chrome session as before. Red-team unchanged (no new tools).
+Client: *"just the accent is different, no emotions, nothing... it's like the
+agent is reading a paragraph, not talking."*
 
-Also pending from the user: confirm backup + consolidator crons are actually
-REGISTERED in hPanel (both verified working by hand 17 Aug 20:49); GCP card
-+ then GOOGLE_TTS_API_KEY (.env) to switch Aisha's real voice on (P4 note
-below); ₹94k Search-credit test on the 18th.
+He is right, and there are three compounding causes:
+
+1. **The text is a paragraph.** Long declarative sentences with no contractions
+   read flat on ANY engine. Fixing Bug 1 fixes much of Bug 2 for free.
+2. **We send plain text, zero SSML.** No prosody, no pauses, no emphasis. See
+   `TtsService::synthesize()` — payload is `['input' => ['text' => $text]]`.
+   Switching to `ssml` with `<break>`, `<emphasis>` and prosody would add life.
+3. **`en-IN-Neural2-D` is a standard neural voice.** Google now has
+   **Chirp3-HD** and **Studio** voice families that are dramatically more
+   natural/emotive. These were NOT probed — we chose from a 4-voice flight of
+   Neural2 options only.
+
+**The fix direction:** extend `scripts/gemini_model_probe.php`'s pattern to a
+**voice probe** — enumerate what the live TTS key actually offers
+(`GET https://texttospeech.googleapis.com/v1/voices`), synthesize the same warm
+line across Chirp3-HD / Studio / Neural2 candidates, and let the client pick by
+ear again. That flight process worked well; reuse it. Voice is already fully
+env-tunable (`TTS_VOICE`, `TTS_RATE`, `TTS_PITCH`) so switching costs nothing.
+
+### Bug 3 — the voice starts 10–15 seconds AFTER the text appears
+
+Client: *"when I opened the window the chat appeared and then after 10-15
+seconds the robotic voice started reading the paragraph.. wtf"*
+
+Sequence today (all in `buddy-widget.js`):
+
+1. `POST /buddy/greeting` returns → text renders **immediately**
+2. `speak()` is called → but audio is blocked until the first user gesture, so
+   it parks in `speechQueue` / `sessionStorage`
+3. User clicks somewhere → `markInteracted()` fires
+4. ONLY THEN `POST /buddy/tts` → Google synthesizes a 4-paragraph block →
+   several seconds → audio finally plays
+
+So the delay is: autoplay wait + synthesis of a long text. Both are real.
+
+**The fix direction:** synthesize server-side **at greeting generation time** and
+return the audio URL alongside the text, so the widget has the MP3 in hand the
+moment it renders the bubble. Then either play immediately (if already
+interacted) or play the instant the gesture arrives — no synthesis round-trip in
+the middle. Shorter greeting text (Bug 1) also cuts synthesis time sharply.
+Consider rendering the text only as playback starts, so voice and text land
+together like a person talking.
 
 ---
 
-## 17 August 2026 update — current state
+## 1. Deploy — read this before anything
 
-**Deployed:** server on `dev` at/after `c6720d7`. Everything through the full
-AI-buddy build (P0–P3) is live and verified. Reliability safety net, the
-40-bug audit fixes, self-hosted Tailwind, 24/7 roster — all shipped. See
-memory: `ai-buddy-status`, `reliability-safety-net`, `roster-24-7`,
-`gcp-credits-deadline`.
+**There is NO auto-deploy.** John pulls manually on SSH, every time. Do not
+assume code is live because it was pushed. Do not tell him a pull is optional.
 
-**Deploy is unchanged:** `git pull origin dev && php hostinger_migrate.php`
-(the migrator is now ledger-based and self-backs-up; safe to run every deploy).
+```bash
+cd ~/domains/base-fare.com/public_html/crm && git pull origin dev && php hostinger_migrate.php
+```
 
-### OPEN OPERATIONAL TASKS (all the user's, none block code)
+- Branch is **`dev`**, never `main` (main is ~240 commits behind).
+- Migrator is ledger-based and self-backs-up; safe every deploy.
+- Server: `u501549865@us-phx-web1355`, path
+  `/home/u501549865/domains/base-fare.com/public_html/crm`.
+- `crm.base-fare.com` docroot is **`crm/public/`**, so the repo-root
+  `.htaccess` does NOT run for that subdomain (discovered live: `/scripts/`
+  returns 404, not 403).
 
-1. **GCP billing card — DUE 18 Aug.** Free-trial credit expires; without a
-   card Gemini goes dark and the whole buddy layer degrades to deterministic
-   fallbacks. Also the Customer-Email AI module. Hard deadline.
-2. **₹94k GenAI Search credit scope test — 18 Aug.** Re-run queries against
-   the `basefare-kb-test` Discovery Engine app after the trial credit lapses;
-   check Billing→Reports credit column. (Details in `gcp-credits-deadline`.)
-3. **hPanel cron jobs to register.** ⚠️ Verified against the actual hPanel list
-   on 17 Aug: only FOUR jobs are registered — `auto_clockout.php` (*/15),
-   `check_email_replies.php` (*/5), `customer_email_inbound.php` (*/5) and
-   `booking_reminders_dispatch.php` (*/15). Earlier notes claiming the buddy
-   trigger cron was registered were WRONG; the 26 nudges it produced came from
-   a manual run. Missing, in priority order:
-   - **Buddy triggers — every 15 min. THE ENGINE.** Without it no nudges are
-     ever created, so the whole P5 "Aisha speaks first" layer has nothing to
-     deliver and she stays silent no matter how well it works.
-     `*/15 * * * *` → `/usr/bin/php <crm>/cron/buddy_triggers.php`
-   - **Nightly backup — daily 03:30.** Backups are stale until this runs.
-     `30 3 * * *` → `/usr/bin/php <crm>/cron/db_backup.php`
-   - Buddy consolidator — weekly Sun 04:00 (memory quality over time):
-     `0 4 * * 0` → `/usr/bin/php <crm>/cron/buddy_consolidate.php`
-   - Optional: `shift_gap_alert.php` (daily ~20:00) — warns when an active
-     agent has no shift for tomorrow. Less urgent while the 24/7 roster covers
-     everyone through 30 Aug.
-   (`<crm>` = `/home/u501549865/domains/base-fare.com/public_html/crm`)
-4. **24/7 roster weekly top-up** (horizon ends 30 Aug):
-   `php <crm>/scripts/schedule_24h_shifts.php --apply --roles=agent,manager`
-5. **Buddy kill switch** if ever needed: set `BUDDY_ENABLED=false` in `.env`
-   (hides widget + 503s all buddy chat, no deploy).
-
-### STILL GATED / DEFERRED (code decisions, not forgotten)
-- Attendance coaching in the buddy stays OFF until the `attendance_sessions.date`
-  overnight-split and dead break-tracking are fixed (rewrites history → needs
-  client sign-off). Plan §13.5.
-- Supervisor role dormant — excluded from all buddy surfaces + the shift bug
-  fixes were deferred (role currently unused).
-- 5 agents inactive 50–100+ days (surfaced by the Super Buddy dry-spell tool)
-  — worth asking the client whether those accounts should stay active; they
-  also each hold a 24/7 shift now.
+**Doctrine (the user made this explicit):** *"Assumption without confirming
+facts is a key to downfall."* See `memory/no-assumptions-doctrine.md`. Verify
+before asserting — probe scripts beat blog posts, live headers beat theory.
 
 ---
 
-## 1. Production state right now
+## 2. Current `.env` state (as of end of session)
 
-| | |
-|---|---|
-| **Deployed commit** | `cfadb62` (server is on `dev`, pulled and verified) |
-| **Production URL** | `crm.base-fare.com` — path `~/domains/base-fare.com/public_html/crm` |
-| **Deploy method** | push to `origin dev` → `git pull origin dev` on the server. **NOT `main`** — `main` is ~241 commits behind and must never be deployed. |
-| **Performance hold** | **ACTIVE** — 1–9 Aug hidden from Performance tab for non-admins. 14 safe-booking refs exempt. Must be lifted when the merchant releases funds. |
-| **Local `dev`** | 1 commit ahead of origin (see §3) |
+```
+VERTEX_MODEL=gemini-2.5-flash      # FAST lane (small talk, ~3s)
+BUDDY_MODEL_THINKING=              # unset → defaults to gemini-3.5-flash (~8s)
+BUDDY_PRICE_IN=1.50
+BUDDY_PRICE_OUT=9.00
+GOOGLE_TTS_API_KEY=<set>           # real voice is LIVE
+TTS_VOICE=en-IN-Neural2-D
+TTS_RATE=0.96
+TTS_PITCH=-1
+```
 
----
+Model routing is automatic (`BuddyService::isHardQuestion()`): small talk →
+fast lane, analytical questions → thinking lane. `BUDDY_SMART_ROUTING=false`
+disables it.
 
-## 2. What shipped today
-
-| Commit | What |
-|---|---|
-| `c2102be` | **Performance hold** — merchant hold hides 1–9 Aug from agent/manager/supervisor scores. Admins unaffected. Read-only filter, writes nothing. |
-| `2ae76e0` | **Invoice print fix** — native vector print instead of html2canvas bitmap |
-| `1a60e7c` | **Invoice font weights** — page now requests Inter 700/800; Manrope 900→800 |
-| `388667a` | **Manual e-tickets** — manager/admin can issue an e-ticket with no linked booking. **Requires migration** (already run). |
-| `ed1b21b` → `cfadb62` | WAF shield built, then **fully reverted** (see §5) |
-
----
-
-## 3. Parked / unpushed
-
-**`92239ef` — attendance work. On local `dev` only, NOT pushed.**
-
-Contains: successful-login logging, mandatory reason on admin clock-in,
-`created_via`/`created_by_user_id`/`created_reason` columns + migration,
-"by admin" badges on Live Board and History.
-
-Why parked: needs `php hostinger_migrate.php`, and it **changes historical hour
-figures**. The client should be told before it ships.
+**GCP:** billing card is attached. Budget "Aisha AI spend - 2000 INR monthly"
+exists, alerts-only at 50/90/100% + 95% forecast, scoped to project
+`johns-project-496821`. Total spend to date ≈ ₹2. Note: TTS is NOT eligible for
+hard spend caps; only Gemini/Vertex/Cloud Run are.
 
 ---
 
-## 4. Open bugs — found, diagnosed, NOT fixed
+## 3. What IS working (verified live, don't re-litigate)
 
-1. **91.7-hour monthly-report bug.** `AttendanceService::getMonthlyReport()`
-   keys sessions by date (`$sessionMap[$user][$date] = $s`), so an agent with
-   two sessions in a day loses the earlier one's hours. JSR alone was
-   understated by 91.7 hrs in July. Day counts are correct; hours are not.
-   **Payroll currently reads wrong hours.**
-
-2. **Business-day windowing inconsistency.** Business day = 24h from 18:00
-   (`ShiftService::businessDayBounds()`). Only 4 places honour it. ~9 places use
-   calendar days — `PerformanceController` (custom/monthly), `AnalyticsController`,
-   `ChargebackController`, `DashboardController` (month KPIs), `MobileAdminController`,
-   `AnalyticsService` (prev-period), `Transaction::scopeByDateRange`,
-   and `LiveBoardController` **hardcodes 18** instead of reading config.
-
-3. **`attendance_sessions.date` splits overnight shifts.** Set as
-   `date('Y-m-d')` at clock-in, so a shift crossing midnight lands on two dates.
-   This is the likely cause of "days present > days rostered" — my earlier claim
-   that the roster was unreliable was probably wrong.
-
-4. **Break tracking dead.** Zero break minutes for all 12 JSR agents for all of
-   July. Undiagnosed — could be unused feature or not writing.
-
-5. **Notes visibility — UNRESOLVED.** Client reported a manager's remark not
-   visible to admin. Leading theory: acceptances and transactions keep
-   **separate note timelines** and the transaction view never merges the linked
-   acceptance's notes. Diagnostic script was written but **never run** — needs
-   `php scripts/tracenotes.php G7BGL3 AHYX2I` (script not on server).
+- Gemini brain, tool calling, grounded answers — `ai:true`, no hallucinated numbers
+- Real TTS voice plays (`/buddy/tts` → MP3, cached by content hash)
+- Proactive nudges: 10 trigger rules, cron running every 15 min
+- Feed delivery, toasts, pacing (cooldown + daily ceiling)
+- Goals: set / track pace / celebrate / **clear**
+- Patterns coaching + week recap (3.5-flash selects the tool; 2.5 did not)
+- Personalization: `set_my_name`, facts, computed knowledge gaps
+- Admin: team stats, confirm-gate on actions (park → cancel → confirm-fails ✓)
+- Learning loop: nudge outcomes, 👍/👎 feedback → weekly consolidation
+- Self-monitoring: every cron writes an unconditional heartbeat
+- **All 7 crons registered and firing** (verified via heartbeat, not assumed)
+- `php scripts/buddy_feed_verify.php` → **253 checks, all green** (SQLite, no
+  network, no API cost). Run it after every change.
 
 ---
 
-## 5. The WAF incident — what actually happened
+## 4. Known-broken / blocked (not the greeting bugs above)
 
-**Symptom:** transaction saves 403'd with LiteSpeed's error page. Cyrus and Sam
-(both Mohali) blocked; Thomas (JSR) fine. Volume dropped 11–16/day → 1.
-
-**Root cause:** Hostinger's shared WAF blocked POSTs from Mohali's static IP
-`112.196.52.242` before they reached PHP. Confirmed by Hostinger's own access
-log (12× 403 on `POST /transactions/create`). Never our code.
-
-**Fix:** Hostinger added a **WAF allowlist for 112.196.52.242/32**. Stable
-because the IP is static.
-
-**What I got wrong, for the record:**
-- Built a base64 "WAF shield" that did NOT beat the WAF (the blocks at
-  21:38–21:46 were the shield failing), and it introduced a bug: renaming
-  uploads to `.bin` broke `saveProofFiles()`'s extension whitelist, so saves
-  failed silently after the allowlist landed. Fixed, then the whole shield was
-  reverted in `cfadb62`.
-- Suggested rebooting the router for a new IP — Mohali's IP is **static**.
-- Speculated a credit-card number in a note triggered a PCI rule. **Tested and
-  not supported** — a Luhn-valid card number reached PHP fine.
-
-**Rule ID never obtained.** Kodee (Hostinger AI) could only see access logs, not
-the ModSecurity audit log. Would need human escalation. Not urgent now.
-
-**Still open risk:** JSR has a **dynamic** IP, so it can't be allowlisted the
-same way. If JSR's IP gets flagged, this recurs there.
+- **Admin voice INPUT (mic) does not work.** Hostinger's CDN edge injects
+  `Permissions-Policy: camera=(), microphone=(), geolocation=()` on every
+  dynamic response. Origin `.htaccess` cannot override it (and doesn't even run
+  on that subdomain — see §1). **Fix requires a Hostinger support ticket** or a
+  hPanel CDN/security-headers toggle. John explicitly deferred this — he was
+  burned before by a WAF change that silently broke transaction saves, and does
+  not want config roulette on a live subdomain. Ask support:
+  *"Your CDN injects Permissions-Policy microphone=() on crm.base-fare.com —
+  can you allow microphone=(self) or exclude this subdomain?"*
+  Voice OUTPUT is unaffected and works.
+- Conversation mode (turn-taking, barge-in, thinking-out-loud filler) is built
+  and tested offline but **never field-tested**, because it needs the mic.
+- `gemini-3.7-flash` times out with our full payload — do not use.
+- Attendance coaching in the buddy stays OFF (overnight date-split +
+  dead break tracking unfixed; needs client sign-off).
 
 ---
 
-## 6. Unverified
+## 5. Testing setup that exists
 
-**Invoice PDF fonts.** After `1a60e7c`, a fresh PDF should embed **Inter** and
-**Manrope**, with `Arial-Black` gone. Never confirmed — the last PDF checked was
-from before the fix. Ask for a fresh PDF and inspect its font table.
-
----
-
-## 7. Next topics (where the conversation was heading)
-
-**A. VPS migration — decision pending, not urgent.**
-- Recommended spec if going ahead: **Hostinger KVM 2 (2 vCPU / 8GB), Mumbai,
-  CyberPanel** — cheapest, easiest migration, `.htaccess` keeps working.
-  (I initially omitted Hostinger from the options by wrongly assuming they
-  wanted to leave the vendor.)
-- **Drawbacks discussed:** security becomes theirs (they store card data incl.
-  CVV, docroot = repo root, `.env` was public for 6 weeks previously); no 3am
-  support; patching/backups become their job; single-person maintenance risk.
-- **My advice given:** don't migrate in the aftermath of an incident. The WAF
-  problem is already fixed. The AI buddy does **not** need a VPS (it's just API
-  calls). Migrate calmly in a month if consolidating projects.
-- Three migration landmines: the **encryption key file** (`ENCRYPTION_KEY_FILE` —
-  miss it and every stored card is unrecoverable), the **`storage/` tree**
-  (gitignored uploads: proofs, signatures, payroll PDFs), and **`.htaccess`**
-  (Apache-only; 8 security rules).
-
-**B. AI "CRM buddy" — proposed, not started.**
-Per-agent conversational assistant with memory, grounded in their own stats,
-coaching toward better scores. Proposed 3 phases: grounded assistant → memory
-(conversations + agent-facts tables) → proactive nudges. Hard constraint: **no
-customer PII to the AI** (follow the existing `AnalyticsService` aggregate-only
-pattern). Cost estimate ~$15–40/mo on Gemini Flash. Uses existing
-`VERTEX_API_KEY`.
-
-Open questions I asked and haven't been answered:
-1. VPS size / go-ahead?
-2. Which other projects move over? (`letsfly-travel.com`, BFHD site?)
-3. Buddy v1: coach-only, or can it take actions?
+- **Test agent:** `test@basefare.com`, role agent, clocked in, preferred name
+  saved as "TJ", monthly goal 5 sales. Logged into a Chrome window named
+  *"skyteam search console"*.
+- Claude can drive Chrome via the browser MCP — `list_connected_browsers`, then
+  `switch_browser` and click Connect in the right window. Multiple Chrome
+  profiles are connected; always confirm which one.
+- Cannot enter passwords (hard rule) — John must log accounts in.
+- Useful in-page probe (run in the test-agent tab):
+  `fetch('/buddy/greeting',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:'{"fresh":1}'})`
+- `php scripts/gemini_model_probe.php` — model × thinking-level matrix WITH
+  latency, using the real registry and a forced tool call. `--bare` for minimal.
 
 ---
 
-## 8. Gotchas for whoever picks this up
+## 6. Landmines
 
-- **Deploy from `dev`, never `main`.** The architecture doc is wrong about this.
-- **Shipping one commit without dragging others:**
-  `git checkout -b ship-x origin/dev && git cherry-pick <sha> && git push origin ship-x:dev`
-  then `git checkout dev && git rebase origin/dev && git branch -d ship-x`.
-- **`git push` is sometimes blocked** by the environment's permission classifier.
-  It worked later in the session; if blocked, the user must run it.
-- **`scp` kept failing** because it was run *inside* the SSH session. Either
-  push via git or paste a heredoc. Long heredocs can truncate — keep them short.
-- **`.gitignore` has `test_*.php`** — a script named `test_shield_save.php` was
-  silently ignored. Renamed to `shield_verify.php`.
-- **`git add -A` swept in stray files** (`show_tables.php`, `test_miles.sql`,
-  `update_enum.sql`) that are untracked and shouldn't ship. Stage explicitly.
-- **Server has leftover scripts** in `scripts/` from debugging (`shield_verify.php`,
-  `blocks.php`, `edge.php`, `cyrus403.php`, `notes.php`, `hr.php`, `find4.php`,
-  `refs.php`, `q.php`, etc.). Harmless (`.htaccess` blocks `scripts/` over HTTP)
-  but worth cleaning.
-- **The user prefers short answers.** Long structured dumps get pushback.
+- **hPanel cron form has a FIXED PREFIX** `/usr/bin/php /home/u501549865/`.
+  Paste only the tail (`domains/base-fare.com/...`). Pasting a full path
+  produces `//usr/bin/php` and the job silently never runs. hPanel has no edit —
+  delete and recreate. Minute box is multi-select. A blank Weekday makes a
+  "weekly" job run daily.
+- **Browser cache lies.** Fetching `/assets/js/buddy-widget.js` without the
+  `?v=` cache-buster returns a stale copy — this made a current deploy look
+  months behind. Always fetch the versioned URL with `cache:'no-store'`.
+- **Gemini 3.x** signs function calls with `thoughtSignature` that MUST be
+  echoed back, and bills thinking as output tokens. Handled in
+  `BuddyGeminiClient`, but don't strip unknown parts from echoed turns.
+- `.gitignore` contains `test_*.php` — a test script with that name is silently
+  ignored. Name verification scripts `*_verify.php`.
+- Stage files explicitly; `git add -A` sweeps in stray root files.
+
+---
+
+## 7. Suggested order for the next session
+
+1. **Fix Bug 1 (greeting prompt).** Cheapest, biggest perceived win. One prompt
+   rewrite in `BuddyService::agentGreeting()`, plus suppress the hold notice in
+   greetings. Same treatment for `adminGreeting()`.
+2. **Fix Bug 3 (audio/text desync).** Pre-synthesize server-side, return the URL
+   with the greeting, land text and voice together.
+3. **Fix Bug 2 (voice quality).** Probe the live TTS voice list, build a
+   Chirp3-HD / Studio flight, let John pick by ear, add SSML prosody.
+4. Re-test the whole arrival experience end-to-end with the test agent.
+5. Only then: the client showcase artifact may need updating —
+   `https://claude.ai/code/artifact/cd9c9535-719d-4f54-ac02-636c391738d2`
+   (source also at `Desktop\aisha-showcase.html`).
+
+**Tone note for whoever picks this up:** John moves fast, tests everything in
+production himself, and is rightly allergic to hand-waving. Give him measured
+facts and one-line commands. He has said several times he wants brutal honesty
+over reassurance — when something isn't verified, say so.
