@@ -36,9 +36,32 @@ class TtsService
     private const MAX_CHARS       = 600;
     private const TIMEOUT_SECONDS = 15;
 
+    /** Google's reason for the last failure — shown to the operator, never logged with any key material. */
+    public static ?string $lastError = null;
+
     public static function isConfigured(): bool
     {
-        return (bool) ($_ENV['GOOGLE_TTS_API_KEY'] ?? getenv('GOOGLE_TTS_API_KEY') ?: '');
+        return self::apiKey() !== '';
+    }
+
+    /**
+     * Key resolution: a dedicated GOOGLE_TTS_API_KEY always wins; without one
+     * we TRY the existing VERTEX_API_KEY. Rationale ("can't we just use the
+     * key we already have?" — asked 19 Aug): if the key's project happens to
+     * have the Text-to-Speech API enabled, the real voice simply works with
+     * zero new setup. If it doesn't, Google answers with its exact reason
+     * (usually SERVICE_DISABLED), we surface that, and the widget stays on
+     * browser speech. The probe costs nothing and turns speculation into an
+     * answer either way.
+     */
+    private static function apiKey(): string
+    {
+        $own = $_ENV['GOOGLE_TTS_API_KEY'] ?? getenv('GOOGLE_TTS_API_KEY');
+        if (is_string($own) && $own !== '') {
+            return $own;
+        }
+        $vertex = $_ENV['VERTEX_API_KEY'] ?? getenv('VERTEX_API_KEY');
+        return is_string($vertex) && $vertex !== '' ? $vertex : '';
     }
 
     public static function cacheDir(): string
@@ -95,7 +118,7 @@ class TtsService
                 CURLOPT_TIMEOUT        => self::TIMEOUT_SECONDS,
                 CURLOPT_HTTPHEADER     => [
                     'Content-Type: application/json',
-                    'x-goog-api-key: ' . ($_ENV['GOOGLE_TTS_API_KEY'] ?? getenv('GOOGLE_TTS_API_KEY')),
+                    'x-goog-api-key: ' . self::apiKey(),
                 ],
                 CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
             ]);
@@ -109,6 +132,7 @@ class TtsService
                 if (isset($dec['error']['message'])) {
                     $msg = $dec['error']['message'];
                 }
+                self::$lastError = "HTTP {$code}: " . mb_substr($msg ?: 'no response', 0, 300);
                 ErrorLogService::log('warning', "[tts] synthesize failed HTTP {$code}: " . mb_substr($msg, 0, 200));
                 return null;
             }

@@ -347,13 +347,20 @@ class BuddyController
     // the widget falls back to browser speech, then silence.
     // =========================================================================
 
-    /** POST /buddy/tts {text} → {ok, url?} */
+    /** POST /buddy/tts {text} → {ok, url?, reason?} */
     public function ttsSynthesize(Request $request, Response $response): Response
     {
         $body = $request->getParsedBody() ?? [];
         $file = \App\Services\Buddy\TtsService::synthesize((string) ($body['text'] ?? ''));
         if ($file === null) {
-            return $this->json($response, ['ok' => false]);
+            // Google's reason (SERVICE_DISABLED, key restriction, quota) —
+            // diagnostic text only, never key material. Without it, "voice
+            // doesn't work" is undebuggable from the widget side.
+            $out = ['ok' => false];
+            if (\App\Services\Buddy\TtsService::$lastError !== null) {
+                $out['reason'] = \App\Services\Buddy\TtsService::$lastError;
+            }
+            return $this->json($response, $out);
         }
         return $this->json($response, ['ok' => true, 'url' => '/buddy/tts/' . $file]);
     }
