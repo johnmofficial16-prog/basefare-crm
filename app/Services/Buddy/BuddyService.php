@@ -107,6 +107,69 @@ class BuddyService
     }
 
     // =========================================================================
+    // MODEL ROUTER — the right brain for the question (user's design, 19 Aug:
+    // "switch models depending on the difficulty of the question… that's how
+    // humans process too").
+    //
+    // Two lanes, measured on production before choosing them:
+    //   FAST     gemini-2.5-flash, thinking off — ~3s. Small talk, lookups.
+    //   THINKING gemini-3.5-flash — ~8-10s, but the only brain that reliably
+    //            picks the right tools for analytical questions (patterns,
+    //            conversion, coaching) and resists its own bad-history anchor.
+    //
+    // The routing decision itself is a deterministic heuristic, deliberately:
+    // asking a model "is this hard?" would spend seconds deciding how not to
+    // spend seconds. Misroutes are benign — easy→thinking is merely slow,
+    // hard→fast is exactly today's baseline behaviour.
+    //
+    // Env knobs (no deploy): BUDDY_SMART_ROUTING=false kills the router;
+    // BUDDY_MODEL_THINKING overrides the thinking lane. The fast lane is
+    // VERTEX_MODEL as always.
+    // =========================================================================
+
+    private const THINKING_MODEL_DEFAULT = 'gemini-3.5-flash';
+
+    /** Pure + public for the offline verifier. */
+    public static function isHardQuestion(string $m): bool
+    {
+        $m = mb_strtolower($m);
+        // Analytical/coaching intent → worth thinking about.
+        if (preg_match(
+            '/pattern|trend|convers|compar|improv|advice|advise|coach|strateg|analy|'
+            . 'best (day|time)|rate|recap|review|why |how am i|how do i|should i|'
+            . 'what.s my (week|month)|versus| vs |plan for|help me (with|figure)/u',
+            $m
+        )) {
+            return true;
+        }
+        // Long or multi-part questions carry compound intent.
+        if (mb_strlen($m) > 160) {
+            return true;
+        }
+        if (substr_count($m, '?') >= 2) {
+            return true;
+        }
+        return false;
+    }
+
+    /** @return string|null Thinking-lane model, or null to use the default client. */
+    private static function pickModel(string $message): ?string
+    {
+        $routing = $_ENV['BUDDY_SMART_ROUTING'] ?? getenv('BUDDY_SMART_ROUTING') ?: 'true';
+        if ($routing === 'false' || !self::isHardQuestion($message)) {
+            return null;
+        }
+        return $_ENV['BUDDY_MODEL_THINKING'] ?? getenv('BUDDY_MODEL_THINKING') ?: self::THINKING_MODEL_DEFAULT;
+    }
+
+    /** Client for this turn: default (fast) unless the question earns thinking. */
+    private function clientFor(string $message): BuddyGeminiClient
+    {
+        $model = self::pickModel($message);
+        return $model === null ? $this->client : new BuddyGeminiClient(null, $model);
+    }
+
+    // =========================================================================
     // AGENT CHAT (P1)
     // =========================================================================
 
@@ -141,7 +204,7 @@ class BuddyService
         $registry = AgentTools::registry($userId, $role);
         $registry->setConversation($convId);
 
-        $result = $this->client->chat(self::agentPersona($userId), $contents, $registry);
+        $result = $this->clientFor($message)->chat(self::agentPersona($userId), $contents, $registry);
 
         if ($result['success']) {
             $this->storeMessage($convId, 'model', $result['text'], $result['tokens_in'] ?? null, $result['tokens_out'] ?? null);
@@ -1044,7 +1107,7 @@ PROMPT;
         $registry = AdminTools::registry($adminId);
         $registry->setConversation($convId);
 
-        $result = $this->client->chat(self::adminPersona(), $contents, $registry);
+        $result = $this->clientFor($message)->chat(self::adminPersona(), $contents, $registry);
 
         // Surface the confirm gate to the UI: if the model parked an action this
         // turn, the widget renders Confirm/Cancel buttons alongside the reply.

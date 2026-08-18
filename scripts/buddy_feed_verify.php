@@ -845,5 +845,34 @@ check('changing your mind overwrites', $svc->recordFeedback($L, 'agent', 1) === 
 check('garbage value rejected', $svc->recordFeedback($L, 'agent', 5) === false);
 check('no conversation = graceful false', $svc->recordFeedback(98765, 'agent', 1) === false);
 
+echo "F27. Model router — the right brain for the question\n";
+$easy = [
+    'hi aisha!',
+    'sales today?',
+    'good morning',
+    'call me TJ please',
+    'thanks! see you tomorrow',
+    'whats the status of booking G7BGL3',
+];
+foreach ($easy as $q) {
+    check("fast lane: \"{$q}\"", BuddyService::isHardQuestion($q) === false, $q);
+}
+$hard = [
+    'do you see any patterns in my work?',
+    'whats my conversion rate like?',
+    'how am i doing against my goal this month',
+    'compare this week to last week',
+    'why did my numbers drop? and what should i focus on?',
+    'give me advice on improving my e-ticket speed',
+    'help me figure out a plan for the rest of the month',
+    'how was my week? and my month? and am I on track for the bike?',
+];
+foreach ($hard as $q) {
+    check("thinking lane: \"" . mb_substr($q, 0, 40) . "\"", BuddyService::isHardQuestion($q) === true, $q);
+}
+// Length alone qualifies (compound intent), two question marks qualify.
+check('long message routes to thinking', BuddyService::isHardQuestion(str_repeat('tell me about my day and then some more words ', 5)));
+check('double question routes to thinking', BuddyService::isHardQuestion('sales today? bookings tomorrow?'));
+
 echo "\n" . ($fail === 0 ? "ALL {$pass} CHECKS PASSED ✓" : "{$fail} FAILED / {$pass} passed ✗") . "\n";
 exit($fail === 0 ? 0 : 1);

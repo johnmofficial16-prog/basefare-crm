@@ -268,6 +268,7 @@
         return false;
       }
       clearParkedSpeech();
+      stopFiller();   // her real voice replaces the thinking line, never overlaps it
       // Strip markdown before it reaches any voice engine, or she reads the
       // syntax out loud.
       var payload = plain(text).slice(0, 600);
@@ -377,6 +378,54 @@
         setMicUi();
       } catch (e) { listening = false; setMicUi(); }
     }
+    // ── Thinking out loud ──────────────────────────────────────────────────
+    // Humans buy processing time by narrating it ("hmm, give me a second…").
+    // In conversation mode, if her real answer hasn't arrived within 2.5s,
+    // she says a short filler — pre-synthesized so it plays instantly — and
+    // the silence reads as thought instead of a dropped call. Deliberately
+    // OUTSIDE the speak() state machine: a filler must never trigger the
+    // "she finished talking, reopen the mic" cue.
+    var FILLERS = [
+      'Hmm, good question — give me a few seconds while I think on that.',
+      'Let me look into that for a moment.',
+      'One second, checking that for you.',
+    ];
+    var fillerUrls = [], fillerAudio = null, fillerTimer = null;
+    function prefetchFillers() {
+      if (fillerUrls.length || !voiceOn) return;
+      FILLERS.forEach(function (line) {
+        fetch('/buddy/tts', { method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+          body: JSON.stringify({ text: line }) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) { if (d && d.ok && d.url) fillerUrls.push(d.url); })
+          .catch(function () {});
+      });
+    }
+    function playFiller() {
+      if (!convo || !voiceOn || speaking) return;
+      try {
+        if (fillerUrls.length) {
+          fillerAudio = new Audio(fillerUrls[Math.floor(Math.random() * fillerUrls.length)]);
+          fillerAudio.play().catch(function () {});
+        } else if (ttsOk) {
+          var u = new SpeechSynthesisUtterance(FILLERS[0]);
+          if (chosenVoice) u.voice = chosenVoice;
+          window.speechSynthesis.speak(u);
+        }
+      } catch (e) {}
+    }
+    function stopFiller() {
+      clearTimeout(fillerTimer);
+      fillerTimer = null;
+      try { if (fillerAudio) { fillerAudio.pause(); fillerAudio = null; } } catch (e) {}
+    }
+    function armFiller() {
+      if (!convo || !voiceOn) return;
+      stopFiller();
+      fillerTimer = setTimeout(playFiller, 2500);
+    }
+
     // Her side of the turn-taking: the moment she finishes a sentence, the
     // floor is yours again.
     onAishaDoneSpeaking = function () {
@@ -384,11 +433,12 @@
     };
     if (micBtn && SR) {
       micBtn.addEventListener('click', function () {
-        if (convo) { convoOff(); return; }
+        if (convo) { convoOff(); stopFiller(); return; }
         convo = true;
         convoStartedAt = Date.now();
         lastHeard = 0;
         stopSpeaking();       // barge-in: the click cuts her off mid-word
+        prefetchFillers();    // thinking-lines ready before they're needed
         startListening();
         setMicUi();
       });
@@ -576,6 +626,7 @@
       // Sending is a barge-in: whatever she was saying, the human moved on.
       stopSpeaking();
       stopRec();
+      armFiller();   // in convo mode: "hmm, let me think…" if the answer takes long
       addMsg('user', text);
       input.value = '';
       send.disabled = true;
@@ -586,6 +637,7 @@
         .then(function (r) { return r.json(); })
         .then(function (d) {
           t.remove();
+          stopFiller();
           if (d.success) {
             addMsg('ai', d.reply, d.ai === false);
             var willSpeak = speak(d.reply, 'reply');
@@ -600,6 +652,7 @@
         })
         .catch(function () {
           t.remove();
+          stopFiller();
           addMsg('ai', 'Network hiccup — try again.');
           if (typeof onAishaDoneSpeaking === 'function') onAishaDoneSpeaking();
         })
