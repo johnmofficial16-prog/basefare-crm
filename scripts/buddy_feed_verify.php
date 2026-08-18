@@ -874,25 +874,34 @@ foreach ($hard as $q) {
 check('long message routes to thinking', BuddyService::isHardQuestion(str_repeat('tell me about my day and then some more words ', 5)));
 check('double question routes to thinking', BuddyService::isHardQuestion('sales today? bookings tomorrow?'));
 
-echo "F28. Per-login greeting (not once a day)\n";
+echo "F28. Arrival greeting — browser reopen, not calendar day\n";
 $G = 101;
 Capsule::table('users')->insert(['id' => $G, 'name' => 'Login Tester']);
-$claimG = $ref->getMethod('claimGreeting');
-$_SESSION = [];
-// First login of the day: greets, stamps the day.
+$claimG    = $ref->getMethod('claimGreeting');
+$claimNow  = $ref->getMethod('claimGreetingNow');
+$_SESSION  = [];
+
+// First arrival of the day (fresh browser session) → greets.
+check('first arrival greets', $claimNow->invoke($svc, $G) === true);
+// Second tab / quick reload seconds later → cooldown holds her quiet.
+check('a second tab does not re-greet', $claimNow->invoke($svc, $G) === false);
+// The old per-business-day path must ALSO now see the day as greeted, so a
+// mid-session page navigation stays silent.
+[$bdS] = \App\Services\ShiftService::businessDayBounds();
+$bdKey = substr((string) $bdS, 0, 10);   // business day, not calendar date
+check('page navigation stays silent', $claimG->invoke($svc, $G, $bdKey) === false);
+
+// Simulate returning much later: rewind the stamp past the cooldown.
+$blobG = \App\Services\Buddy\BuddySettings::read($G);
+$blobG['last_greeted_at'] = time() - 3600;
+\App\Services\Buddy\BuddySettings::mutate($G, fn(array $e) => [$blobG, true]);
+check('returning after a real gap greets again', $claimNow->invoke($svc, $G) === true);
+
+// The login flag remains a valid trigger for surfaces that do see logins.
 $_SESSION['buddy_greet_due'] = true;
-$freshA = !empty($_SESSION['buddy_greet_due']); unset($_SESSION['buddy_greet_due']);
-check('login flag observed on first sign-in', $freshA === true);
-$claimG->invoke($svc, $G, '2026-08-19');
-// Page navigation in the SAME session: no flag, day already stamped → silent.
-$freshB = !empty($_SESSION['buddy_greet_due']);
-check('page navigation does not re-greet', $freshB === false
-    && $claimG->invoke($svc, $G, '2026-08-19') === false);
-// Log out, log back in: flag returns → greets again the SAME business day.
-$_SESSION['buddy_greet_due'] = true;
-$freshC = !empty($_SESSION['buddy_greet_due']); unset($_SESSION['buddy_greet_due']);
-check('a second login the same day greets again', $freshC === true);
-check('flag is consumed, not left armed', empty($_SESSION['buddy_greet_due']));
+$loginFlag = !empty($_SESSION['buddy_greet_due']); unset($_SESSION['buddy_greet_due']);
+check('login flag still observed', $loginFlag === true);
+check('login flag is consumed, not left armed', empty($_SESSION['buddy_greet_due']));
 
 echo "F29. Admin personalization\n";
 $A = 102;

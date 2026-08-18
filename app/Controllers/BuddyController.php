@@ -204,9 +204,14 @@ class BuddyController
         if (!\App\Services\Buddy\BuddyService::enabled()) {
             return $this->json($response, ['success' => false, 'greeted' => false], 503);
         }
+        // `fresh` = the widget found no browser-session marker, i.e. the app was
+        // just opened. Trusted only as a hint: the service still applies its own
+        // cooldown, so a forged flag cannot make Aisha greet on a loop.
+        $body = $request->getParsedBody() ?? [];
         $result = $this->service->agentGreeting(
             (int) $_SESSION['user_id'],
-            (string) ($_SESSION['role'] ?? 'agent')
+            (string) ($_SESSION['role'] ?? 'agent'),
+            !empty($body['fresh'])
         );
         return $this->json($response, ['success' => true] + $result);
     }
@@ -349,7 +354,8 @@ class BuddyController
         if (($_SESSION['role'] ?? '') !== User::ROLE_ADMIN) {
             return $this->json($response, ['error' => 'forbidden'], 403);
         }
-        $result = $this->service->adminGreeting((int) $_SESSION['user_id']);
+        $body = $request->getParsedBody() ?? [];
+        $result = $this->service->adminGreeting((int) $_SESSION['user_id'], !empty($body['fresh']));
         return $this->json($response, ['success' => true] + $result);
     }
 

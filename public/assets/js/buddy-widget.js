@@ -573,9 +573,22 @@
         .catch(function () { backOff(); })   // don't hammer a broken endpoint
         .finally(function () { pollBusy = false; scheduleFeed(feedMs); });
     }
+    // "Did they just open the app?" — sessionStorage is wiped when the browser
+    // closes, so its absence is the one client-side fact that matches what the
+    // client means by opening it again. Server-side cooldown handles the rest
+    // (second tab, cleared storage, an impatient reload).
+    var freshArrival = false;
+    try {
+      if (!sessionStorage.getItem('bwArrived')) {
+        freshArrival = true;
+        sessionStorage.setItem('bwArrived', String(Date.now()));
+      }
+    } catch (e) { /* private mode — fall back to the server's own rules */ }
+
     if (EP.greeting) {
       fetch(EP.greeting, { method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF }, body: '{}' })
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+        body: JSON.stringify({ fresh: freshArrival ? 1 : 0 }) })
         .then(function (r) { return r.json(); })
         .then(function (g) { if (g.greeted && g.reply) deliver(g.reply, true, g.ai === false); })
         .catch(function () { /* greeting is a bonus, never an error */ })

@@ -225,7 +225,7 @@ class BuddyService
      *
      * @return array {greeted: bool, reply?: string, ai?: bool}
      */
-    public function agentGreeting(int $userId, string $role): array
+    public function agentGreeting(int $userId, string $role, bool $freshArrival = false): array
     {
         [$dayStart] = \App\Services\ShiftService::businessDayBounds();
         $dayKey = substr((string) $dayStart, 0, 10);
@@ -248,11 +248,26 @@ class BuddyService
         // sessions that predate the flag and for login/logout loops: it lets the
         // FIRST login of a business day through unconditionally, and later
         // logins through only when the flag says a real sign-in happened.
-        $freshLogin = !empty($_SESSION['buddy_greet_due']);
+        // WHAT COUNTS AS AN ARRIVAL (learned the hard way, 19 Aug):
+        //  - NOT the business day: closing and reopening the browser bought
+        //    silence, which is where this started.
+        //  - NOT the shift: the roster runs 24 hours, so an attendance session
+        //    spans the whole day and would fire even less often.
+        //  - NOT login alone: agents here are usually force-clocked-in by an
+        //    admin or resume an existing session, so most of them go weeks
+        //    without touching AuthController at all.
+        //
+        // The honest signal is the BROWSER session — cleared when the browser
+        // closes, which is exactly the moment the client means by "they opened
+        // it again". The widget reports it; claimGreetingNow's cooldown is what
+        // keeps a second tab (or a cleared storage) from re-greeting.
+        $arrival = $freshArrival || !empty($_SESSION['buddy_greet_due']);
         unset($_SESSION['buddy_greet_due']);
 
-        if ($freshLogin) {
-            $this->claimGreeting($userId, $dayKey);   // stamp it, ignore the verdict
+        if ($arrival) {
+            if (!$this->claimGreetingNow($userId)) {
+                return ['greeted' => false];
+            }
         } elseif (!$this->claimGreeting($userId, $dayKey)) {
             return ['greeted' => false];
         }
@@ -334,6 +349,37 @@ class BuddyService
      * it made the claim atomic but still lost whichever key a concurrent
      * writer had merged in between our read and our write.
      */
+    /**
+     * Minimum gap between arrival greetings. Long enough that opening a second
+     * tab, or a quick reload, stays quiet; short enough that someone genuinely
+     * returning after a break is welcomed rather than ignored.
+     */
+    private const GREET_COOLDOWN_SECONDS = 600;
+
+    /**
+     * Claim a greeting for a real arrival. No calendar opinion — the cooldown
+     * is the only thing standing between an eager client signal and Aisha
+     * greeting the same person twice in a minute.
+     */
+    private function claimGreetingNow(int $userId): bool
+    {
+        [$dayStart] = \App\Services\ShiftService::businessDayBounds();
+        $dayKey = substr((string) $dayStart, 0, 10);
+
+        return BuddySettings::mutate($userId, function (array $extra) use ($dayKey) {
+            $last = (int) ($extra['last_greeted_at'] ?? 0);
+            if (time() - $last < self::GREET_COOLDOWN_SECONDS) {
+                return [$extra, false];
+            }
+            $extra['last_greeted_at'] = time();
+            // Stamp the DAY too. Without this, the very next page load finds
+            // the business day unclaimed, falls through to the daily path and
+            // greets a second time — caught by the verifier, not production.
+            $extra['last_greeted_bday'] = $dayKey;
+            return [$extra, true];
+        }, false);
+    }
+
     private function claimGreeting(int $userId, string $dayKey): bool
     {
         // Cheap read first: almost every page load hits this already-greeted
@@ -1152,16 +1198,19 @@ PROMPT;
      *
      * @return array {greeted: bool, reply?: string, ai?: bool}
      */
-    public function adminGreeting(int $adminId): array
+    public function adminGreeting(int $adminId, bool $freshArrival = false): array
     {
         [$dayStart] = \App\Services\ShiftService::businessDayBounds();
         $dayKey = substr((string) $dayStart, 0, 10);
 
-        $freshLogin = !empty($_SESSION['buddy_greet_due']);
+        // Same arrival rule as the agent surface — see agentGreeting().
+        $arrival = $freshArrival || !empty($_SESSION['buddy_greet_due']);
         unset($_SESSION['buddy_greet_due']);
 
-        if ($freshLogin) {
-            $this->claimGreeting($adminId, $dayKey);
+        if ($arrival) {
+            if (!$this->claimGreetingNow($adminId)) {
+                return ['greeted' => false];
+            }
         } elseif (!$this->claimGreeting($adminId, $dayKey)) {
             return ['greeted' => false];
         }
