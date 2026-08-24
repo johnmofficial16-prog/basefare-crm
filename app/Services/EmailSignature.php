@@ -140,9 +140,23 @@ class EmailSignature
         return rtrim($base, '/');
     }
 
+    /**
+     * Absolute, cache-busted logo URL.
+     *
+     * The path never changes, so replacing the image leaves every browser and
+     * mail client serving whatever it cached — the same failure Asset::url()
+     * exists to prevent for JS, and it hid a logo swap for a full deploy cycle
+     * here. Appending the file's mtime changes the URL whenever the bytes
+     * change. A query string does not affect which file Apache serves, so mail
+     * already sent carrying an older ?v= still resolves fine.
+     */
     public static function logoUrl(): string
     {
-        return self::baseUrl() . self::LOGO_PATH;
+        $abs   = dirname(__DIR__, 2) . '/public' . self::LOGO_PATH;
+        $mtime = @filemtime($abs);
+
+        return self::baseUrl() . self::LOGO_PATH
+             . ($mtime !== false ? '?v=' . $mtime : '');
     }
 
     // =========================================================================
