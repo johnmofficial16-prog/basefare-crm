@@ -170,11 +170,23 @@ tailwind.config = {
           </h2>
         </div>
         <div class="p-6 space-y-4">
+        <?php if (!\App\Services\EmailSignature::roleSigns($user)): ?>
+
+          <div class="flex items-start gap-3 px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <span class="material-symbols-outlined text-base text-slate-400 mt-0.5">info</span>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Personal signatures are added to <strong>admin</strong> email only. This account's mail
+              still goes out in the branded Base Fare shell with the shared Reservation Desk footer —
+              it just isn't signed with an individual name.
+            </p>
+          </div>
+
+        <?php else: ?>
           <input type="hidden" name="sig_submitted" value="1">
 
           <p class="text-xs text-slate-500 leading-relaxed">
-            Appended to customer emails this agent sends from the CRM. Leave a field blank to use the
-            default for their role — the logo, colours and legal footer are applied automatically.
+            Appended to customer emails sent from the CRM. Leave a field blank to use the default —
+            the logo, colours and legal footer are applied automatically.
           </p>
 
           <label class="flex items-center gap-2 cursor-pointer select-none">
@@ -217,6 +229,7 @@ tailwind.config = {
             </p>
           </div>
 
+        <?php endif; ?>
         </div>
       </div>
 

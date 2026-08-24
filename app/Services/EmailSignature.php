@@ -20,6 +20,15 @@ use App\Models\User;
  * rather than a webfont, and an absolute https logo URL — Gmail and Outlook
  * both strip `data:` images, so an inlined logo arrives as a broken box.
  *
+ * The mark is the base-fare.com site logo (logo-v4), a neon feather-plane that
+ * only exists on a dark ground — there is no transparent cut-out of it and a
+ * glow cannot be keyed off its background cleanly. It is therefore shown the
+ * way the website's own footer shows it: a small rounded dark tile. The corner
+ * radius is baked into the PNG's alpha rather than set with border-radius,
+ * which Outlook desktop ignores. Do NOT swap in the globe-and-plane mark from
+ * the repo root — that belongs to Trio Tours, a separate entity, and is used
+ * only on payroll slips and the LOI letterhead.
+ *
  * Colours match ETicketEmailService so a signed email and an e-ticket read as
  * the same sender.
  */
@@ -37,6 +46,17 @@ class EmailSignature
     const BODY  = '#1e293b';
     const MUTED = '#94a3b8';
     const RULE  = '#e2e8f0';
+
+    /**
+     * Roles whose outbound mail carries a signature.
+     *
+     * Admin only, by decision: a personal sign-off is an identity claim to the
+     * customer, and only the desk that owns the booking end-to-end should make
+     * one. Agent and supervisor mail still goes out under the branded Base Fare
+     * shell with the shared Reservation Desk footer — it is not unsigned, just
+     * not personally attributed. Widening this is a one-line change here.
+     */
+    const SIGNED_ROLES = [User::ROLE_ADMIN];
 
     /**
      * Customer-facing job titles per role.
@@ -81,8 +101,18 @@ class EmailSignature
             // customer reply goes to one person's inbox and the thread dies
             // when they are off shift.
             'email'   => self::SUPPORT_EMAIL,
-            'enabled' => !array_key_exists('enabled', $stored) || (bool) $stored['enabled'],
+            // Role gate first: an agent account carrying stored signature fields
+            // (set before the gate existed, or left behind by a demotion) must
+            // still not sign its mail.
+            'enabled' => in_array($role, self::SIGNED_ROLES, true)
+                         && (!array_key_exists('enabled', $stored) || (bool) $stored['enabled']),
         ];
+    }
+
+    /** Whether this role signs its mail at all, before the per-user toggle. */
+    public static function roleSigns(?User $user): bool
+    {
+        return in_array($user->role ?? '', self::SIGNED_ROLES, true);
     }
 
     /** Whether this user's mail should carry a signature at all. */
@@ -162,7 +192,7 @@ class EmailSignature
 <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:26px;">
   <tr>
     <td style="padding:0 20px 0 0;vertical-align:middle;">
-      <img src="{$logo}" alt="Base Fare" width="132" height="92" style="display:block;border:0;outline:none;text-decoration:none;">
+      <img src="{$logo}" alt="Base Fare" width="88" height="88" style="display:block;border:0;outline:none;text-decoration:none;">
     </td>
     <td style="padding:2px 0 2px 20px;border-left:3px solid {$ink};vertical-align:middle;">
       <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
