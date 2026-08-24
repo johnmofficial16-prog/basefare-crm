@@ -149,6 +149,77 @@ tailwind.config = {
         </div>
       </div>
 
+      <!-- Email Signature -->
+      <?php
+        // Resolved values (stored fields merged over role defaults) drive the
+        // placeholders, so the admin can see what this agent's mail will say
+        // without having to fill anything in.
+        $sigResolved = \App\Services\EmailSignature::fields($user);
+        $sigStored   = is_array($user->email_signature) ? $user->email_signature : [];
+        $sigVal = function (string $key) use ($old, $sigStored) {
+            return htmlspecialchars((string) ($old['sig_' . $key] ?? $sigStored[$key] ?? ''));
+        };
+        $sigOn = isset($old['sig_submitted'])
+            ? !empty($old['sig_enabled'])
+            : $sigResolved['enabled'];
+      ?>
+      <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-5">
+        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+          <h2 class="font-bold text-slate-900 flex items-center gap-2" style="font-family:Manrope">
+            <span class="material-symbols-outlined text-base">draw</span> Email Signature
+          </h2>
+        </div>
+        <div class="p-6 space-y-4">
+          <input type="hidden" name="sig_submitted" value="1">
+
+          <p class="text-xs text-slate-500 leading-relaxed">
+            Appended to customer emails this agent sends from the CRM. Leave a field blank to use the
+            default for their role — the logo, colours and legal footer are applied automatically.
+          </p>
+
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" name="sig_enabled" value="1" <?= $sigOn ? 'checked' : '' ?>
+                   class="rounded border-slate-300 text-primary focus:ring-primary">
+            <span class="text-sm font-semibold text-slate-700">Add a signature to this agent's emails</span>
+          </label>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="field-label" for="sig_title">Job Title</label>
+              <input class="field-input" type="text" id="sig_title" name="sig_title" maxlength="60"
+                     value="<?= $sigVal('title') ?>"
+                     placeholder="<?= htmlspecialchars($sigResolved['title']) ?>">
+              <p class="text-[10px] text-slate-400 mt-1">Shown to the customer. Defaults to the role title.</p>
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+              <div class="col-span-2">
+                <label class="field-label" for="sig_direct">Direct Line</label>
+                <input class="field-input" type="text" id="sig_direct" name="sig_direct" maxlength="30"
+                       value="<?= $sigVal('direct') ?>"
+                       placeholder="<?= htmlspecialchars($sigResolved['direct']) ?>">
+              </div>
+              <div>
+                <label class="field-label" for="sig_ext">Ext.</label>
+                <input class="field-input" type="text" id="sig_ext" name="sig_ext" maxlength="8"
+                       inputmode="numeric" value="<?= $sigVal('ext') ?>" placeholder="—">
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-1">
+            <p class="field-label mb-2">Preview</p>
+            <div class="border border-slate-200 rounded-lg bg-white p-4 overflow-x-auto">
+              <?= \App\Services\EmailSignature::html($user) ?: '<p class="text-xs text-slate-400 italic">Signature is switched off for this agent.</p>' ?>
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1">
+              Reflects what is saved now — save the form to see edits here. Replies always go to
+              <?= htmlspecialchars(\App\Services\EmailSignature::SUPPORT_EMAIL) ?> so threads stay on the shared desk.
+            </p>
+          </div>
+
+        </div>
+      </div>
+
       <!-- Metadata Card (read-only) -->
       <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-5">
         <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">

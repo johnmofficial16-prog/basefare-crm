@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `role` enum('admin','manager','supervisor','agent','csa') NOT NULL DEFAULT 'agent',
   `reports_to_id` int DEFAULT NULL,
   `grace_period_mins` int NOT NULL DEFAULT 30,
+  `email_signature` json DEFAULT NULL COMMENT 'Agent-specific signature fields; branding lives in EmailSignature service',
   `status` enum('active','inactive','suspended') NOT NULL DEFAULT 'active',
   `deleted_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,

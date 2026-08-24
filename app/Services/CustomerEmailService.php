@@ -300,7 +300,8 @@ class CustomerEmailService
             $mail->Subject = $message->final_subject ?: ('Message from ' . self::SUPPORT_NAME);
             $mail->isHTML(true);
             $mail->Body    = $this->buildHtml($thread, $message);
-            $mail->AltBody = EmailMarkdown::toPlainText($message->final_body);
+            $mail->AltBody = EmailMarkdown::toPlainText($message->final_body)
+                           . EmailSignature::plain($message->author);
             $mail->MessageID = $messageId;
 
             // Threading: if this is a reply to a prior message, link it so the
@@ -481,6 +482,13 @@ class CustomerEmailService
         $tollFree = self::TOLL_FREE;
         $support  = self::SUPPORT_EMAIL;
 
+        // Signed by the agent who drafted it, not whoever approved it — the
+        // customer corresponds with the drafter, and an approver's name in the
+        // sign-off would send replies to someone who never saw the thread.
+        // Inbound messages have no author (created_by is NULL), but those are
+        // never rendered through this builder.
+        $signature = EmailSignature::html($message->author);
+
         return <<<HTML
 <!DOCTYPE html>
 <html>
@@ -493,6 +501,7 @@ class CustomerEmailService
     </div>
     <div style="padding:28px 30px;font-size:14px;line-height:1.75;color:#1e293b;">
       {$bodyHtml}
+      {$signature}
     </div>
     <div style="background:linear-gradient(135deg,#0f1e3c,#1a3a6b);padding:22px 30px;text-align:center;">
       <div style="color:rgba(255,255,255,0.85);font-size:13px;line-height:1.7;">

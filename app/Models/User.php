@@ -18,12 +18,19 @@ class User extends Model
         'role',
         'reports_to_id',
         'grace_period_mins',
+        'email_signature',
         'status',
         'deleted_at',
     ];
 
     protected $hidden = [
         'password_hash',
+    ];
+
+    protected $casts = [
+        // Per-agent signature fields ({title, direct, ext, enabled}); NULL means
+        // "use the role defaults" — see App\Services\EmailSignature.
+        'email_signature' => 'array',
     ];
 
     protected $dates = [

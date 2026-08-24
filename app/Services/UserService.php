@@ -240,13 +240,23 @@ class UserService
 
         $before = ['name' => $user->name, 'email' => $user->email, 'role' => $user->role, 'reports_to_id' => $user->reports_to_id];
 
-        $user->update([
+        $payload = [
             'name'              => $name,
             'email'             => $email,
             'role'              => $role,
             'reports_to_id'     => $reportsToId,
             'grace_period_mins' => $grace,
-        ]);
+        ];
+
+        // Only touch the signature when the edit form actually submitted it.
+        // Other callers of update() (there is no such caller today, but this is
+        // a public service method) must not silently wipe an agent's sign-off
+        // just by omitting the fields.
+        if (array_key_exists('sig_submitted', $data)) {
+            $payload['email_signature'] = EmailSignature::fromInput($data);
+        }
+
+        $user->update($payload);
 
         $this->log($adminId, 'user_updated', 'users', $userId, [
             'before' => $before,
