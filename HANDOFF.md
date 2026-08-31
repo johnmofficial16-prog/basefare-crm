@@ -1,181 +1,179 @@
-# Session Handoff — 28 August 2026
+# Session Handoff — 31 August 2026
 
-Written at the end of a long session that ran across the CRM, a live sales bid,
-marketing collateral, and the brand film. Everything below is **current and
-verified** unless it says otherwise.
+A long session that ran almost entirely on **marketing and brand work**, not the
+CRM. Two things shipped: a hiring campaign for Trio Tours, and **Brand Film II
+("From Booking to Boarding") rebuilt end to end** after client feedback.
 
-`MEMORY.md` + the `memory/` files carry the durable facts and load automatically
-next session — this document is the **action list**. The previous handoff is
-archived as `HANDOFF-2026-08-19.md` (AI-buddy / greeting work; still valid but
-older).
-
----
-
-## 0. START HERE — three things with clocks on them
-
-| # | Item | When | State |
-|---|---|---|---|
-| 1 | **AGC bidder questions** | **31 Aug** (3 days) | Not sent |
-| 2 | **AGC proposal submission** | **11 Sep, 6pm GST** | Drafted, has unfilled fields |
-| 3 | **CVV/PCI cleanup before any merchant application** | Before applying | Not started |
-
-Nothing else in this document is time-critical.
+`MEMORY.md` + the `memory/` files carry durable facts and load automatically next
+session — **this document is the action list**. Previous handoff archived as
+`HANDOFF-2026-08-28.md`.
 
 ---
 
-## 1. Deploy state
+## 0. START HERE — what is waiting on a decision
 
-Branch `dev` (production tracks `dev`, **not** `main` — see
-`memory/deploy-branch-is-dev.md`). **Everything is pushed**; working tree has
-only pre-existing untracked scratch files that were there before this session
-(`show_tables.php`, `database/test_miles.sql`, `database/update_enum.sql`,
-`scripts/buddy_redteam_admin.php`, the Trio JPEGs, and two loose PNGs).
-
-Commits this session:
-
-```
-ba42046  assets(newsletter): September 2026 issue images
-b305399  fix(emails): cache-bust the signature logo URL
-1791cad  fix(emails): admin-only signature, and use the real Base Fare logo
-1da86d1  feat(emails): per-agent signature on customer email
-```
-
-**Server pull status: UNKNOWN for `ba42046`.** John pulled through `b305399`
-during the session (there is no auto-deploy — see `memory/no-assumptions-doctrine.md`).
-The newsletter images in `ba42046` were still 404 on the server when last
-checked. If the hosted newsletter is ever used, the server needs:
-
-```bash
-cd ~/domains/base-fare.com/public_html/crm && git pull origin dev
-curl -sI https://crm.base-fare.com/assets/img/newsletter/hero-terminal.jpg | head -1   # expect 200
-```
-
----
-
-## 2. Shipped this session
-
-### Email signature (done, live)
-Per-agent signature on customer email. One JSON column `users.email_signature`,
-rendered by `app/Services/EmailSignature.php`, admin-only, edited on
-`/users/{id}/edit`. Migration `2026_08_24_user_email_signature.sql` **has been
-applied on production**. Details in `memory/email-signature-module.md`.
-
-### PNR correction (done)
-`YA7RN9` → `YA7RM9` across `transactions` #555, `acceptance_requests` #711,
-`etickets` #422 and the `performance.hold_exempt_refs` config. Verified.
-**E-ticket 422 had already been emailed to `miloradcavic@yahoo.com` on 7 Aug
-with the wrong PNR and was never acknowledged** — a correction resend was
-offered and never actioned. Worth closing out.
-
-Hard lesson recorded in `memory/mysql-idle-drops-transactions.md`: the prod DB
-drops idle connections and silently rolls back open transactions. Use guarded,
-id-pinned autocommit statements for manual fixes, never an interactive
-`START TRANSACTION`.
-
----
-
-## 3. AGC / Al Ghafia — the live bid (read `memory/agc-rfp-lead.md` first)
-
-A $6M/yr corporate travel RFP that arrived through the website. **The
-due-diligence findings are serious and unresolved** — `ghafia.com` was
-registered 63 days before the RFP while the company claims 50 years of trading;
-their company profile PDF predates their own domain by a day. A real firm of
-that name exists in UAE directories, which makes impersonation the live
-hypothesis rather than a resolved one.
-
-John's decision: **proceed, but no credit for 12 months — prepaid Advance
-Travel Account, wire transfer only.** The proposal is built entirely on that and
-sells it as a benefit (~USD 248k of year-one value to AGC).
-
-**To do next:**
-1. **Send bidder questions by 31 Aug** — trade licence number, TRN, Chamber
-   membership number, audited accounts, two trade references. These are normal
-   procurement asks and will flush out a fake quickly. Draft was never written.
-2. **Call the real Al Ghafia on a number found independently** (directory, not
-   the RFP) and ask whether they issued a travel RFP and whether Meezan Dar
-   works there. One call likely settles it.
-3. **Fill the proposal's open fields** — submission date, Account Director,
-   Account Manager, senior exec, insurance provider (all click-to-edit in the
-   HTML), plus the §2.5 attachments: trade licence, incorporation certificate,
-   IATA/IATAN cert, sample invoice. Also §3.1c (construction/EPC client
-   experience — a *scored* criterion) and §3.2b (accounts managed).
-4. Regenerate the PDF from the HTML once filled (toolbar → Save as PDF).
-
-Files: `Desktop\Base Fare - AGC Corporate Travel Proposal.html` / `.pdf`.
-
----
-
-## 4. Marketing collateral (all delivered, on Desktop)
-
-| Asset | File | Note |
+| # | Item | State |
 |---|---|---|
-| Newsletter (send-ready) | `Base Fare Newsletter - September 2026.html` | hosted images — needs the server pull |
-| Newsletter (self-contained) | `… - MASTER.html` | images embedded; best for browser/paste |
-| Newsletter (client copy) | `… September 2026.pdf` | 9pp; **use this to send** — mail clients strip images from HTML attachments |
-| Raksha Bandhan, square | `TrioTours_RakshaBandhan_Square.jpg` | 1080×1080 |
-| Raksha Bandhan, status | `TrioTours_RakshaBandhan_Status.jpg` | 1080×1920 |
-| TailoredPay assessment | `TailoredPay Assessment.html` | pure CSS, no JS, mobile-verified |
-
-Trio banners use the **globe-and-plane mark** (`salary slip logo.jpeg`) —
-correct for Trio. Base Fare uses `logo-v4` from the b2b repo. **The two are
-routinely confused; the repo-root file named `basefare_logo_*` is actually
-Trio's.**
-
-Newsletter is "Issue #01", so a #02 is implied. Bulk sending should go through
-Brevo/Mailchimp (legal unsubscribe) with images re-pointed at their CDN rather
-than `crm.base-fare.com`.
+| 1 | **b2b site: film section is committed but NOT pushed** | One `git push` deploys it live. John said "yeah do that" — but asked for SEO work to be considered first, so it may be worth bundling into one deploy. |
+| 2 | **YouTube copy has a Content ID claim** | Private, unlisted so far. Claim is on the Zimmer music. Must be checked before going public. |
+| 3 | **AGC bidder questions** | Deadline was **31 Aug** — that is today/passed. Never sent. See `memory/agc-rfp-lead.md`. |
+| 4 | **CVV/PCI cleanup** | Still not started. Blocks any merchant application. |
 
 ---
 
-## 5. Brand film — "The Machinery"
+## 1. Brand Film II — "From Booking to Boarding" v2
 
-**Master v2 delivered**: `Desktop\Base Fare - The Machinery - Master v2.mp4`,
-69s, 1080p. Client approved the first 30s; v1's flat end cards were rejected and
-have been replaced. Full production grammar in `memory/basefare-brand-film.md`
-and the bible artifact.
+**Delivered:** `Desktop\Base Fare Work\Base Fare - From Booking to Boarding - v2.mp4`
+(88s, 1080p, full mix). Client has **approved it**.
 
-Higgsfield MCP, Pro plan, **~209 credits left**.
+> ⚠️ **All Base Fare video files now live in `Desktop\Base Fare Work\`.**
+> John reorganised the Desktop mid-session — older paths in previous handoffs are dead.
 
-Not built yet, all offered and none started:
-- 30s cutdown for paid placements
-- 9:16 crops for Reels/Shorts
-- The Family/Tourist chapters (shelved when the client pivoted to B2B)
+### Asset folders (all on Desktop)
+- `Base Fare Work\` — masters (Machinery v1 + v2, Booking-to-Boarding v1 + v2)
+- `Base Fare - Film II Stills\` — the 8 approved stills, 2752×1536+
+- `Base Fare - Style Board\` — the 8 casting looks; **client chose 08 (pinstripe + tie bar)**
 
-Cheap pipeline established for anything further: cast stills at ~2 cr, animate
-from `start_image` with Kling 3.0 pro at ~2.5 cr/sec, edit/score/overlay locally
-for free. Seedance 1080p (9 cr/sec) only when a reference must hold *mid-shot*.
+### The locked structure (client-approved treatment)
+Artifact: https://claude.ai/code/artifact/00fd216e-0646-48a0-bc35-baf1dd7c8187
+
+The big idea: **Film I ("The Machinery") is nested inside Film II.** It plays on the
+protagonist's TV, its command-centre/globe footage becomes the finale, and its
+clock + light-tunnel (reversed) build the rewind. Two films, one universe.
+
+**Client's one structural change:** the command centre + globe moved to play
+*after* the Gates walk and *before* the Seat — turning the machinery from
+explanation into crescendo. He was right; it is the strongest cut in the film.
+
+**Client's locked look:** the backlit gates walk — *"walk aisa hi rehna chahiye
+jaise light pichey se aa raha hai."* Do not relight that shot.
+
+### Production numbers (for estimating future films)
+- Kling 3.0 `kling3_0`, mode=pro, sound=off: **8.75cr / 5s**. sound=on: **12.5cr**.
+- Runway `nano-banana-pro`: **1K and 2K both cost 20cr** — 1K is 1376×768 (**sub-HD, unusable**),
+  2K is 2752×1536. **Always pass `imageSize: "2K"`.** 4K costs 40cr for no gain
+  (Kling renders ~1928×1076 regardless).
+- VO via Higgsfield `seed_audio`, Fraser preset `6705e465-7b52-5915-a1d8-b1222885e01d`: 0.4cr/line.
+- Total v2 spend: ~96cr Higgsfield, ~140cr Runway.
+
+### Balances at wrap
+- **Higgsfield: ~25 credits** (Pro plan). Enough for ~2 retakes only.
+- **Runway: ~110 credits** (~5 stills). John topped up 250 mid-session.
+- **No unlimited available.** Verified by testing, not by reading docs: the unlim
+  flag is rejected for this account, `trial_status.eligible: false`. The "365-day
+  unlimited" bundles are **web-only, not MCP**, and their purchase window said
+  "buy until Aug 26". See `memory/basefare-brand-film.md`.
 
 ---
 
-## 6. Open items, ranked
+## 2. The b2b website — film section (COMMITTED, NOT PUSHED)
 
-1. **CVV storage** — `cvv_enc` on `payment_cards` (`database/schema.sql:201`).
-   PCI-DSS prohibits retaining CVV after authorisation; encryption does not cure
-   it. Blocks an honest PCI attestation on any merchant application, and is
-   grounds for termination if found later. Fix = drop the column + purge values.
-   **Not started.**
-2. **AGC actions** — §3 above.
-3. **Performance hold** — `memory/performance-hold-august-2026.md` says the
-   1–9 Aug window is still hidden from non-admins and **must be lifted when the
-   merchant releases**. Not revisited this session; still worth checking.
-4. **E-ticket 422 correction resend** — §2 above.
-5. **Newsletter images** — server pull for `ba42046`.
-6. **Film cutdowns** — §5 above.
+Repo: `Desktop\basefare b2b` · commit **`0be637a`** on `main`, unpushed.
+
+> ⚠️ **This repo DOES auto-deploy** — push to `main` → GitHub Actions → `npm run build`
+> → rsync to Hostinger. **Unlike the CRM**, which John pulls by hand. Do not confuse them.
+> The deploy is `rsync --delete`, so anything not in `dist/` gets wiped from the server —
+> which is why the videos had to go into `public/`, not be uploaded separately.
+
+**What was added:**
+- `#brand-film` section between the hero and platform teaser, using the site's own
+  tokens (`--bg-dark`, `.section-tag`, `.section-title`) so it reads as native.
+- `public/video/`: 1080p (21MB) + 720p (9.8MB), both `+faststart`, plus a poster.
+- Responsive `<source media>` — verified: 1440px viewport pulls 1080p, narrow pulls 720p.
+- Poster-click player, fires a `brand_film_play` GA event.
+- **Self-hosted deliberately, not a YouTube embed** — the YouTube copy is private and
+  claimed; an embed would show visitors an unavailable video.
+
+**Verified before commit:** `npm run build` passes, assets land in `dist/video/`,
+all serve 200, playback + audio + source-switching confirmed in a real browser.
+
+**Left untouched on purpose:** the hero's "See How It Works" button has a play icon
+but jumps to a text section. It is the natural link to the film now — but it sits in
+the live Google Ads conversion path, so it needs John's explicit OK.
 
 ---
 
-## 7. Things that will bite the next session
+## 3. SEO opportunities found (John asked — these are the answers)
 
-- **No auto-deploy exists.** John pulls manually, every time. Never state a
-  change is live because it was pushed.
-- **Prod MariaDB kills idle connections** and silently rolls back open
-  transactions — see §2.
-- **`ffmpeg`'s `reverse` filter silently drops frames** past ~480; reverse long
-  clips in segments and re-concat.
-- **HTML sent as an email attachment gets its images stripped** by Gmail/Outlook
-  previews. Send PDFs to clients.
-- **Browser/CDN caching hides asset swaps for up to 7 days.** Cache-bust asset
-  URLs (`?v=mtime`) rather than debugging a "broken" deploy.
-- **Headless-Chrome screenshots at a set `--window-size` do not reliably set the
-  CSS viewport.** Verify responsive layout with real device emulation, not a
-  cropped screenshot — it produced a false "broken table" report this session.
+Quick audit of `basefare b2b`, nothing implemented yet:
+
+1. **Sitemap is missing 12 pages.** `public/sitemap.xml` has 20 `<url>` entries;
+   the repo has 32 HTML pages. The carrier-desk landing pages (Qatar/BA/Lufthansa/
+   AirFrance, added in `6db0683`) appear to be among the missing. **Highest-value,
+   lowest-effort fix on the site.**
+2. **No `VideoObject` schema** anywhere. The new film is a free rich-result
+   opportunity — Google can surface video thumbnails in search. Should be added to
+   `index.html` alongside the existing Organization schema.
+3. **No `og:video` / `twitter:player` tags.** Sharing the homepage on social shows a
+   static image when it could show the film.
+4. Existing schema is decent — FAQPage on 5 pages, Service, Article, Organization.
+   The gap is specifically video + sitemap coverage.
+
+**Recommendation:** do 1–3 in the same commit as the film, then one deploy instead of two.
+
+---
+
+## 4. Trio Tours hiring campaign
+
+Playbook artifact: https://claude.ai/code/artifact/1344b711-f0be-42f2-b40e-d09cee1e4d3d
+Full detail in `memory/mohali-hiring-drive.md`.
+
+**Live:** one Indeed post — *Travel Advisor – US Voice Process*, Mohali, ₹40–60k,
+6 openings, **free tier, ₹0 spent**, status was "Pending → live in a few hours".
+Account: `Param@triotoursandtravels.in`.
+
+**The finding worth keeping:** every listicle says apna and WorkIndia are free.
+**They are not** — their own pricing pages show paid-only. Genuinely free:
+Job Hai, Indeed, Freshersworld (5 contacts only), Naukri (1 job/7 days), LinkedIn
+(1 post, ~10–30 application cap), PGRKAM, Google for Jobs.
+
+**Parked, needs John:**
+- **Dimapur, Nagaland** post — Trio has a second branch; agreed at **₹30–40k**.
+  Never posted. Indeed allows ~3 free jobs/month so it costs nothing.
+- **Naukri** — registration is mobile + OTP. John's number `8178774775` is
+  **account-creation only, never to be published to candidates.** That constraint
+  is why Job Hai was parked (it is phone-first by design and demands company KYC docs).
+- **Trio Tours has almost no online footprint** — no company page, no reviews.
+  For a night-shift role where families weigh in, this is the biggest conversion
+  risk. Free fixes, in payoff order: Google Business Profile → AmbitionBox claim.
+
+---
+
+## 5. Things that will bite the next session
+
+- **Two repos, two deploy models.** `basefare b2b` auto-deploys on push to `main`.
+  The **CRM does not** — John pulls by hand, every time (`memory/no-assumptions-doctrine.md`).
+- **Runway `nano-banana-pro` defaults to 1K = 1376×768, below HD, at the same price
+  as 2K.** Always pass `imageSize: "2K"`.
+- **Frontal faces drift.** A ¾-view reference does not hold a front-on generation —
+  the beard thinned and the face narrowed. Fix: pass **two** references (approved ¾ +
+  frontal) and run a face-zoom comparison against the anchor before animating.
+- **Verify staging and eyelines at the STILL stage.** The client caught a living-room
+  shot where the TV was behind the protagonist — he could not have been watching it.
+  Cost a reshoot that a 10-second geometry check would have prevented.
+- **Motion direction only reveals itself in playback.** The client caught the closing
+  aerial flying backwards; frame-level QC had missed it. **John is the motion QC** —
+  always ask him to play the master end to end.
+- **Kling intercepts batch submissions with preset recommendations** ("IN THE DARK").
+  Resubmit with `declined_preset_id`.
+- **Kling supports `start_image` + `end_image`** — the clean way to get an eyeline
+  move (looking out a window → down at a phone) in a single shot.
+- `ffmpeg`'s `gblur` will not take a conditional `sigma` expression; `eq` will take
+  conditional `brightness`/`saturation`. Arial has no ✈ or ✓ glyph — draw shapes
+  or use `seguisym.ttf`.
+- **Higgsfield is at ~25 credits.** Any further video work needs a top-up first.
+
+---
+
+## 6. Everything else (unchanged from 28 Aug, still open)
+
+1. **CVV storage** — `cvv_enc` on `payment_cards`. Blocks an honest PCI attestation
+   on any merchant application. Not started.
+2. **AGC / Al Ghafia** — bidder questions were due 31 Aug and were never sent;
+   proposal due 11 Sep with unfilled fields. Serious unresolved due-diligence red
+   flags. See `memory/agc-rfp-lead.md`.
+3. **Performance hold** — the 1–9 Aug window is still hidden from non-admins and
+   must be lifted when the merchant releases.
+4. **E-ticket 422** — emailed to the customer on 7 Aug with the wrong PNR, never
+   corrected. Correction resend still not actioned.
+5. **Newsletter images** — commit `ba42046` may still be unpulled on the server.
