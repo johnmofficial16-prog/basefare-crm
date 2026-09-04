@@ -18,6 +18,7 @@ node_modules/
 
 # Application Storage
 storage/logs/*.log
+storage/logs/*.log.*
 storage/payroll/*.pdf
 storage/cache/
 

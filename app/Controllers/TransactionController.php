@@ -58,7 +58,15 @@ class TransactionController
             if (!is_dir($dir)) {
                 @mkdir($dir, 0775, true);
             }
-            @file_put_contents($dir . '/txn_probe.log', $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+            $file = $dir . '/txn_probe.log';
+
+            // Keep one generation and cap growth — this is a diagnostic on a
+            // shared host, it must never fill the account's disk quota.
+            if (@filesize($file) > 2 * 1024 * 1024) {
+                @rename($file, $file . '.1');
+            }
+
+            @file_put_contents($file, $line . PHP_EOL, FILE_APPEND | LOCK_EX);
         } catch (\Throwable $e) {
             // Diagnostics must never affect the user's submission.
         }
