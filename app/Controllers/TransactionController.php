@@ -22,6 +22,51 @@ class TransactionController
     }
 
     // =========================================================================
+    // WAF PROBE  —  POST /api/txn-probe
+    // =========================================================================
+    //
+    // The hosting WAF rejects some /transactions/create submissions with its own
+    // 403 page *before* PHP runs, so the app never sees the request and nothing
+    // lands in activity_log (see 10 Aug and 4 Sep 2026 incidents). The form fires
+    // a sendBeacon here immediately before submitting, so even a blocked POST
+    // leaves a trace of its SHAPE.
+    //
+    // Deliberately records no values: field names, lengths and which character
+    // classes are present. Card/CVV fields get a length only.
+    // =========================================================================
+
+    public function probe(Request $request, Response $response): Response
+    {
+        try {
+            $raw = (string) $request->getBody();
+            if (strlen($raw) > 20000) {
+                $raw = substr($raw, 0, 20000);           // never let this grow unbounded
+            }
+            $data = json_decode($raw, true);
+
+            $line = json_encode([
+                'ts'      => date('c'),
+                'user_id' => $_SESSION['user_id'] ?? null,
+                'ip'      => $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? null,
+                'ua'      => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 200),
+                'sid'     => $data['sid'] ?? null,
+                'acc'     => $data['acc'] ?? null,
+                'fields'  => $data['fields'] ?? null,
+            ], JSON_UNESCAPED_SLASHES);
+
+            $dir = __DIR__ . '/../../storage/logs';
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+            @file_put_contents($dir . '/txn_probe.log', $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+        } catch (\Throwable $e) {
+            // Diagnostics must never affect the user's submission.
+        }
+
+        return $response->withStatus(204);
+    }
+
+    // =========================================================================
     // LIST  —  GET /transactions
     // =========================================================================
 

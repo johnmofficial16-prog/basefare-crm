@@ -917,6 +917,39 @@ const formAssembly = {
     btn.innerHTML = '<span class="material-symbols-outlined animate-spin">progress_activity</span> Saving...';
     btn.classList.add('opacity-75','cursor-not-allowed');
 
+    // WAF probe — fire-and-forget record of this submission's SHAPE before it
+    // goes out. The hosting WAF 403s some POSTs before PHP sees them, so this is
+    // the only trace we get. Sends NO values: field names, lengths and which
+    // character classes are present. Card/CVV fields report a length only.
+    try {
+      var CARDISH = /card_number|cvv|cvc|security_code/i;
+      var probeFields = [];
+      new FormData(document.getElementById('txnForm')).forEach(function (v, k) {
+        if (v instanceof File) {
+          probeFields.push({ n: k, file: 1, len: v.size, mime: v.type || '' });
+          return;
+        }
+        var str = String(v);
+        if (CARDISH.test(k)) { probeFields.push({ n: k, len: str.length }); return; }
+        probeFields.push({
+          n: k,
+          len: str.length,
+          c: (/['"]/.test(str) ? 'q' : '')
+           + (/[<>]/.test(str) ? 'a' : '')
+           + (/[\/\\]/.test(str) ? 's' : '')
+           + (/&/.test(str) ? '&' : '')
+           + (/[;|]/.test(str) ? ';' : '')
+           + (/--/.test(str) ? '-' : '')
+           + (/[^\x20-\x7E]/.test(str) ? 'u' : '')
+        });
+      });
+      navigator.sendBeacon('/api/txn-probe', new Blob([JSON.stringify({
+        sid: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+        acc: (document.querySelector('[name=acceptance_request_id]') || {}).value || null,
+        fields: probeFields
+      })], { type: 'application/json' }));
+    } catch (e) { /* diagnostics must never block a sale */ }
+
     // Submit
     document.getElementById('txnForm').submit();
   }

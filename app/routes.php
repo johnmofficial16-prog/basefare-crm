@@ -296,6 +296,12 @@ $app->group('/acceptance', function ($group) {
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
 
+// WAF probe — records the SHAPE of a transaction submission (never its values)
+// just before the form POSTs, so a WAF 403 that never reaches PHP can still be
+// diagnosed. Deliberately on /api/* so it does not share the blocked path.
+$app->post('/api/txn-probe', [TransactionController::class, 'probe'])
+    ->add(new AuthMiddleware());
+
 // ==========================================================================
 // Transaction Recorder — Agent-facing (behind Auth + AttendanceGate)
 // ==========================================================================
