@@ -14,6 +14,7 @@ $navItems = [
     ['href' => '/attendance/admin',         'icon' => 'groups',         'label' => 'Live Board',     'key' => 'attendance'],
     ['href' => '/attendance/admin/history', 'icon' => 'history',        'label' => 'History',        'key' => 'history'],
     ['href' => '/performance',              'icon' => 'leaderboard',    'label' => 'Performance',    'key' => 'performance'],
+    ['href' => '/call-logs/team',           'icon' => 'phone_in_talk',  'label' => 'Call Logs',      'key' => 'call_logs'],
     ['href' => '/shifts/week',              'icon' => 'calendar_month', 'label' => 'Shift Schedule', 'key' => 'shifts'],
     ['href' => '/acceptance',              'icon' => 'verified',       'label' => 'Acceptance',     'key' => 'acceptance'],
     ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',   'key' => 'transactions'],

@@ -30,6 +30,8 @@ class Notification extends Model
     const UPDATED_AT = null;
 
     const TYPE_BOOKING_REMINDER = 'booking_reminder';
+    const TYPE_CALL_FOLLOWUP    = 'call_followup';
+    const TYPE_CALL_COMPLIANCE  = 'call_log_compliance';
 
     protected $fillable = [
         'user_id',

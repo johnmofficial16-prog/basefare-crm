@@ -14,6 +14,7 @@ use App\Controllers\InvoiceController;
 use App\Controllers\AnalyticsController;
 use App\Controllers\ChargebackController;
 use App\Controllers\ReminderController;
+use App\Controllers\CallLogController;
 use App\Controllers\NotificationController;
 use App\Controllers\AdminController;
 use App\Controllers\MobileAdminController;
@@ -345,6 +346,26 @@ $app->group('/transactions', function ($group) {
 $app->group('/reminders', function ($group) {
     $group->get('',                      [ReminderController::class, 'index']);
     $group->post('/{id:[0-9]+}/cancel',  [ReminderController::class, 'cancel']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware());
+
+// ==========================================================================
+// Call Logs — agents log every customer call; team leads monitor.
+// Role rules (own-only edits, lead-only team page, admin-only delete/settings)
+// are enforced in CallLogController.
+// ==========================================================================
+$app->group('', function ($group) {
+    $group->get('/call-logs',                              [CallLogController::class, 'myPage']);
+    $group->post('/call-logs',                             [CallLogController::class, 'store']);
+    $group->post('/call-logs/{id:[0-9]+}/update',          [CallLogController::class, 'update']);
+    $group->post('/call-logs/{id:[0-9]+}/follow-up-done',  [CallLogController::class, 'followUpDone']);
+    $group->post('/call-logs/{id:[0-9]+}/delete',          [CallLogController::class, 'delete']);
+    $group->get('/api/call-logs/lookup',                   [CallLogController::class, 'lookup']);
+    $group->get('/call-logs/team',                         [CallLogController::class, 'teamPage']);
+    $group->get('/call-logs/export',                       [CallLogController::class, 'export']);
+    $group->post('/call-logs/settings',                    [CallLogController::class, 'saveSettings']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())

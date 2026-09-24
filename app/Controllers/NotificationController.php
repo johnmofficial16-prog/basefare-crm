@@ -34,6 +34,15 @@ class NotificationController
         } catch (\Throwable $e) {
             error_log('[NotificationController] lazy dispatch failed: ' . $e->getMessage());
         }
+        // Same for call-log call-back reminders, plus the (15-min throttled)
+        // compliance check in case the hourly cron isn't registered.
+        try {
+            $callLogs = new \App\Services\CallLogService();
+            $callLogs->dispatchDueFollowUps();
+            $callLogs->maybeRunCompliance();
+        } catch (\Throwable $e) {
+            error_log('[NotificationController] call follow-up dispatch failed: ' . $e->getMessage());
+        }
 
         $unread = Notification::forUser($userId)->unread()->count();
 

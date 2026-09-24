@@ -11,6 +11,7 @@ $activePage = $activePage ?? '';
 $navItems = [
     ['href' => '/dashboard',     'icon' => 'dashboard',      'label' => 'Dashboard',    'key' => 'dashboard'],
     ['href' => '/transactions',  'icon' => 'payments',       'label' => 'Transactions', 'key' => 'transactions'],
+    ['href' => '/call-logs',     'icon' => 'phone_in_talk',  'label' => 'Call Logs',    'key' => 'call_logs'],
     ['href' => '/acceptance',    'icon' => 'verified',       'label' => 'Acceptance',   'key' => 'acceptance'],
     ['href' => '/etickets',      'icon' => 'airplane_ticket','label' => 'E-Tickets',    'key' => 'etickets'],
     ['href' => '/emails',        'icon' => 'forward_to_inbox','label' => 'Customer Emails','key' => 'emails'],
@@ -29,6 +30,8 @@ $navItems = [
       <span class="font-headline font-extrabold text-primary text-sm leading-tight">Base Fare<br><span class="text-on-surface-variant font-medium text-xs">CRM Agent</span></span>
     </a>
   </div>
+
+  <?php require __DIR__ . '/call_log_quick.php'; ?>
 
   <!-- Navigation -->
   <nav class="flex-1 py-4 overflow-y-auto">

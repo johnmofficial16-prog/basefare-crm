@@ -14,6 +14,7 @@ $navItems = [
     ['href' => '/attendance/admin',         'icon' => 'groups',         'label' => 'Live Board',       'key' => 'attendance',    'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/attendance/admin/history', 'icon' => 'history',        'label' => 'History',          'key' => 'history',       'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/performance',             'icon' => 'leaderboard',    'label' => 'Performance',      'key' => 'performance',   'roles' => ['admin', 'manager', 'supervisor']],
+    ['href' => '/call-logs/team',          'icon' => 'phone_in_talk',  'label' => 'Call Logs',        'key' => 'call_logs',     'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/analytics',               'icon' => 'insights',       'label' => 'Centre Analytics', 'key' => 'analytics',     'roles' => ['admin']],
     ['href' => '/chargebacks',             'icon' => 'credit_card_off','label' => 'Chargebacks & Refunds', 'key' => 'chargebacks', 'roles' => ['admin']],
     ['href' => '/shifts/week',             'icon' => 'calendar_month', 'label' => 'Shift Schedule',   'key' => 'shifts',        'roles' => ['admin', 'manager', 'supervisor']],
