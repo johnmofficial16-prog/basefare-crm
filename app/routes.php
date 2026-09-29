@@ -17,6 +17,7 @@ use App\Controllers\ReminderController;
 use App\Controllers\CallLogController;
 use App\Controllers\NotificationController;
 use App\Controllers\AdminController;
+use App\Controllers\FareTermsController;
 use App\Controllers\MobileAdminController;
 use App\Controllers\LetterController;
 use App\Controllers\PayrollController;
@@ -257,6 +258,18 @@ $app->group('/admin', function ($group) {
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN]));
+
+// Fare Terms wording + cabin defaults — managers and admins (agents only pick
+// a fare type and fill blanks on the forms).
+$app->group('/admin/fare-terms', function ($group) {
+    $group->get('', [FareTermsController::class, 'index']);
+    $group->post('/cabin-map', [FareTermsController::class, 'saveCabinMap']);
+    $group->post('/template/{slug:[a-z_]+}', [FareTermsController::class, 'saveTemplate']);
+    $group->post('/template/{slug:[a-z_]+}/reset', [FareTermsController::class, 'resetTemplate']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
 
 // ==========================================================================
 // Mobile Admin Quick Panel (admin ONLY, NO AttendanceGate — so admin

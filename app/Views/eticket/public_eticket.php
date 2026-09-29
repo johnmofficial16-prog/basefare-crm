@@ -680,7 +680,7 @@ if (session_status() === PHP_SESSION_NONE) {
             <span class="ack-checkbox-label">
               I, <strong style="color:#c9a84c;"><?= htmlspecialchars($et->customer_name) ?></strong>, confirm that I have reviewed all booking details,
               flight itinerary, ticket conditions, and the policy above. I acknowledge that this e-ticket is
-              <strong style="color:#c9a84c;">non-refundable and non-transferable</strong>. I understand that acknowledging
+              <strong style="color:#c9a84c;"><?= htmlspecialchars(trim($et->refund_ack_text ?? '') ?: \App\Services\FareTermsService::LEGACY_ETICKET_ACK) ?></strong>. I understand that acknowledging
               this ticket constitutes a legal receipt and waives any right to dispute charges for services rendered.
             </span>
           </label>

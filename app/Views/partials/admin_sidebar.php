@@ -30,6 +30,7 @@ $navItems = [
     ['href' => '/users',                   'icon' => 'manage_accounts','label' => 'Users',            'key' => 'users',         'roles' => ['admin', 'manager']],
     ['href' => '/attendance/admin/monthly',   'icon' => 'date_range',    'label' => 'Monthly Report',    'key' => 'monthly',       'roles' => ['admin', 'manager', 'supervisor']],
     ['href' => '/admin/settings',          'icon' => 'settings',       'label' => 'Settings',         'key' => 'settings',      'roles' => ['admin']],
+    ['href' => '/admin/fare-terms',        'icon' => 'gavel',          'label' => 'Fare Terms',       'key' => 'fare_terms',    'roles' => ['admin', 'manager']],
     ['href' => '/admin/ip-whitelist',      'icon' => 'shield',         'label' => 'IP Whitelist',     'key' => 'ip_whitelist',  'roles' => ['admin']],
     ['href' => '/admin/activity-log',      'icon' => 'history_edu',    'label' => 'Activity Log',     'key' => 'activity_log',  'roles' => ['admin', 'manager']],
     ['href' => '/admin/error-console',     'icon' => 'bug_report',     'label' => 'Error Console',    'key' => 'error_console', 'roles' => ['admin', 'manager']],

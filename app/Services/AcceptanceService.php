@@ -101,7 +101,7 @@ class AcceptanceService
             }
         }
 
-        $acceptance = AcceptanceRequest::create([
+        $acceptance = AcceptanceRequest::create(FareTermsService::stripIfNotMigrated('acceptance_requests', [
             'token'               => $token,
             'transaction_id'      => $data['transaction_id'] ?? null,
             'type'                => $data['type'],
@@ -132,6 +132,9 @@ class AcceptanceService
             'baggage_info'        => trim($data['baggage_info'] ?? ''),
             'fare_rules'          => trim($data['fare_rules'] ?? ''),
             'policy_text'         => trim($data['policy_text'] ?? self::DEFAULT_POLICY),
+            'fare_type'           => $data['fare_type'] ?? null,
+            'fare_terms_values'   => $data['fare_terms_values'] ?? null,
+            'refund_ack_text'     => $data['refund_ack_text'] ?? null,
             'req_passport'        => (bool)($data['req_passport'] ?? false),
             'req_cc_front'        => (bool)($data['req_cc_front'] ?? false),
             'agent_id'            => $agentId,
@@ -144,7 +147,7 @@ class AcceptanceService
             'is_miles_booking'    => (bool)($data['is_miles_booking'] ?? false),
             'miles_used'          => !empty($data['miles_used']) ? (int)$data['miles_used'] : null,
             'miles_program'       => !empty($data['miles_program']) ? trim($data['miles_program']) : null,
-        ]);
+        ]));
 
         // Log creation note to record_notes timeline
         RecordNote::log(

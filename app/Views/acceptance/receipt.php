@@ -889,6 +889,14 @@ body {
     </div>
     <?php endif; ?>
 
+    <!-- ── REFUNDABILITY ACKNOWLEDGED (exact wording the customer ticked) ── -->
+    <?php if (!empty($acceptance->refund_ack_text)): ?>
+    <div class="section">
+      <div class="section-title">Refundability Acknowledged — <?= rh(\App\Services\FareTermsService::label($acceptance->fare_type)) ?></div>
+      <div class="policy-text">&#9745; <?= rh($acceptance->refund_ack_text) ?></div>
+    </div>
+    <?php endif; ?>
+
     <!-- ── AGENT / INTERNAL NOTES (Chargeback Defense) ── -->
     <?php if ($acceptance->agent_notes): ?>
     <div class="section">

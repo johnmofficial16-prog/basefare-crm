@@ -6,6 +6,7 @@ use App\Models\AcceptanceRequest;
 use App\Models\User;
 use App\Services\AcceptanceService;
 use App\Services\AcceptanceEmailService;
+use App\Services\FareTermsService;
 use Carbon\Carbon;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -217,6 +218,21 @@ class AcceptanceController
             'miles_used'       => !empty($body['miles_used']) ? (int)$body['miles_used'] : null,
             'miles_program'    => trim($body['miles_program'] ?? ''),
         ]);
+
+        // ── Fare terms: rendered here from the fare type + blanks ─────────
+        // Agents' text is always the server render; a manager/admin may have
+        // unlocked manual edit. The customer's checkbox wording is stored too.
+        $terms = FareTermsService::resolveFromRequest($body, $userRole, 'acceptance', $body['currency'] ?? 'USD');
+        if ($terms['missing']) {
+            $_SESSION['flash_error'] = 'Fill in the Fare Type blanks: ' . implode(', ', $terms['missing']);
+            return $response->withHeader('Location', '/acceptance/create')->withStatus(302);
+        }
+        $data['fare_type']         = $terms['fare_type'];
+        $data['fare_terms_values'] = $terms['fare_terms_values'];
+        $data['fare_rules']        = $terms['fare_rules'];
+        $data['endorsements']      = $terms['endorsements'];
+        $data['policy_text']       = $terms['policy_text'];
+        $data['refund_ack_text']   = $terms['refund_ack_text'];
 
         // ── Create record ─────────────────────────────────────────────────
         // create() now throws rather than saving a record whose card details failed

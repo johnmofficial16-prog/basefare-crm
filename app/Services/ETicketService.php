@@ -90,7 +90,7 @@ class ETicketService
             }
             unset($pax);
 
-            $eticket = ETicket::create([
+            $eticket = ETicket::create(FareTermsService::stripIfNotMigrated('etickets', [
                 'token'            => $this->generateToken(),
                 'transaction_id'   => $txn?->id,
                 'acceptance_id'    => $txn?->acceptance_id ?: null,
@@ -110,6 +110,9 @@ class ETicketService
                 'baggage_info'     => trim($data['baggage_info'] ?? ''),
                 'fare_rules'       => trim($data['fare_rules'] ?? ''),
                 'policy_text'      => trim($data['policy_text'] ?? self::DEFAULT_POLICY),
+                'fare_type'        => $data['fare_type'] ?? null,
+                'fare_terms_values'=> $data['fare_terms_values'] ?? null,
+                'refund_ack_text'  => $data['refund_ack_text'] ?? null,
                 'extra_data'       => $data['extra_data'] ?? null,
                 'agent_notes'      => trim($data['agent_notes'] ?? ''),
                 'status'           => ETicket::STATUS_DRAFT,
@@ -118,7 +121,7 @@ class ETicketService
                 'is_miles_booking' => (bool)($txn?->is_miles_booking ?? false),
                 'miles_used'       => $txn?->miles_used ?? null,
                 'miles_program'    => $txn?->miles_program ?? null,
-            ]);
+            ]));
 
             // The audit note names manual issuance explicitly — a permission-
             // gated bypass must be visible in the record's timeline.
@@ -226,6 +229,9 @@ class ETicketService
             'fare_rules'     => $fareRules    ?? '',
             'extra_data'     => $extraData,
             'policy_text'    => self::DEFAULT_POLICY,
+            // Fare type the customer signed on the acceptance (null on older ones)
+            'fare_type'         => $acc?->fare_type ?? null,
+            'fare_terms_values' => $acc?->fare_terms_values ?? null,
             // Miles / Award booking
             'is_miles_booking' => (bool)($txn->is_miles_booking ?? false),
             'miles_used'       => $txn->miles_used ?? null,

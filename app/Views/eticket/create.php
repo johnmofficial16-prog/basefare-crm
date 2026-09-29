@@ -26,6 +26,7 @@ $error = $_GET['error'] ?? '';
 <script src="<?= \App\Services\Asset::url('assets/js/error-beacon.js') ?>"></script>
 <script src="/assets/js/tailwind.js"></script>
 <script src="<?= \App\Services\Asset::url('assets/js/buddy-widget.js') ?>" defer></script>
+<script src="<?= \App\Services\Asset::url('assets/js/fare-terms.js') ?>"></script>
 <script>
 tailwind.config = {
   darkMode: "class",
@@ -196,6 +197,8 @@ tailwind.config = {
     <!-- Ticket Conditions -->
     <div class="bg-white border border-slate-200 rounded-xl p-5 mb-5">
       <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">📋 Ticket Conditions</p>
+      <!-- Fare type picker: drives Endorsements, Fare Rules, policy refund clause & customer acknowledgement -->
+      <div id="fare-terms-picker" class="mb-4"></div>
       <div class="grid grid-cols-2 gap-4 mb-4">
         <div>
           <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Endorsements / Restrictions</label>
@@ -341,9 +344,18 @@ async function loadAutofill() {
             }
         }
 
-        fillField('f-endorsements', d.endorsements);
         fillField('f-baggage_info', d.baggage_info);
-        fillField('f-fare_rules',   d.fare_rules);
+
+        // Fare type follows the acceptance the customer signed; older acceptances
+        // (no fare type) fall back to the cabin default.
+        if (d.fare_type) {
+            fareTermsPicker.setType(d.fare_type, d.fare_terms_values || {});
+        } else {
+            const fd = d.flight_data || {};
+            const segs = (fd.new_flights && fd.new_flights.length) ? fd.new_flights : (fd.flights || fd.old_flights || []);
+            fareTermsPicker.setCabin(FareTerms.highestCabin(segs.map(s => s.cabin_class)));
+            fareTermsPicker.refresh();
+        }
 
         document.getElementById('pax-rows').innerHTML = '';
         paxIndex = 0;
@@ -437,6 +449,30 @@ function renderFlightDisplay(flightData) {
 }
 
 window.addEventListener('DOMContentLoaded', () => { addPax(); });
+
+// ── Fare terms (see public/assets/js/fare-terms.js) ─────────────────────────
+window.fareTermsPicker = FareTerms.mount({
+    root: document.getElementById('fare-terms-picker'),
+    config: <?= json_encode(\App\Services\FareTermsService::clientConfig(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>,
+    policy: 'eticket',
+    canEdit: <?= in_array($role ?? '', ['admin', 'manager'], true) ? 'true' : 'false' ?>,
+    getCurrency: () => document.getElementById('f-currency')?.value || 'USD',
+    fields: {
+        fareRules:    document.getElementById('f-fare_rules'),
+        endorsements: document.getElementById('f-endorsements'),
+        policy:       document.getElementById('f-policy_text'),
+    },
+});
+document.getElementById('f-currency')?.addEventListener('change', () => fareTermsPicker.refresh());
+document.getElementById('et-form')?.addEventListener('submit', function (e) {
+    const missing = fareTermsPicker.missing();
+    if (missing.length) {
+        e.preventDefault();
+        alert('Fill in the Fare Type blanks: ' + missing.join(', '));
+        return;
+    }
+    fareTermsPicker.refresh();
+});
 
 // ── Manual mode (manager/admin) ─────────────────────────────────────────────
 // Ticking the box sets the flag the server checks (role re-verified there) and

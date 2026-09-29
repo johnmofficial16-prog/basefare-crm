@@ -84,7 +84,7 @@ class ETicketController
             'autofill_options' => $options,
             'prefill'          => null,
             'role'             => $role,
-            'defaultPolicy'    => ETicketService::DEFAULT_POLICY,
+            'defaultPolicy'    => FareTermsService::render(FareTermsService::NON_REFUNDABLE, [])['eticket_policy'],
         ]);
     }
 
@@ -180,6 +180,20 @@ class ETicketController
             'policy_text'    => $body['policy_text']    ?? ETicketService::DEFAULT_POLICY,
             'agent_notes'    => $body['agent_notes']    ?? '',
         ];
+
+        // Fare terms: server-rendered from the fare type + blanks (agents), or the
+        // manager/admin's unlocked manual text. Stores the acknowledgement phrase.
+        $terms = FareTermsService::resolveFromRequest($body, $role, 'eticket', $body['currency'] ?? 'USD');
+        if ($terms['missing']) {
+            return $response->withHeader('Location', '/etickets/create?error='
+                . urlencode('Fill in the Fare Type blanks: ' . implode(', ', $terms['missing'])))->withStatus(302);
+        }
+        $data['fare_type']         = $terms['fare_type'];
+        $data['fare_terms_values'] = $terms['fare_terms_values'];
+        $data['endorsements']      = $terms['endorsements'];
+        $data['fare_rules']        = $terms['fare_rules'];
+        $data['policy_text']       = $terms['policy_text'];
+        $data['refund_ack_text']   = $terms['refund_ack_text'];
 
         try {
             $eticket = $this->service->create($data, $userId);

@@ -66,7 +66,16 @@ $colorMap = [
     'slate'  => ['ring' => 'ring-slate-400',  'bg' => 'bg-slate-50',  'icon' => 'text-slate-500',  'badge' => 'bg-slate-100 text-slate-700'],
 ];
 
-$defaultPolicy = "1. PASSENGER NAMES: Names must match your government-issued ID exactly. Lets Fly Travel LLC DBA Base Fare is not responsible for denied boarding due to name mismatches or Visa/Travel Document issues.\n2. REFUNDS & CHANGES: All tickets are NON-REFUNDABLE and NON-TRANSFERABLE once issued. Date changes are subject to airline penalties plus fare differences.\n3. CHARGEBACK WAIVER: You explicitly acknowledge that all services described herein have been rendered by Lets Fly Travel LLC DBA Base Fare. Filing a credit card dispute or chargeback after signing this authorization constitutes Friendly Fraud. You explicitly waive your right to file a credit card dispute or chargeback for this transaction. This signed authorization, along with your IP address, device fingerprint, and user-agent information will be submitted as conclusive evidence to your financial institution to contest any such claim.\n4. AUTHORIZATION: I authorize Lets Fly Travel LLC DBA Base Fare to charge the Total Amount listed to my credit card.\n5. I confirm that I am the authorized cardholder and approve the charge of the agreed amount for the requested travel services.\n6. I acknowledge that I have personally requested this service and that all details, including itinerary, pricing, and applicable terms, have been clearly explained to me prior to authorization.\n7. I understand that the Lets Fly Travel LLC DBA Base Fare acts solely as an intermediary, and all bookings, cancellations, and refunds are subject to the respective airline's rules and regulations.\n8. I agree that the service fee charged by Lets Fly Travel LLC DBA Base Fare is non-refundable once the booking or requested service has been processed.\n9. I acknowledge that the service is considered fully rendered once the reservation/ticket has been issued or the requested service has been completed.\n10. I confirm that I have received and reviewed all booking details via email, phone, or message and have provided my consent to proceed.\n11. I understand that any cancellations, changes, refund or any other travel related service requests will be governed strictly by the airline's fare rules and policies, and additional charges may apply.\n12. I agree that this transaction is valid, authorized, and initiated by me voluntarily without any misrepresentation.\n13. I undertake to contact Lets Fly Travel LLC DBA Base Fare directly for any concerns or clarifications before initiating any dispute or chargeback with my bank or card issuer.\n14. I acknowledge that this transaction may be recorded (call/email/SMS) for quality, training, and verification purposes.\n15. I confirm that the billing details provided by me are accurate and belong to me, and I take full responsibility for this transaction.\n16. I understand and agree to comply with the 24-hour cancellation policy (if applicable), subject to airline terms and conditions.";
+// Fare terms: the fare type picker renders Fare Rules, Endorsements, the policy
+// refund clause and the customer's checkbox. Defaults = Non-refundable, as before.
+$fareTermsConfig  = \App\Services\FareTermsService::clientConfig();
+$fareTermsDefault = \App\Services\FareTermsService::render(\App\Services\FareTermsService::NON_REFUNDABLE, [], $prefill['currency'] ?? 'USD');
+$defaultPolicy    = $fareTermsDefault['acceptance_policy'];
+$canEditTerms     = in_array($_SESSION['role'] ?? '', ['admin', 'manager'], true);
+// Promoting a pre-auth keeps the fare type the customer already agreed to
+$fareTermsInitial = ($preauthRecord && \App\Services\FareTermsService::isValidType($preauthRecord->fare_type ?? null))
+    ? ['fare_type' => $preauthRecord->fare_type, 'values' => $preauthRecord->fare_terms_values ?: (object) []]
+    : null;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -79,6 +88,7 @@ $defaultPolicy = "1. PASSENGER NAMES: Names must match your government-issued ID
 <script src="<?= \App\Services\Asset::url('assets/js/error-beacon.js') ?>"></script>
 <script src="/assets/js/tailwind.js"></script>
 <script src="<?= \App\Services\Asset::url('assets/js/buddy-widget.js') ?>" defer></script>
+<script src="<?= \App\Services\Asset::url('assets/js/fare-terms.js') ?>"></script>
 <script>
 tailwind.config = {
   darkMode: 'class',
@@ -938,7 +948,7 @@ tailwind.config = {
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Endorsements</label>
-                <input type="text" name="endorsements" value="NON END/NON REF/NON RRT" placeholder="e.g. NON END/NON REF/NON RRT"
+                <input type="text" name="endorsements" id="field_endorsements" value="<?= htmlspecialchars($fareTermsDefault['endorsements']) ?>" placeholder="e.g. NON END/NON REF/NON RRT"
                   class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600">
               </div>
               <div>
@@ -949,11 +959,9 @@ tailwind.config = {
             </div>
             <div>
               <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Fare Rules</label>
-              <textarea name="fare_rules" rows="3"
-                placeholder="Exchange: permitted with fee. Cancellation: non-refundable. Name changes: not permitted..."
-                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 resize-none focus:outline-none focus:ring-2 focus:ring-primary-600">Exchange : Permitted with Fee
-Cancellation : Non Refundable Ticket
-Name Change : Not Allowed</textarea>
+              <textarea name="fare_rules" id="field_fare_rules" rows="3"
+                placeholder="Set by the Fare Type above"
+                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 resize-none focus:outline-none focus:ring-2 focus:ring-primary-600"><?= htmlspecialchars($fareTermsDefault['fare_rules']) ?></textarea>
             </div>
           </div>
         </div>
@@ -967,9 +975,11 @@ Name Change : Not Allowed</textarea>
             </h2>
           </div>
           <div class="p-6 space-y-4">
+            <!-- Fare type picker: drives Fare Rules, Endorsements, refund clause & customer checkbox -->
+            <div id="fare-terms-picker"></div>
             <div>
               <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Policy / Terms Text (Customer Will Read &amp; Agree To)</label>
-              <textarea name="policy_text" rows="5"
+              <textarea name="policy_text" id="field_policy_text" rows="5"
                 class="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-slate-50 resize-none focus:outline-none focus:ring-2 focus:ring-primary-600"
 ><?= htmlspecialchars($defaultPolicy) ?></textarea>
             </div>
@@ -1634,6 +1644,7 @@ const wizard = {
 // ─────────────────────────────────────────────────────────────────────────────
 function selectType(type) {
   state.type = type;
+  fareTermsSyncCabin();
   // Update card styles
   Object.keys(TYPE_LABELS).forEach(t => {
     const card = document.getElementById('tc-' + t);
@@ -2110,6 +2121,7 @@ const flightMgr = {
   _updateSeg: function(group, idx, field, val) {
     if (!state.segments[group] || !state.segments[group][idx]) return;
     state.segments[group][idx][field] = val;
+    if (field === 'cabin_class') fareTermsSyncCabin();
     if (field === 'airline_iata' && val.length === 2 && !state.segments[group][idx].flight_no) {
       state.segments[group][idx].flight_no = val.toUpperCase();
     }
@@ -2123,6 +2135,7 @@ const flightMgr = {
     const el = document.getElementById('segs-' + group);
     if (!el) return;
     const segs = state.segments[group];
+    fareTermsSyncCabin();
     if (!segs || !segs.length) { el.innerHTML = ''; return; }
 
     const self = this;
@@ -2751,6 +2764,7 @@ const cardMgr = {
 // ─────────────────────────────────────────────────────────────────────────────
 function syncExtraData() {
   // Called by name correction / cabin upgrade / other fields
+  fareTermsSyncCabin();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2914,6 +2928,17 @@ const formAssembly = {
     // 1. Final validation
     const { valid, msg } = wizard.validate(4);
     if (!valid) { wizard.goTo(4); setTimeout(()=>alert('Please fix: ' + msg), 100); return; }
+
+    // 1b. Fare type blanks must be filled — they go into the customer's terms
+    if (window.fareTermsPicker) {
+      const ftMissing = fareTermsPicker.missing();
+      if (ftMissing.length) {
+        wizard.goTo(4);
+        setTimeout(()=>alert('Fill in the Fare Type blanks: ' + ftMissing.join(', ')), 100);
+        return;
+      }
+      fareTermsPicker.refresh();
+    }
 
     // 2. Assemble passengers JSON
     document.getElementById('hidPassengers').value = JSON.stringify(
@@ -3220,6 +3245,39 @@ function serializeExtraData() {
       serializeExtraData();
     });
   }
+})();
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FARE TERMS — fare type picker (see public/assets/js/fare-terms.js)
+// ─────────────────────────────────────────────────────────────────────────────
+function fareTermsCabin() {
+  const t = state.type;
+  if (t === 'cabin_upgrade') {
+    return document.getElementById('cu-new-cabin')?.value || null;
+  }
+  const group = t === 'exchange' ? 'new' : (['cancel_refund','cancel_credit'].includes(t) ? 'old' : (t === 'other' ? 'other' : 'main'));
+  return FareTerms.highestCabin((state.segments[group] || []).map(s => s.cabin_class));
+}
+function fareTermsSyncCabin() {
+  if (window.fareTermsPicker) fareTermsPicker.setCabin(fareTermsCabin());
+}
+(function() {
+  window.fareTermsPicker = FareTerms.mount({
+    root: document.getElementById('fare-terms-picker'),
+    config: <?= json_encode($fareTermsConfig, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>,
+    policy: 'acceptance',
+    canEdit: <?= $canEditTerms ? 'true' : 'false' ?>,
+    initial: <?= json_encode($fareTermsInitial, JSON_HEX_TAG | JSON_HEX_AMP) ?>,
+    getCurrency: () => document.getElementById('field_currency')?.value || 'USD',
+    fields: {
+      fareRules:    document.getElementById('field_fare_rules'),
+      endorsements: document.getElementById('field_endorsements'),
+      policy:       document.getElementById('field_policy_text'),
+    },
+  });
+  document.getElementById('field_currency')?.addEventListener('change', () => fareTermsPicker.refresh());
+  fareTermsSyncCabin();
 })();
 
 </script>

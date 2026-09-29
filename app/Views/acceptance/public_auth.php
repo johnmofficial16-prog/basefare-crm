@@ -125,6 +125,11 @@ if (!$seatNumber && empty($seatAssignments)) {
 }
 
 $baggageInfo   = $acceptance->baggage_info     ?? '';
+$fareRules     = trim($acceptance->fare_rules ?? '');
+// Refund checkbox: the exact wording stored when the form was created (fare type
+// aware). Older records have none — they were created under the old wording.
+$refundAckText = trim($acceptance->refund_ack_text ?? '') ?: \App\Services\FareTermsService::LEGACY_CHECKBOX;
+$refundAckHtml = preg_replace('/\b(NON-REFUNDABLE|NON-TRANSFERABLE|FULLY REFUNDABLE|REFUNDABLE WITH A PENALTY|REFUNDABLE|CONVERTIBLE TO TRAVEL CREDIT)\b/', '<strong>$1</strong>', htmlspecialchars($refundAckText));
 $isPreauth     = (bool)($acceptance->is_preauth ?? false);
 $isMiles       = (bool)($acceptance->is_miles_booking ?? false);
 $milesUsed     = $acceptance->miles_used ?? null;
@@ -687,7 +692,7 @@ $error = $_GET['error'] ?? null;
         <?php endif; ?>
 
         <!-- Ticket Conditions: Endorsements, Baggage, Seats -->
-        <?php if ($endorsements || $baggageInfo || ($seatNumber && $acceptance->type !== 'seat_purchase')): ?>
+        <?php if ($endorsements || $baggageInfo || $fareRules || ($seatNumber && $acceptance->type !== 'seat_purchase')): ?>
         <div class="section">
           <div class="section-title">Ticket Conditions</div>
           <table class="fare-table">
@@ -701,6 +706,12 @@ $error = $_GET['error'] ?? null;
             <tr><td class="label">Endorsements</td><td class="amt" style="color:#dc2626; font-family:monospace; text-align:right;"><?= $endorsements ?></td></tr>
             <?php endif; ?>
           </table>
+          <?php if ($fareRules): ?>
+          <div style="margin-top:10px; padding:10px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
+            <div style="font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;">Fare Rules</div>
+            <div style="font-size:12px; color:#1e293b; line-height:1.55;"><?= nl2br(htmlspecialchars($fareRules)) ?></div>
+          </div>
+          <?php endif; ?>
         </div>
         <?php endif; ?>
 
@@ -735,7 +746,7 @@ $error = $_GET['error'] ?? null;
           </div>
           <div class="check-item">
             <input type="checkbox" name="confirm_nonrefundable" id="chk3" value="1" required>
-            <label for="chk3">I understand this purchase is <strong>NON-REFUNDABLE</strong> and <strong>NON-TRANSFERABLE</strong> once issued.</label>
+            <label for="chk3"><?= $refundAckHtml ?></label>
           </div>
           <div class="check-item">
             <input type="checkbox" name="confirm_chargeback" id="chk4" value="1" required>

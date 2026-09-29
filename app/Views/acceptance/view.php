@@ -808,6 +808,15 @@ tailwind.config = {
             <p class="text-sm text-slate-700"><?= htmlspecialchars($acceptance->baggage_info) ?></p>
           </div>
           <?php endif; ?>
+          <?php if (!empty($acceptance->fare_type)): ?>
+          <div>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fare Type</p>
+            <p class="text-sm font-semibold text-slate-800"><?= htmlspecialchars(\App\Services\FareTermsService::label($acceptance->fare_type)) ?></p>
+            <?php if (!empty($acceptance->refund_ack_text)): ?>
+            <p class="text-xs text-slate-500 mt-1">Customer ticks: “<?= htmlspecialchars($acceptance->refund_ack_text) ?>”</p>
+            <?php endif; ?>
+          </div>
+          <?php endif; ?>
           <?php if ($acceptance->fare_rules): ?>
           <div>
             <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fare Rules</p>
