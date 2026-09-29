@@ -78,6 +78,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             break;
         }
 
+        // Refundability acknowledgement — forms created with a fare type carry the
+        // exact sentence (refund_ack_text); the customer must tick it. Older forms
+        // were created without one and keep the single consent box.
+        if (trim((string) ($acceptance->refund_ack_text ?? '')) !== '' && empty($_POST['refund_ack'])) {
+            $submitError = 'Please confirm the refund terms for this ticket before signing.';
+            break;
+        }
+
         // Validate signature
         $signatureData = trim($_POST['signature_data'] ?? '');
         if (empty($signatureData) || strlen($signatureData) < 100) {
@@ -813,8 +821,14 @@ tailwind.config = {
           $authSeatNumber  = $acceptance->extra_data['seat_number']      ?? '';
           $authSeatAssigns = $acceptance->extra_data['seat_assignments']  ?? [];
         ?>
-        <?php if ($acceptance->endorsements || $acceptance->baggage_info || $authSeatNumber || !empty($authSeatAssigns)): ?>
+        <?php if ($acceptance->endorsements || $acceptance->baggage_info || ($acceptance->fare_rules ?? '') || $authSeatNumber || !empty($authSeatAssigns)): ?>
         <div class="space-y-2">
+          <?php if ($acceptance->fare_rules ?? ''): ?>
+          <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <p class="text-[9px] font-bold text-slate-400 uppercase mb-1">Fare Rules</p>
+            <p class="text-xs text-slate-700 leading-relaxed"><?= nl2br(h($acceptance->fare_rules)) ?></p>
+          </div>
+          <?php endif; ?>
           <?php if ($acceptance->endorsements || $acceptance->baggage_info): ?>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <?php if ($acceptance->endorsements): ?>
@@ -1038,6 +1052,16 @@ tailwind.config = {
               </p>
             </div>
           </label>
+          <?php $refundAck = trim((string) ($acceptance->refund_ack_text ?? '')); if ($refundAck !== ''): ?>
+          <label class="consent-box flex items-start gap-3 p-4 bg-amber-50 border-2 border-amber-200 hover:border-amber-500 rounded-xl cursor-pointer" id="refund-ack-label">
+            <input type="checkbox" name="refund_ack" id="refund-ack-check" value="1" class="mt-0.5 w-5 h-5 rounded accent-amber-600 flex-none" onchange="updateRefundAckStyle()">
+            <p class="text-sm font-semibold text-amber-900 leading-snug"><?= preg_replace('/\b(NON-REFUNDABLE|NON-TRANSFERABLE|FULLY REFUNDABLE|REFUNDABLE WITH A PENALTY|REFUNDABLE|CONVERTIBLE TO TRAVEL CREDIT)\b/', '<strong>$1</strong>', h($refundAck)) ?></p>
+          </label>
+          <div id="refund-ack-error" class="hidden text-rose-600 text-xs font-medium flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-sm">error</span>
+            Please confirm the refund terms for this ticket.
+          </div>
+          <?php endif; ?>
           <div id="consent-error" class="hidden text-rose-600 text-xs font-medium flex items-center gap-1.5">
             <span class="material-symbols-outlined text-sm">error</span>
             Please check the box to confirm your authorization.
@@ -1170,6 +1194,13 @@ function updateConsentStyle() {
   if (checked) document.getElementById('consent-error').classList.add('hidden');
 }
 
+function updateRefundAckStyle() {
+  const box = document.getElementById('refund-ack-check');
+  const label = document.getElementById('refund-ack-label');
+  label.style.borderColor = box.checked ? '#b45309' : '';
+  if (box.checked) document.getElementById('refund-ack-error').classList.add('hidden');
+}
+
 // ─── Submit ───────────────────────────────────────────────────────────────────
 function submitAuth() {
   let valid = true;
@@ -1182,6 +1213,16 @@ function submitAuth() {
     valid = false;
   } else {
     document.getElementById('consent-error').classList.add('hidden');
+  }
+
+  // Check refund-terms acknowledgement (only present on fare-type forms)
+  const refundAck = document.getElementById('refund-ack-check');
+  if (refundAck && !refundAck.checked) {
+    document.getElementById('refund-ack-error').classList.remove('hidden');
+    if (valid) document.getElementById('refund-ack-label').scrollIntoView({ behavior:'smooth', block:'center' });
+    valid = false;
+  } else if (refundAck) {
+    document.getElementById('refund-ack-error').classList.add('hidden');
   }
 
   // Check signature
