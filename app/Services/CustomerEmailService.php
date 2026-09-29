@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CustomerEmailThread;
 use App\Models\CustomerEmailMessage;
+use App\Models\CustomerEmailAttachment;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\RecordNote;
@@ -210,6 +211,12 @@ class CustomerEmailService
             'created_at'    => date('Y-m-d H:i:s'),
         ]);
 
+        // Files were validated + stored by the controller (CustomerEmailAttachments::stage);
+        // link them now so an auto-approved send below includes them.
+        if (!empty($data['attachments'])) {
+            CustomerEmailAttachments::attach($message, $data['attachments'], $creator->id);
+        }
+
         if ($autoApprove) {
             $sendResult = $this->send($thread, $message);
             $this->touchThread($thread, $sendResult['success']
@@ -304,6 +311,16 @@ class CustomerEmailService
                            . EmailSignature::plain($message->author);
             $mail->MessageID = $messageId;
 
+            // Attachments: a missing file fails the send rather than emailing the
+            // customer "please find attached" with nothing attached.
+            foreach ($this->attachmentsFor($message) as $att) {
+                $abs = CustomerEmailAttachments::safePath($att->stored_path);
+                if ($abs === null) {
+                    throw new Exception('Attachment "' . $att->original_name . '" is missing on the server.');
+                }
+                $mail->addAttachment($abs, $att->original_name, PHPMailer::ENCODING_BASE64, $att->mime_type);
+            }
+
             // Threading: if this is a reply to a prior message, link it so the
             // customer's mail client (and our IMAP poller) keep the conversation.
             if (!empty($message->in_reply_to)) {
@@ -332,6 +349,15 @@ class CustomerEmailService
             ]);
             return ['success' => false, 'error' => $err];
         }
+    }
+
+    /** @return \Illuminate\Support\Collection<CustomerEmailAttachment> */
+    private function attachmentsFor(CustomerEmailMessage $message)
+    {
+        if (!CustomerEmailAttachment::tableReady()) {
+            return collect();
+        }
+        return CustomerEmailAttachment::where('message_id', $message->id)->orderBy('id')->get();
     }
 
     // =========================================================================

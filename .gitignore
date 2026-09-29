@@ -77,6 +77,8 @@ storage/proofs/*
 !storage/proofs/.gitkeep
 storage/etickets/*
 !storage/etickets/.gitkeep
+# Customer email attachments (customer documents — never commit)
+storage/customer_emails/
 storage/email_previews/*
 storage/payroll/*.pdf
 test_autofill.php

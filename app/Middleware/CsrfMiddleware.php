@@ -56,6 +56,22 @@ class CsrfMiddleware
 
             // 3. Validation strict string comparison
             if (empty($submittedToken) || !hash_equals($_SESSION['csrf_token'], $submittedToken)) {
+                // An upload over post_max_size makes PHP drop the whole body, so
+                // the token is "missing". Still blocked — but say why, instead of
+                // telling an agent attaching files that it's a security error.
+                if (empty($body) && empty($_FILES) && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0
+                    && str_starts_with(strtolower($request->getHeaderLine('Content-Type')), 'multipart/form-data')) {
+                    $response = new SlimResponse();
+                    $response->getBody()->write(
+                        '<!DOCTYPE html><meta charset="utf-8"><title>Upload too large</title>'
+                        . '<div style="font-family:sans-serif;max-width:480px;margin:80px auto;padding:24px;border:1px solid #fecaca;background:#fef2f2;border-radius:12px;color:#7f1d1d">'
+                        . '<h2 style="margin-top:0">Files too large</h2><p>The attached files were bigger than the server accepts in one go (limit '
+                        . htmlspecialchars((string) ini_get('post_max_size')) . '). Nothing was saved or sent.</p>'
+                        . '<p><a href="javascript:history.back()">&larr; Go back</a> and attach fewer or smaller files.</p></div>'
+                    );
+                    return $response->withStatus(413)->withHeader('Content-Type', 'text/html; charset=utf-8');
+                }
+
                 $response = new SlimResponse();
                 $response->getBody()->write("Invalid or missing CSRF token. Request blocked.");
                 return $response->withStatus(403);

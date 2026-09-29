@@ -4,10 +4,12 @@ namespace App\Controllers;
 
 use App\Models\CustomerEmailThread;
 use App\Models\CustomerEmailMessage;
+use App\Models\CustomerEmailAttachment;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\RecordNote;
 use App\Services\CustomerEmailService;
+use App\Services\CustomerEmailAttachments;
 use App\Services\GeminiService;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -189,6 +191,18 @@ class CustomerEmailController
                      . "list the individual flights, times, or flight numbers in your text.";
         }
 
+        // Files the agent attached: mention them, but only by what the names say —
+        // the AI cannot see the contents. Names are untrusted: strip, cap, quote.
+        $attNames = array_slice(array_filter(array_map(
+            fn($n) => mb_substr(preg_replace('/[^\p{L}\p{N} ._()\-]/u', '', (string) $n), 0, 80),
+            explode('|', (string) ($body['attachment_names'] ?? ''))
+        ), 'strlen'), 0, CustomerEmailAttachments::MAX_FILES);
+        if ($attNames) {
+            $intent .= "\n\nNote: these files are attached to the email: \"" . implode('", "', $attNames) . "\". "
+                     . "Mention that they are attached (e.g. \"please find attached …\"). You cannot see their "
+                     . "contents — do not describe or quote anything from them beyond the file names.";
+        }
+
         $result = $this->ai->draftEmail($intent, $grounding, $category);
         if (!$result['success']) {
             return $this->json($response, ['success' => false, 'error' => $result['error']], 502);
@@ -236,6 +250,14 @@ class CustomerEmailController
             return $this->backWithError($response, '/emails/compose', 'Session expired. Please sign in again.');
         }
 
+        // Attachments: validated + stored before anything is created, so a bad
+        // file stops the whole email with a clear message.
+        $staged = CustomerEmailAttachments::stage(CustomerEmailAttachments::fromRequest($request->getUploadedFiles()));
+        if ($staged['error']) {
+            return $this->backWithError($response, '/emails/compose', $staged['error']);
+        }
+
+        try {
         $outcome = $this->service->createThread([
             'transaction_id' => $body['transaction_id'] ?? null,
             'customer_name'  => trim($body['customer_name'] ?? '') ?: 'Customer',
@@ -248,7 +270,12 @@ class CustomerEmailController
             'ai_body'        => $body['ai_body'] ?? null,
             'final_subject'  => $finalSubject,
             'final_body'     => $finalBody,
+            'attachments'    => $staged['files'],
         ], $creator);
+        } catch (\Throwable $e) {
+            CustomerEmailAttachments::discard($staged['files']);
+            throw $e;
+        }
 
         $thread = $outcome['thread'];
         $flash  = $outcome['sent']
@@ -267,7 +294,9 @@ class CustomerEmailController
         $role   = $_SESSION['role'] ?? 'agent';
         $userId = (int) ($_SESSION['user_id'] ?? 0);
 
-        $thread = CustomerEmailThread::with(['messages.author', 'messages.approver', 'agent'])
+        $with = ['messages.author', 'messages.approver', 'agent'];
+        if (CustomerEmailAttachment::tableReady()) $with[] = 'messages.attachments';
+        $thread = CustomerEmailThread::with($with)
             ->find((int) $args['id']);
         if (!$thread || !$this->canAccessThread($thread, $role, $userId)) {
             $_SESSION['flash_error'] = 'Access denied.';
@@ -324,6 +353,11 @@ class CustomerEmailController
             return $this->backWithError($response, '/emails/' . $thread->id, 'Subject and body cannot be empty.');
         }
 
+        $staged = CustomerEmailAttachments::stage(CustomerEmailAttachments::fromRequest($request->getUploadedFiles()));
+        if ($staged['error']) {
+            return $this->backWithError($response, '/emails/' . $thread->id, $staged['error']);
+        }
+
         $creator = User::find($userId);
         // Thread replies link to the most recent SENT outbound message for proper email threading.
         $lastSent = $thread->messages()
@@ -331,6 +365,7 @@ class CustomerEmailController
             ->where('status', CustomerEmailMessage::STATUS_SENT)
             ->orderByDesc('id')->first();
 
+        try {
         $outcome = $this->service->addOutboundMessage($thread, [
             'category'      => $body['category'] ?? 'custom',
             'intent_prompt' => $body['intent'] ?? '',
@@ -339,7 +374,12 @@ class CustomerEmailController
             'ai_body'       => $body['ai_body'] ?? null,
             'final_subject' => $finalSubject,
             'final_body'    => $finalBody,
+            'attachments'   => $staged['files'],
         ], $creator, $lastSent);
+        } catch (\Throwable $e) {
+            CustomerEmailAttachments::discard($staged['files']);
+            throw $e;
+        }
 
         $flash = $outcome['sent'] ? 'sent=1'
             : (isset($outcome['send_error']) && $outcome['send_error'] ? 'send_error=1' : 'submitted=1');
@@ -359,7 +399,8 @@ class CustomerEmailController
             return $response->withHeader('Location', '/emails')->withStatus(302);
         }
 
-        $query = CustomerEmailMessage::with(['thread', 'author'])
+        $query = CustomerEmailMessage::with(CustomerEmailAttachment::tableReady()
+                ? ['thread', 'author', 'attachments'] : ['thread', 'author'])
             ->pendingApproval()->orderBy('created_at', 'asc');
         if ($role === User::ROLE_MANAGER) {
             $query->whereIn('created_by', $this->getManagerTeamIds($userId));
@@ -441,6 +482,42 @@ class CustomerEmailController
         $thread->update(['status' => CustomerEmailThread::STATUS_CLOSED]);
         RecordNote::log('customer_email', $thread->id, $userId, 'Thread closed.', 'note');
         return $response->withHeader('Location', '/emails/' . $thread->id)->withStatus(302);
+    }
+
+    // =========================================================================
+    // ATTACHMENT DOWNLOAD — GET /emails/attachment/{id}
+    // =========================================================================
+
+    public function attachment(Request $request, Response $response, array $args): Response
+    {
+        $role   = $_SESSION['role'] ?? 'agent';
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+
+        $att = CustomerEmailAttachment::tableReady()
+            ? CustomerEmailAttachment::with('message.thread')->find((int) $args['id'])
+            : null;
+        $thread = $att?->message?->thread;
+
+        // Same rule as opening the thread (managers: their team, which is also
+        // whose drafts reach their approval queue)
+        $allowed = $thread && $this->canAccessThread($thread, $role, $userId);
+        $path = $allowed ? CustomerEmailAttachments::safePath($att->stored_path) : null;
+        if (!$path) {
+            return $response->withStatus(404);
+        }
+
+        // PDFs and images open in the browser; anything else downloads
+        $inline = $att->mime_type === 'application/pdf' || str_starts_with($att->mime_type, 'image/');
+        $name   = str_replace(['"', "\r", "\n"], '', $att->original_name);
+
+        $response->getBody()->write((string) file_get_contents($path));
+        return $response
+            ->withHeader('Content-Type', $att->mime_type)
+            ->withHeader('Content-Length', (string) filesize($path))
+            ->withHeader('Content-Disposition', ($inline ? 'inline' : 'attachment')
+                . '; filename="' . $name . '"; filename*=UTF-8\'\'' . rawurlencode($att->original_name))
+            ->withHeader('X-Content-Type-Options', 'nosniff')
+            ->withHeader('Cache-Control', 'private, no-store');
     }
 
     // =========================================================================

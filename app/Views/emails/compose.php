@@ -47,7 +47,7 @@ tailwind.config = { darkMode: "class", theme: { extend: {
     </div>
   <?php endif; ?>
 
-  <form method="POST" action="/emails/compose" id="composeForm">
+  <form method="POST" action="/emails/compose" id="composeForm" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>"/>
     <input type="hidden" name="ai_model"   id="f_ai_model"/>
     <input type="hidden" name="ai_subject" id="f_ai_subject"/>
@@ -134,6 +134,11 @@ tailwind.config = { darkMode: "class", theme: { extend: {
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1">Formatted preview <span class="font-normal text-slate-400">(what the customer sees)</span></label>
           <div id="bodyPreview" class="rounded-lg border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-700 leading-relaxed min-h-[72px]"><span class="text-slate-400">Your formatted email will appear here…</span></div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">Attachments <span class="font-normal text-slate-400">(optional)</span></label>
+          <?php $pickerId = 'composeAttach'; require __DIR__ . '/_attach_picker.php'; ?>
         </div>
 
         <div id="placeholderWarn" class="hidden px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
@@ -310,7 +315,8 @@ document.getElementById('genBtn').addEventListener('click', async function() {
         category: document.getElementById('f_category').value,
         customer_name: document.getElementById('f_customer_name').value || '',
         transaction_id: document.getElementById('f_transaction_id').value || '',
-        has_itinerary: window._itineraryMd ? '1' : ''
+        has_itinerary: window._itineraryMd ? '1' : '',
+        attachment_names: (AttachPicker.get('composeAttach')?.names() || []).join('|')
       })
     });
     const d = await res.json();

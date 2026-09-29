@@ -414,6 +414,7 @@ $app->group('/emails', function ($group) {
     $group->get('/itinerary/{id:[0-9]+}',        [CustomerEmailController::class, 'itinerary']);      // AJAX itinerary table from booking
     $group->post('/draft',                       [CustomerEmailController::class, 'draft']);          // AJAX → AI
     $group->post('/compose',                     [CustomerEmailController::class, 'store']);
+    $group->get('/attachment/{id:[0-9]+}',       [CustomerEmailController::class, 'attachment']);     // access-checked file download
     $group->get('/approvals',                    [CustomerEmailController::class, 'approvals']);      // manager/admin queue
     $group->post('/message/{mid:[0-9]+}/approve',[CustomerEmailController::class, 'approve']);        // manager/admin only
     $group->post('/message/{mid:[0-9]+}/reject', [CustomerEmailController::class, 'reject']);         // manager/admin only

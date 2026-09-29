@@ -57,6 +57,7 @@ tailwind.config = { darkMode: "class", theme: { extend: {
           </div>
           <div class="text-sm font-bold text-primary mb-1"><?= htmlspecialchars($m->final_subject) ?></div>
           <div class="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed border-l-2 border-slate-100 pl-3 max-h-40 overflow-y-auto"><?= htmlspecialchars($m->final_body) ?></div>
+          <?php $atts = $m->loadedAttachments(); require __DIR__ . '/_attach_list.php'; ?>
 
           <?php if ($m->hasPlaceholders()): ?>
             <div class="mt-3 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">

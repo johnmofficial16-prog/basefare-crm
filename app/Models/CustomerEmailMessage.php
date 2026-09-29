@@ -102,6 +102,20 @@ class CustomerEmailMessage extends Model
         return $this->belongsTo(User::class, 'approved_by');
     }
 
+    public function attachments()
+    {
+        return $this->hasMany(CustomerEmailAttachment::class, 'message_id')->orderBy('id');
+    }
+
+    /**
+     * Attachments if the relation was eager-loaded, else empty. Views use this so
+     * a page never queries a table the migration hasn't created yet.
+     */
+    public function loadedAttachments()
+    {
+        return $this->relationLoaded('attachments') ? $this->attachments : collect();
+    }
+
     // ── Scopes ───────────────────────────────────────────────────────────────
 
     public function scopePendingApproval($query)

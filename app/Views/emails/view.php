@@ -96,6 +96,7 @@ tailwind.config = { darkMode: "class", theme: { extend: {
         <?php else: /* our outbound — render the same safe Markdown the customer received */ ?>
           <div class="text-sm text-slate-700 leading-relaxed"><?= \App\Services\EmailMarkdown::toEmailHtml($m->final_body) ?></div>
         <?php endif; ?>
+        <?php $atts = $m->loadedAttachments(); require __DIR__ . '/_attach_list.php'; ?>
 
         <?php if ($m->status === 'rejected' && $m->rejected_reason): ?>
           <div class="mt-3 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
@@ -136,7 +137,7 @@ tailwind.config = { darkMode: "class", theme: { extend: {
   <?php if ($thread->status !== 'closed' && ($role ?? '') !== 'csa'): ?>
   <div class="bg-white border border-slate-200 rounded-xl p-5">
     <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-3">Reply</div>
-    <form method="POST" action="/emails/<?= $thread->id ?>/reply" id="replyForm">
+    <form method="POST" action="/emails/<?= $thread->id ?>/reply" id="replyForm" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>"/>
       <input type="hidden" name="ai_model"   id="r_ai_model"/>
       <input type="hidden" name="ai_subject" id="r_ai_subject"/>
@@ -163,6 +164,7 @@ tailwind.config = { darkMode: "class", theme: { extend: {
       <textarea name="final_body" id="r_body" rows="6" required placeholder="Write your reply…"
                 class="w-full rounded-lg border-slate-300 text-sm font-mono leading-relaxed focus:ring-primary focus:border-primary"></textarea>
       <p id="rGenError" class="hidden text-xs font-semibold text-rose-600 mt-1"></p>
+      <div class="mt-2"><?php $pickerId = 'replyAttach'; require __DIR__ . '/_attach_picker.php'; ?></div>
       <div class="flex items-center justify-between mt-3">
         <p class="text-[11px] text-slate-400">
           <?= $canApprove ? 'Sends immediately on submit.' : 'Queued for manager approval.' ?>
@@ -213,7 +215,8 @@ if (rGen) {
         method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ csrf_token: CSRF, intent, category: document.getElementById('r_category').value,
           customer_name: <?= json_encode($thread->customer_name ?? '') ?>,
-          transaction_id: document.querySelector('#replyForm [name=transaction_id]').value || '' })
+          transaction_id: document.querySelector('#replyForm [name=transaction_id]').value || '',
+          attachment_names: (window.AttachPicker?.get('replyAttach')?.names() || []).join('|') })
       });
       const d = await res.json();
       if (!d.success) { errEl.textContent = d.error || 'Could not generate.'; errEl.classList.remove('hidden'); return; }
