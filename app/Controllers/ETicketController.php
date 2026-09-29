@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\RecordNote;
 use App\Services\ETicketService;
 use App\Services\ETicketEmailService;
+use App\Services\FareTermsService;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
