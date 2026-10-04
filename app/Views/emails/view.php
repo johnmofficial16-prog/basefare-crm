@@ -216,6 +216,7 @@ if (rGen) {
         body: new URLSearchParams({ csrf_token: CSRF, intent, category: document.getElementById('r_category').value,
           customer_name: <?= json_encode($thread->customer_name ?? '') ?>,
           transaction_id: document.querySelector('#replyForm [name=transaction_id]').value || '',
+          thread_id: <?= (int) $thread->id ?>,
           attachment_names: (window.AttachPicker?.get('replyAttach')?.names() || []).join('|') })
       });
       const d = await res.json();

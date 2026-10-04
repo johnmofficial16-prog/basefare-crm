@@ -56,7 +56,7 @@ class CustomerEmailService
             $money = strtoupper($txn->currency ?? 'USD') . ' ' . number_format((float) $txn->total_amount, 2);
         }
 
-        return array_filter([
+        $facts = [
             'Customer name'            => $txn->customer_name ?? '',
             'Booking reference (PNR)'  => $txn->pnr ?? '',
             'Airline'                  => $txn->airline ?? '',
@@ -65,7 +65,67 @@ class CustomerEmailService
             'Payment status'           => $txn->payment_status ?? '',
             'Travel date'              => $txn->travel_date ? (string) $txn->travel_date : '',
             'Return date'              => $txn->return_date ? (string) $txn->return_date : '',
-        ], fn($v) => trim((string) $v) !== '');
+        ];
+
+        // The flights themselves (same source as the itinerary table), so the
+        // AI can mention times and airports correctly instead of placeholders.
+        $n = 0;
+        foreach ($this->extractFlightSegments($this->resolveFlightData($txn)) as $s) {
+            $from = strtoupper(trim($s['from'] ?? $s['departure_airport'] ?? ''));
+            $to   = strtoupper(trim($s['to']   ?? $s['arrival_airport']   ?? ''));
+            if ($from === '' && $to === '') continue;
+            $flight = trim(strtoupper(trim($s['airline_iata'] ?? $s['airline'] ?? '')) . ' ' . trim($s['flight_no'] ?? $s['flight'] ?? ''));
+            $parts = array_filter([
+                $flight,
+                "{$from} to {$to}",
+                trim($s['date'] ?? $s['departure_date'] ?? ''),
+                ($dep = trim($s['dep_time'] ?? $s['time'] ?? '')) !== '' ? "departs {$dep}" : '',
+                ($arr = trim($s['arr_time'] ?? $s['arrival_time'] ?? '')) !== ''
+                    ? 'arrives ' . $arr . (!empty($s['arr_next_day']) ? ' (next day)' : '') : '',
+                trim($s['cabin_class'] ?? $s['class'] ?? ''),
+            ], fn($v) => $v !== '');
+            $facts['Flight ' . (++$n)] = implode(', ', $parts);
+            if ($n >= 8) break;
+        }
+
+        return array_filter($facts, fn($v) => trim((string) $v) !== '');
+    }
+
+    /**
+     * Recent messages of a thread as plain text for the AI (oldest first), so a
+     * drafted reply answers what the customer actually wrote. Sent and received
+     * messages only — drafts, rejected and failed ones never reached anyone.
+     * Quoted history inside inbound mail is trimmed; each message is capped.
+     */
+    public function conversationForAi(CustomerEmailThread $thread, int $limit = 6): string
+    {
+        $messages = $thread->messages()
+            ->whereIn('status', [CustomerEmailMessage::STATUS_SENT, CustomerEmailMessage::STATUS_RECEIVED])
+            ->orderByDesc('id')->limit($limit)->get()->reverse();
+
+        $out = [];
+        foreach ($messages as $m) {
+            $inbound = $m->direction === CustomerEmailMessage::DIR_INBOUND;
+            $text = $inbound ? $this->stripQuotedReply((string) $m->final_body) : (string) $m->final_body;
+            $text = mb_substr(trim(preg_replace("/\n{3,}/", "\n\n", str_replace("\r", '', $text))), 0, 1500);
+            if ($text === '') continue;
+            $when = $m->created_at ? date('j M Y H:i', strtotime((string) $m->created_at)) : '';
+            $who  = $inbound ? 'CUSTOMER' : 'BASE FARE (us)';
+            $out[] = "[{$when}] {$who}:\n{$text}";
+        }
+        return implode("\n\n---\n\n", $out);
+    }
+
+    /** Drop the quoted earlier conversation that mail clients append to replies. */
+    private function stripQuotedReply(string $text): string
+    {
+        $text = str_replace("\r", '', $text);
+        // Cut at the usual "On <date>, <name> wrote:" / Outlook header markers
+        $cut = preg_split('/\n(?:On .{5,200}wrote:|-{2,}\s*Original Message\s*-{2,}|From: .+\nSent: )/i', $text, 2);
+        $text = $cut[0];
+        // And any remaining ">"-quoted lines
+        $lines = array_filter(explode("\n", $text), fn($l) => !str_starts_with(ltrim($l), '>'));
+        return trim(implode("\n", $lines));
     }
 
     /**

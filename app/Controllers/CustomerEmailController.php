@@ -203,7 +203,17 @@ class CustomerEmailController
                      . "contents — do not describe or quote anything from them beyond the file names.";
         }
 
-        $result = $this->ai->draftEmail($intent, $grounding, $category);
+        // Reply in a thread: give the AI the recent conversation, so it answers
+        // what the customer actually wrote (access-checked like the thread page).
+        $conversation = '';
+        if (!empty($body['thread_id'])) {
+            $thread = CustomerEmailThread::find((int) $body['thread_id']);
+            if ($thread && $this->canAccessThread($thread, $role, (int) ($_SESSION['user_id'] ?? 0))) {
+                $conversation = $this->service->conversationForAi($thread);
+            }
+        }
+
+        $result = $this->ai->draftEmail($intent, $grounding, $category, $conversation);
         if (!$result['success']) {
             return $this->json($response, ['success' => false, 'error' => $result['error']], 502);
         }
@@ -212,7 +222,7 @@ class CustomerEmailController
             'success'  => true,
             'subject'  => $result['subject'],
             'body'     => $result['body'],
-            'ai_model' => $_ENV['VERTEX_MODEL'] ?? 'gemini-2.5-flash',
+            'ai_model' => $result['model'] ?? '',
         ]);
     }
 
