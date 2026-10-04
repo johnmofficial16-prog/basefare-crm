@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ETicket;
+use App\Services\ExchangeVoucherService;
 use Carbon\Carbon;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -65,6 +66,18 @@ class ETicketEmailService
         $subject   = $this->buildSubject($eticket);
         $link      = $eticket->publicUrl();
 
+        // Exchange voucher: the PDF must exist (rendered at Preview & Send) —
+        // never email "your voucher is attached" without the attachment.
+        $voucherPdf = null;
+        $voucher    = null;
+        if (ExchangeVoucherService::forEticket($eticket)) {
+            $voucher    = ExchangeVoucherService::voucherFor($eticket);
+            $voucherPdf = $voucher ? ExchangeVoucherService::pdfAbsPath($voucher) : null;
+            if (!$voucherPdf) {
+                return ['success' => false, 'error' => 'The Future Travel Voucher PDF is not ready — open Preview & Send first.'];
+            }
+        }
+
         try {
             $mail = $this->getMailer();
             $mail->addAddress($sendTo, $sendToName);
@@ -72,6 +85,9 @@ class ETicketEmailService
             $mail->Subject = $subject;
             $mail->Body    = $this->buildHtmlEmail($eticket, $link);
             $mail->AltBody = $this->buildPlainText($eticket, $link);
+            if ($voucherPdf) {
+                $mail->addAttachment($voucherPdf, ExchangeVoucherService::pdfFilename($voucher), PHPMailer::ENCODING_BASE64, 'application/pdf');
+            }
             $mail->send();
 
             $this->log($eticket, $subject, $sendTo, 'SENT_OK');
@@ -344,6 +360,14 @@ HTML;
             $body .= 'Total Charged: ' . $eticket->currency . ' ' . number_format($eticket->total_amount, 2) . "\n";
         }
         $body .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
+        if ($ftv = ExchangeVoucherService::forEticket($eticket)) {
+            $vch   = ExchangeVoucherService::voucherFor($eticket);
+            $body .= "FUTURE TRAVEL VOUCHER\n";
+            $body .= "Although this exchange was charged, you receive a Future Travel Voucher of "
+                   . ExchangeVoucherService::money($ftv) . ", valid until " . ExchangeVoucherService::date($ftv['valid_until'] ?? '') . ".\n";
+            if ($vch) $body .= "Voucher number: {$vch->voucher_no} (PDF attached)\n";
+            $body .= "To use it, call 888-608-4011 or reply to this email quoting the voucher number.\n\n";
+        }
         $body .= "TO ACKNOWLEDGE RECEIPT — CLICK THIS LINK:\n{$ackUrl}\n\n";
         $body .= "Clicking the link above confirms you have received your e-ticket. This is legally binding.\n\n";
         $body .= "View full e-ticket online:\n{$link}\n\n";
@@ -357,6 +381,30 @@ HTML;
     // =========================================================================
     // HTML EMAIL — E-TICKET TO CUSTOMER
     // =========================================================================
+
+    /** Voucher block for exchange e-tickets; '' for everything else. */
+    private function buildVoucherSection(ETicket $eticket): string
+    {
+        $ftv = ExchangeVoucherService::forEticket($eticket);
+        if (!$ftv) {
+            return '';
+        }
+        $vch    = ExchangeVoucherService::voucherFor($eticket);
+        $amount = htmlspecialchars(ExchangeVoucherService::money($ftv));
+        $valid  = htmlspecialchars(ExchangeVoucherService::date($ftv['valid_until'] ?? ''));
+        $no     = $vch ? htmlspecialchars($vch->voucher_no) : '';
+
+        return "\n      <div style='margin:0 0 24px;border:2px solid #bae6fd;border-radius:12px;overflow:hidden;'>\n"
+            . "        <div style='background:linear-gradient(90deg,#163274,#1e4fad);color:#ffffff;padding:10px 16px;font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;'>&#127873; Future Travel Voucher</div>\n"
+            . "        <div style='background:#f0f9ff;padding:14px 16px;'>\n"
+            . "          <table style='width:100%;border-collapse:collapse;'><tr>\n"
+            . "            <td style='font-size:24px;font-weight:900;color:#163274;font-family:monospace;'>{$amount}</td>\n"
+            . ($no ? "            <td style='text-align:right;font-size:11px;color:#475569;'>Voucher no.<br><strong style='font-size:15px;color:#163274;font-family:monospace;letter-spacing:1px;'>{$no}</strong></td>\n" : '')
+            . "          </tr></table>\n"
+            . "          <p style='margin:8px 0 0;font-size:13px;line-height:1.6;color:#0c4a6e;'>Although this exchange was charged, you receive a Future Travel Voucher for this amount, valid until <strong>{$valid}</strong>, to use on a future booking with us. <strong>Your voucher is attached to this email as a PDF.</strong></p>\n"
+            . "          <p style='margin:8px 0 0;font-size:13px;line-height:1.6;color:#0c4a6e;'>To use it, call <strong>888-608-4011</strong> or reply to this email quoting the voucher number.</p>\n"
+            . "        </div>\n      </div>";
+    }
 
     public function buildHtmlEmail(ETicket $eticket, string $link): string
     {
@@ -597,6 +645,9 @@ HTML;
                 : "<div style='padding:0 0 24px;text-align:right;font-size:15px;font-weight:800;color:#065f46;'>Total: {$total}</div>";
         }
 
+        // ── Exchange: Future Travel Voucher (PDF attached by send()) ─────────
+        $voucherSection = $this->buildVoucherSection($eticket);
+
         // ── Ticket Conditions (endorsements, baggage, fare rules, policy) ───
         $condParts = [];
         if (!empty($eticket->endorsements)) {
@@ -743,6 +794,7 @@ HTML;
 
       {$itinSection}
       {$fareSection}
+      {$voucherSection}
       {$condSection}
 
     </div>

@@ -726,7 +726,23 @@ function importAcceptance(id) {
         document.getElementById('txnForm').prepend(accInput);
       }
       accInput.value = id;
-      syncSummary(); 
+
+      // Exchange: show the Future Travel Voucher promised on the acceptance
+      // (stored on the transaction server-side from the acceptance itself)
+      var ftvBox = document.getElementById('ftv-notice');
+      if (ftvBox) {
+        var ftv = d.future_travel_voucher;
+        if (ftv && parseFloat(ftv.amount) > 0) {
+          var vd = new Date((ftv.valid_until || '') + 'T00:00:00');
+          document.getElementById('ftv-notice-text').textContent =
+            (ftv.currency || 'USD') + ' ' + parseFloat(ftv.amount).toFixed(2) +
+            (isNaN(vd) ? '' : ' · valid until ' + vd.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }));
+          ftvBox.classList.remove('hidden');
+        } else {
+          ftvBox.classList.add('hidden');
+        }
+      }
+      syncSummary();
       var importedMsg = '\u2713 Acceptance #' + id + ' imported successfully.';
       if (!hasMain && !hasOld) importedMsg += '\n\nNote: No flight itinerary was found in this acceptance record. Please enter it manually.';
       alert(importedMsg + '\n\nReview and complete remaining fields.');

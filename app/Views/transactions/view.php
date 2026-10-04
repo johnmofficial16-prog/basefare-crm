@@ -868,6 +868,20 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       </div>
       <?php endif; ?>
 
+      <?php /* Exchange: Future Travel Voucher (from the signed acceptance; ExchangeVoucherService) */ ?>
+      <?php $txnFtv = $txn->type === 'exchange' && is_array($d['future_travel_voucher'] ?? null) ? $d['future_travel_voucher'] : null; ?>
+      <?php if ($txnFtv): ?>
+      <div class="border-2 border-sky-200 bg-sky-50 rounded-xl px-5 py-4 flex items-center gap-3">
+        <span class="material-symbols-outlined text-sky-600 text-2xl">card_giftcard</span>
+        <div>
+          <p class="text-[10px] font-bold text-sky-700 uppercase tracking-wider">Future Travel Voucher owed to customer</p>
+          <p class="text-sm font-bold text-sky-900"><?= htmlspecialchars(\App\Services\ExchangeVoucherService::money($txnFtv)) ?>
+            <span class="font-normal text-sky-700">· valid until <?= htmlspecialchars(\App\Services\ExchangeVoucherService::date($txnFtv['valid_until'] ?? '')) ?></span></p>
+          <p class="text-[11px] text-sky-600">Issued as a PDF with the e-ticket (preview before sending).</p>
+        </div>
+      </div>
+      <?php endif; ?>
+
       <!-- Agent Notes / Transaction Summary (txn->agent_notes OR acceptance->agent_notes) -->
       <?php if ($displayAgentNotes): ?>
       <div class="border-2 border-amber-300 rounded-xl overflow-hidden" style="background:linear-gradient(135deg,#fffbeb,#fef9ed);">

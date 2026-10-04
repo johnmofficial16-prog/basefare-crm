@@ -722,6 +722,15 @@ body {
       <?php endif; ?>
     </div>
 
+    <!-- ── EXCHANGE: FUTURE TRAVEL VOUCHER (shown to and accepted by the customer) ── -->
+    <?php $rcFtv = $acceptance->type === 'exchange' && is_array($extraData['ftv'] ?? null) ? $extraData['ftv'] : null; ?>
+    <?php if ($rcFtv): ?>
+    <div class="section">
+      <div class="section-title">Future Travel Voucher</div>
+      <div class="policy-text">The customer was told that, although the amount above is charged, a Future Travel Voucher of <?= rh(\App\Services\ExchangeVoucherService::money($rcFtv)) ?>, valid until <?= rh(\App\Services\ExchangeVoucherService::date($rcFtv['valid_until'] ?? '')) ?>, is issued for a future booking.</div>
+    </div>
+    <?php endif; ?>
+
     <!-- ── TICKET CONDITIONS ── -->
     <?php if ($acceptance->endorsements || $acceptance->baggage_info || $acceptance->fare_rules || $seatNumber): ?>
     <div class="section">

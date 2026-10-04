@@ -414,6 +414,28 @@ tailwind.config = {
       <div class="bg-white border border-slate-200 rounded-xl p-5">
         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Send E-Ticket</p>
 
+        <?php
+          // Exchange with a Future Travel Voucher: review email + voucher before sending
+          $etFtv     = \App\Services\ExchangeVoucherService::forEticket($et);
+          $etVoucher = $etFtv ? \App\Services\ExchangeVoucherService::voucherFor($et) : null;
+        ?>
+        <?php if ($etFtv): ?>
+        <div class="mb-3 p-3 rounded-lg border-2 border-sky-200 bg-sky-50">
+          <p class="text-[10px] font-bold text-sky-700 uppercase tracking-wider">Future Travel Voucher</p>
+          <p class="text-sm font-bold text-sky-900"><?= htmlspecialchars(\App\Services\ExchangeVoucherService::money($etFtv)) ?>
+            <?php if ($etVoucher): ?><span class="font-mono text-xs">· <?= htmlspecialchars($etVoucher->voucher_no) ?></span><?php endif; ?></p>
+          <?php if ($etVoucher && $etVoucher->pdf_path): ?>
+          <a href="/etickets/<?= $et->id ?>/voucher.pdf" target="_blank" rel="noopener" class="text-[11px] font-semibold text-sky-700 hover:underline">Open voucher PDF</a>
+          <?php else: ?>
+          <p class="text-[11px] text-sky-600">Made when you open Preview &amp; Send.</p>
+          <?php endif; ?>
+        </div>
+        <a href="/etickets/<?= $et->id ?>/preview"
+           class="mb-4 w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-container transition-all text-sm shadow-lg shadow-primary/20">
+          <span class="material-symbols-outlined text-base">preview</span>
+          <?= $et->isSent() ? 'Preview &amp; Resend' : 'Preview &amp; Send' ?>
+        </a>
+        <?php else: ?>
         <!-- Send to customer email -->
         <form method="POST" action="/etickets/<?= $et->id ?>/send" class="mb-4">
           <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
@@ -429,6 +451,7 @@ tailwind.config = {
           </p>
           <?php endif; ?>
         </form>
+        <?php endif; ?>
 
         <!-- Resend to alternate email -->
         <div class="border-t border-slate-100 pt-4">

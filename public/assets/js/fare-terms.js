@@ -14,7 +14,8 @@
  *     canEdit: true|false,                 // manager/admin may unlock manual edit
  *     initial: { fare_type, values },      // optional
  *     getCurrency: () => 'USD',
- *     fields: { fareRules, endorsements, policy }   // textareas/inputs to fill
+ *     fields: { fareRules, endorsements, policy },  // textareas/inputs to fill
+ *     policyTransform: text => text           // optional, e.g. exchange voucher clause 8
  *   });
  *   ft.setCabin('Business');               // auto-select unless the agent picked
  *   ft.missing();                          // → ['Cancellation penalty (per pax)', ...]
@@ -171,7 +172,10 @@
       if (!state.manual) {
         if (fields.fareRules) fields.fareRules.value = out.fare_rules;
         if (fields.endorsements) fields.endorsements.value = out.endorsements;
-        if (fields.policy) fields.policy.value = policyKind === 'eticket' ? out.eticket_policy : out.acceptance_policy;
+        if (fields.policy) {
+          var pol = policyKind === 'eticket' ? out.eticket_policy : out.acceptance_policy;
+          fields.policy.value = opts.policyTransform ? opts.policyTransform(pol) : pol;
+        }
       }
       [fields.fareRules, fields.endorsements, fields.policy].forEach(function (f) {
         if (!f) return;
