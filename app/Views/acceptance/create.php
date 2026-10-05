@@ -851,37 +851,6 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- sec-exchange-voucher: Exchange (reissue), full mode — see ExchangeVoucherService -->
-        <div id="sec-exchange-voucher" class="hidden bg-white border-2 border-sky-200 rounded-xl shadow-sm overflow-hidden">
-          <div class="px-6 py-4 border-b border-sky-100 bg-sky-50/60 flex items-center gap-2">
-            <span class="material-symbols-outlined text-sky-600">card_giftcard</span>
-            <div>
-              <h2 class="font-bold text-sky-900" style="font-family:Manrope,sans-serif;">Future Travel Voucher</h2>
-              <p class="text-xs text-sky-700 mt-0.5">The amount charged under Base Fare comes back to the customer as a voucher. Shown on the authorization form, the transaction and the e-ticket.</p>
-            </div>
-          </div>
-          <div class="p-6">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-1.5">Voucher Amount</label>
-                <div class="flex items-center gap-2">
-                  <span id="ftv_currency" class="text-xs font-bold text-sky-700">USD</span>
-                  <input type="number" id="field_ftv_amount" step="0.01" min="0" placeholder="0.00"
-                    class="w-full border border-sky-200 rounded-lg px-3 py-2 text-sm font-mono font-bold text-sky-800 bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-400">
-                </div>
-                <p id="ftv_hint" class="text-[10px] text-sky-600 mt-1">Follows the Base Fare amount. Change it if the customer was promised a different amount; 0 = no voucher.</p>
-                <button type="button" id="ftv_reset" class="hidden mt-1 text-[10px] font-semibold text-sky-700 hover:text-sky-900 underline">Use the Base Fare amount again</button>
-              </div>
-              <div>
-                <label class="block text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-1.5">Valid Until</label>
-                <input type="date" id="field_ftv_valid_until"
-                  class="w-full border border-sky-200 rounded-lg px-3 py-2 text-sm bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-400">
-                <p class="text-[10px] text-sky-600 mt-1">Default: 1 year from today.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- Payment Details -->
         <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
@@ -1717,7 +1686,6 @@ function selectType(type) {
   // Show type-specific cancel sections (only in full mode)
   _toggleSec('sec-cancel-refund',  type === 'cancel_refund' && _currentMode === 'full');
   _toggleSec('sec-cancel-credit',  type === 'cancel_credit' && _currentMode === 'full');
-  if (typeof ftvMgr !== 'undefined') ftvMgr.syncVisibility();
   // Sync credit e-ticket rows with passenger count if switching to cancel_credit
   if (type === 'cancel_credit') creditEtktMgr.syncFromPassengers();
 }
@@ -2700,7 +2668,6 @@ const fareMgr = {
     const el = document.getElementById('field_total_amount');
     if (el && state.fareItems.length > 0) el.value = total.toFixed(2);
     syncSummary();
-    if (typeof ftvMgr !== 'undefined') ftvMgr.followBaseFare();
   },
   _render() {
     // Ensure there is always at least one primary item
@@ -3032,9 +2999,6 @@ const formAssembly = {
       extraData.cancel_fee      = parseFloat(document.getElementById('field_cr_cancel_fee')?.value || 0) || 0;
       extraData.refund_method   = document.getElementById('field_cr_refund_method')?.value || '';
       extraData.refund_timeline = document.getElementById('field_cr_refund_timeline')?.value || '';
-    } else if (t === 'exchange' && ftvMgr.active()) {
-      // Server re-checks: empty amount → fare line 1; 0 → no voucher; bad date → +1 year
-      extraData.ftv = ftvMgr.data();
     } else if (t === 'cancel_credit') {
       extraData.credit_amount = parseFloat(document.getElementById('field_cc_credit_amount')?.value || 0) || 0;
       extraData.valid_until   = document.getElementById('field_cc_valid_until')?.value || '';
@@ -3185,7 +3149,6 @@ function setMode(mode) {
     var el = document.getElementById(id);
     if (el) el.style.display = 'none'; // reset; selectType() handles show logic
   });
-  if (typeof ftvMgr !== 'undefined') ftvMgr.syncVisibility();
 
   // Sync currency from preauth total selector to main
   if (mode === 'preauth') {
@@ -3286,74 +3249,6 @@ function serializeExtraData() {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXCHANGE FUTURE TRAVEL VOUCHER (see App\Services\ExchangeVoucherService)
-// The amount follows fare line 1 until someone types their own; clearing the
-// box goes back to following it. `var` (not const): selectType()/fareMgr call
-// this before the script reaches here, and typeof on a const in TDZ throws.
-// ─────────────────────────────────────────────────────────────────────────────
-var ftvMgr = {
-  edited: false,
-  el(id) { return document.getElementById(id); },
-  active() {
-    return state.type === 'exchange' && _currentMode === 'full';
-  },
-  baseFare() {
-    return parseFloat((state.fareItems[0] || {}).amount) || 0;
-  },
-  syncVisibility() {
-    _toggleSec('sec-exchange-voucher', this.active());
-    this.followBaseFare();
-    if (window.fareTermsPicker) fareTermsPicker.refresh();
-  },
-  followBaseFare() {
-    const amt = this.el('field_ftv_amount');
-    if (!amt) return;
-    if (!this.edited) amt.value = this.baseFare() ? this.baseFare().toFixed(2) : '';
-    this.el('ftv_currency').textContent = this.el('field_currency')?.value || 'USD';
-    this.el('ftv_reset').classList.toggle('hidden', !this.edited);
-    if (window.fareTermsPicker) fareTermsPicker.refresh();
-  },
-  amount() {
-    return Math.max(0, parseFloat(this.el('field_ftv_amount')?.value) || 0);
-  },
-  validUntil() {
-    return this.el('field_ftv_valid_until')?.value || '';
-  },
-  data() {
-    return {
-      amount: this.edited ? this.amount().toFixed(2) : '',   // '' → server uses fare line 1
-      valid_until: this.validUntil(),
-    };
-  },
-  /** Clause 8 → voucher wording (mirrors FareTermsService::applyVoucherClause). */
-  policyTransform(policy, cfg) {
-    if (!this.active() || this.amount() <= 0) return policy;
-    const cur = this.el('field_currency')?.value || 'USD';
-    const d = this.validUntil() ? new Date(this.validUntil() + 'T00:00:00') : null;
-    const date = d ? d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '____';
-    const clause = cfg.serviceFeeClauseVoucher
-      .replace('{{voucher_amount}}', cur + ' ' + this.amount().toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }))
-      .replace('{{voucher_valid_until}}', date);
-    return policy.replace(cfg.serviceFeeClause, clause);
-  },
-  init() {
-    const valid = this.el('field_ftv_valid_until');
-    if (valid && !valid.value) {
-      const d = new Date(); d.setFullYear(d.getFullYear() + 1);
-      valid.value = d.toISOString().slice(0, 10);
-    }
-    this.el('field_ftv_amount')?.addEventListener('input', (e) => {
-      this.edited = e.target.value.trim() !== '';
-      this.followBaseFare();
-    });
-    valid?.addEventListener('change', () => this.followBaseFare());
-    this.el('ftv_reset')?.addEventListener('click', () => { this.edited = false; this.followBaseFare(); });
-    this.el('field_currency')?.addEventListener('change', () => this.followBaseFare());
-    this.syncVisibility();
-  },
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
 // FARE TERMS — fare type picker (see public/assets/js/fare-terms.js)
 // ─────────────────────────────────────────────────────────────────────────────
 function fareTermsCabin() {
@@ -3368,12 +3263,10 @@ function fareTermsSyncCabin() {
   if (window.fareTermsPicker) fareTermsPicker.setCabin(fareTermsCabin());
 }
 (function() {
-  const ftCfg = <?= json_encode($fareTermsConfig, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
   window.fareTermsPicker = FareTerms.mount({
     root: document.getElementById('fare-terms-picker'),
-    config: ftCfg,
+    config: <?= json_encode($fareTermsConfig, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>,
     policy: 'acceptance',
-    policyTransform: (text) => ftvMgr.policyTransform(text, ftCfg),
     canEdit: <?= $canEditTerms ? 'true' : 'false' ?>,
     initial: <?= json_encode($fareTermsInitial, JSON_HEX_TAG | JSON_HEX_AMP) ?>,
     getCurrency: () => document.getElementById('field_currency')?.value || 'USD',
@@ -3385,7 +3278,6 @@ function fareTermsSyncCabin() {
   });
   document.getElementById('field_currency')?.addEventListener('change', () => fareTermsPicker.refresh());
   fareTermsSyncCabin();
-  ftvMgr.init();
 })();
 
 </script>

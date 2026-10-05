@@ -8,7 +8,6 @@ use App\Models\RecordNote;
 use App\Services\ETicketService;
 use App\Services\ETicketEmailService;
 use App\Services\FareTermsService;
-use App\Services\ExchangeVoucherService;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
@@ -183,16 +182,6 @@ class ETicketController
             'agent_notes'    => $body['agent_notes']    ?? '',
         ];
 
-        // Exchange voucher: always the one on the signed acceptance, never the
-        // browser's copy of extra_data (the amount is set at acceptance stage).
-        $ftvExtra = is_array($data['extra_data'] ?? null) ? $data['extra_data'] : [];
-        unset($ftvExtra['ftv']);
-        $ftvAcc = $txnId ? \App\Models\Transaction::find($txnId)?->acceptance : null;
-        if ($ftvAcc && $ftvAcc->type === 'exchange' && is_array($ftvAcc->extra_data['ftv'] ?? null)) {
-            $ftvExtra['ftv'] = $ftvAcc->extra_data['ftv'];
-        }
-        $data['extra_data'] = $ftvExtra ?: null;
-
         // Fare terms: server-rendered from the fare type + blanks (agents), or the
         // manager/admin's unlocked manual text. Stores the acknowledgement phrase.
         $terms = FareTermsService::resolveFromRequest($body, $role, 'eticket', $body['currency'] ?? 'USD');
@@ -215,12 +204,6 @@ class ETicketController
         }
 
         // Auto-send email if requested
-        // Exchange with a Future Travel Voucher: never send blind — the agent
-        // reviews the email + voucher (and the voucher PDF is made) first.
-        if (!empty($body['send_now']) && ExchangeVoucherService::forEticket($eticket)) {
-            return $response->withHeader('Location', '/etickets/' . $eticket->id . '/preview?created=1')->withStatus(302);
-        }
-
         if (!empty($body['send_now'])) {
             $result = $this->emailService->send($eticket);
             if ($result['success']) {
@@ -302,15 +285,6 @@ class ETicketController
         }
         $sendTo        = $overrideEmail ?? $eticket->customer_email;
 
-        // Exchange voucher: the PDF is made at Preview & Send; without it, go there.
-        if (ExchangeVoucherService::forEticket($eticket)) {
-            $vch = ExchangeVoucherService::voucherFor($eticket);
-            if (!$vch || !ExchangeVoucherService::pdfAbsPath($vch)) {
-                $_SESSION['flash_error'] = 'Review the e-ticket and Future Travel Voucher before sending.';
-                return $response->withHeader('Location', '/etickets/' . $eticket->id . '/preview')->withStatus(302);
-            }
-        }
-
         $result = $this->emailService->send($eticket, $overrideEmail);
 
         if ($result['success']) {
@@ -321,91 +295,6 @@ class ETicketController
         }
 
         return $response->withHeader('Location', '/etickets/' . $eticket->id . '?send_error=1')->withStatus(302);
-    }
-
-    // =========================================================================
-    // PREVIEW & SEND — exchange e-tickets with a Future Travel Voucher
-    // GET /etickets/{id}/preview: the customer email as it will be sent, plus the
-    // voucher in the standard design. The agent's browser renders the voucher to
-    // PDF and uploads it (POST /etickets/{id}/voucher-pdf); Send attaches it.
-    // =========================================================================
-
-    public function preview(Request $request, Response $response, array $args): Response
-    {
-        $eticket = ETicket::with(['transaction', 'acceptance'])->findOrFail((int) $args['id']);
-        if (!$this->canAccessETicket($eticket) || ($_SESSION['role'] ?? '') === User::ROLE_CSA) {
-            $_SESSION['flash_error'] = 'Access denied.';
-            return $response->withHeader('Location', '/etickets')->withStatus(302);
-        }
-
-        $ftv = ExchangeVoucherService::forEticket($eticket);
-        if (!$ftv) {
-            // Not an exchange voucher ticket — the normal page sends directly
-            return $response->withHeader('Location', '/etickets/' . $eticket->id)->withStatus(302);
-        }
-
-        try {
-            $voucher = ExchangeVoucherService::ensureIssued($eticket, $ftv, (int) ($_SESSION['user_id'] ?? 0));
-        } catch (\Throwable $e) {
-            $_SESSION['flash_error'] = $e->getMessage();
-            return $response->withHeader('Location', '/etickets/' . $eticket->id)->withStatus(302);
-        }
-
-        $flashError = $_SESSION['flash_error'] ?? null;
-        unset($_SESSION['flash_error']);
-
-        return $this->render($response, 'eticket/preview.php', [
-            'eticket'    => $eticket,
-            'voucher'    => $voucher,
-            'ftv'        => $ftv,
-            'emailHtml'  => $this->emailService->buildHtmlEmail($eticket, $eticket->publicUrl()),
-            'hasPdf'     => (bool) ExchangeVoucherService::pdfAbsPath($voucher),
-            'role'       => $_SESSION['role'] ?? 'agent',
-            'flashError' => $flashError,
-            'justCreated'=> isset($request->getQueryParams()['created']),
-        ]);
-    }
-
-    public function uploadVoucherPdf(Request $request, Response $response, array $args): Response
-    {
-        $eticket = ETicket::with(['transaction', 'acceptance'])->findOrFail((int) $args['id']);
-        if (!$this->canAccessETicket($eticket) || ($_SESSION['role'] ?? '') === User::ROLE_CSA) {
-            return $this->jsonError($response, 'Access denied.', 403);
-        }
-        $ftv = ExchangeVoucherService::forEticket($eticket);
-        $voucher = $ftv ? ExchangeVoucherService::voucherFor($eticket) : null;
-        if (!$voucher || (int) ($request->getParsedBody()['voucher_id'] ?? 0) !== (int) $voucher->id) {
-            // The voucher changed since the preview loaded — reload rather than attach a stale PDF
-            return $this->jsonError($response, 'The voucher changed since this page loaded. Please reload the preview.', 409);
-        }
-
-        $error = ExchangeVoucherService::savePdf($voucher, $request->getUploadedFiles()['voucher_pdf'] ?? null);
-        if ($error) {
-            return $this->jsonError($response, $error, 422);
-        }
-
-        $response->getBody()->write(json_encode(['success' => true, 'voucher_no' => $voucher->voucher_no]));
-        return $response->withHeader('Content-Type', 'application/json');
-    }
-
-    /** GET /etickets/{id}/voucher.pdf — the exact PDF the customer gets. */
-    public function voucherPdf(Request $request, Response $response, array $args): Response
-    {
-        $eticket = ETicket::with(['transaction', 'acceptance'])->findOrFail((int) $args['id']);
-        if (!$this->canAccessETicket($eticket)) {
-            return $response->withStatus(404);
-        }
-        $voucher = ExchangeVoucherService::voucherFor($eticket);
-        $path    = $voucher ? ExchangeVoucherService::pdfAbsPath($voucher) : null;
-        if (!$path) {
-            return $response->withStatus(404);
-        }
-        $response->getBody()->write((string) file_get_contents($path));
-        return $response
-            ->withHeader('Content-Type', 'application/pdf')
-            ->withHeader('Content-Disposition', 'inline; filename="' . ExchangeVoucherService::pdfFilename($voucher) . '"')
-            ->withHeader('X-Content-Type-Options', 'nosniff')
-            ->withHeader('Cache-Control', 'private, no-store');
     }
 
     // =========================================================================

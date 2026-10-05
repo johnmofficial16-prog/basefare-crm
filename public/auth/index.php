@@ -921,27 +921,6 @@ tailwind.config = {
             <?php endif; ?>
           </div>
 
-          <?php
-            // Exchange: Future Travel Voucher for the Base Fare amount (ExchangeVoucherService)
-            $authFtv = ($acceptance->type === 'exchange' && is_array($acceptance->extra_data['ftv'] ?? null))
-                ? $acceptance->extra_data['ftv'] : null;
-          ?>
-          <?php if ($authFtv && (float) ($authFtv['amount'] ?? 0) > 0): ?>
-          <div class="flex items-start gap-3 p-4 rounded-xl border-2 border-sky-200 bg-sky-50">
-            <span class="material-symbols-outlined text-sky-600 text-2xl flex-none">card_giftcard</span>
-            <div class="text-sm text-sky-900 leading-relaxed">
-              <p class="font-black">Future Travel Voucher included</p>
-              <p class="mt-0.5">
-                Although this amount is charged today, you will receive a Future Travel Voucher of
-                <strong><?= h(\App\Services\ExchangeVoucherService::money($authFtv)) ?></strong>,
-                valid until <strong><?= h(\App\Services\ExchangeVoucherService::date($authFtv['valid_until'] ?? '')) ?></strong>,
-                to use on a future booking with us. It will be emailed to you with your e-ticket.
-                To use it, call <strong>888-608-4011</strong> or email <strong>reservation@base-fare.com</strong>.
-              </p>
-            </div>
-          </div>
-          <?php endif; ?>
-
           <!-- Card (bigger, more prominent) -->
           <div class="flex items-center gap-4 p-5 bg-white border-2 border-slate-300 rounded-xl shadow-sm">
             <span class="material-symbols-outlined text-primary-600 text-3xl">credit_card</span>

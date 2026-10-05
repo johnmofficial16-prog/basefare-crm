@@ -20,13 +20,7 @@ class TravelVoucher extends Model
         'reason',
         'terms',
         'status',
-        'created_by',
-        // Exchange vouchers (2026_10_04_exchange_vouchers.sql)
-        'source',
-        'eticket_id',
-        'transaction_id',
-        'acceptance_id',
-        'pdf_path',
+        'created_by'
     ];
 
     protected $casts = [

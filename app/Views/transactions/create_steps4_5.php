@@ -207,19 +207,6 @@
             </h2>
           </div>
           <div class="p-6 space-y-4">
-            <!-- Exchange: Future Travel Voucher from the acceptance — rendered here for
-                 ?autofill= page loads, and filled by create_js for the in-page import -->
-            <?php $preFtv = is_array($prefill['future_travel_voucher'] ?? null) ? $prefill['future_travel_voucher'] : null; ?>
-            <div id="ftv-notice" class="<?= $preFtv ? '' : 'hidden ' ?>flex items-center gap-3 p-3 rounded-lg border-2 border-sky-200 bg-sky-50">
-              <span class="material-symbols-outlined text-sky-600">card_giftcard</span>
-              <div>
-                <p class="text-[10px] font-bold text-sky-700 uppercase tracking-wider">Future Travel Voucher (from the signed acceptance)</p>
-                <p id="ftv-notice-text" class="text-sm font-bold text-sky-900"><?= $preFtv
-                    ? htmlspecialchars(\App\Services\ExchangeVoucherService::money($preFtv) . ' · valid until ' . \App\Services\ExchangeVoucherService::date($preFtv['valid_until'] ?? ''))
-                    : '' ?></p>
-                <p class="text-[10px] text-sky-600">Saved with this transaction; the voucher PDF goes out with the e-ticket.</p>
-              </div>
-            </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="field-label">Class of Service</label>

@@ -123,7 +123,7 @@ class FareTermsService
         . "5. I confirm that I am the authorized cardholder and approve the charge of the agreed amount for the requested travel services.\n"
         . "6. I acknowledge that I have personally requested this service and that all details, including itinerary, pricing, and applicable terms, have been clearly explained to me prior to authorization.\n"
         . "7. I understand that the Lets Fly Travel LLC DBA Base Fare acts solely as an intermediary, and all bookings, cancellations, and refunds are subject to the respective airline's rules and regulations.\n"
-        . self::SERVICE_FEE_CLAUSE . "\n"
+        . "8. I agree that the service fee charged by Lets Fly Travel LLC DBA Base Fare is non-refundable once the booking or requested service has been processed.\n"
         . "9. I acknowledge that the service is considered fully rendered once the reservation/ticket has been issued or the requested service has been completed.\n"
         . "10. I confirm that I have received and reviewed all booking details via email, phone, or message and have provided my consent to proceed.\n"
         . "11. I understand that any cancellations, changes, refund or any other travel related service requests will be governed strictly by the airline's fare rules and policies, and additional charges may apply.\n"
@@ -132,30 +132,6 @@ class FareTermsService
         . "14. I acknowledge that this transaction may be recorded (call/email/SMS) for quality, training, and verification purposes.\n"
         . "15. I confirm that the billing details provided by me are accurate and belong to me, and I take full responsibility for this transaction.\n"
         . "16. I understand and agree to comply with the 24-hour cancellation policy (if applicable), subject to airline terms and conditions.";
-
-    /** Clause 8 of ACCEPTANCE_POLICY. */
-    const SERVICE_FEE_CLAUSE = '8. I agree that the service fee charged by Lets Fly Travel LLC DBA Base Fare is non-refundable once the booking or requested service has been processed.';
-
-    /**
-     * Clause 8 on an Exchange that carries a Future Travel Voucher (agreed 4 Oct
-     * 2026): still non-refundable in cash — the chargeback position holds — but
-     * the voucher replaces it. See ExchangeVoucherService.
-     */
-    const SERVICE_FEE_CLAUSE_VOUCHER = '8. I agree that the service fee charged by Lets Fly Travel LLC DBA Base Fare is non-refundable in cash once the booking or requested service has been processed. For this exchange, a Future Travel Voucher of {{voucher_amount}} is issued to me in its place, valid until {{voucher_valid_until}}, redeemable for a future booking by contacting Lets Fly Travel LLC DBA Base Fare.';
-
-    /** Swap clause 8 for the voucher wording when the exchange carries a voucher. */
-    public static function applyVoucherClause(string $policy, ?array $ftv): string
-    {
-        if (!$ftv) {
-            return $policy;
-        }
-        $clause = str_replace(
-            ['{{voucher_amount}}', '{{voucher_valid_until}}'],
-            [ExchangeVoucherService::money($ftv), ExchangeVoucherService::date($ftv['valid_until'])],
-            self::SERVICE_FEE_CLAUSE_VOUCHER
-        );
-        return str_replace(self::SERVICE_FEE_CLAUSE, $clause, $policy);
-    }
 
     /** E-ticket acknowledgement policy; clause 2 is the refund clause. */
     const ETICKET_POLICY = "1. TICKET RECEIPT: You have received your electronic travel ticket and all booking details are correct.\n\n"
@@ -424,8 +400,6 @@ class FareTermsService
             'cabinMap'          => self::cabinMap(),
             'acceptancePolicy'  => self::ACCEPTANCE_POLICY,
             'eticketPolicy'     => self::ETICKET_POLICY,
-            'serviceFeeClause'        => self::SERVICE_FEE_CLAUSE,
-            'serviceFeeClauseVoucher' => self::SERVICE_FEE_CLAUSE_VOUCHER,
         ];
     }
 

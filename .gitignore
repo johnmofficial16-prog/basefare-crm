@@ -79,8 +79,6 @@ storage/etickets/*
 !storage/etickets/.gitkeep
 # Customer email attachments (customer documents — never commit)
 storage/customer_emails/
-# Exchange voucher PDFs sent to customers
-storage/vouchers/
 storage/email_previews/*
 storage/payroll/*.pdf
 test_autofill.php

@@ -788,20 +788,6 @@ tailwind.config = {
         </div>
       </div>
 
-      <!-- ── EXCHANGE: FUTURE TRAVEL VOUCHER ── -->
-      <?php $viewFtv = $acceptance->type === 'exchange' && is_array($extraData['ftv'] ?? null) ? $extraData['ftv'] : null; ?>
-      <?php if ($viewFtv): ?>
-      <div class="bg-sky-50 border-2 border-sky-200 rounded-xl shadow-sm px-5 py-4 flex items-center gap-3">
-        <span class="material-symbols-outlined text-sky-600 text-2xl">card_giftcard</span>
-        <div>
-          <p class="text-[10px] font-bold text-sky-700 uppercase tracking-wider">Future Travel Voucher (shown to customer)</p>
-          <p class="text-sm font-bold text-sky-900"><?= htmlspecialchars(\App\Services\ExchangeVoucherService::money($viewFtv)) ?>
-            <span class="font-normal text-sky-700">· valid until <?= htmlspecialchars(\App\Services\ExchangeVoucherService::date($viewFtv['valid_until'] ?? '')) ?></span></p>
-          <p class="text-[11px] text-sky-600">Issued with the e-ticket — the agent previews the voucher before sending.</p>
-        </div>
-      </div>
-      <?php endif; ?>
-
       <!-- ── TICKET CONDITIONS ── -->
       <?php if ($acceptance->endorsements || $acceptance->baggage_info || $acceptance->fare_rules || $seatNumber || !empty($seatAssigns)): ?>
       <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
