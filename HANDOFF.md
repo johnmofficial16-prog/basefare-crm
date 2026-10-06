@@ -5,7 +5,7 @@ one-off documents. `MEMORY.md` + `memory/` carry durable facts and load
 automatically — **this document is the action list**. Previous handoff archived as
 `HANDOFF-2026-08-31.md`.
 
-**Production is at `2f1ca5b`** (John pulled 5 Oct; all migrations applied). Nothing
+**Production is at `ef8bbd5`** (John pulled 6 Oct; all migrations applied). Nothing
 is committed-but-unpushed. The CRM never auto-deploys — John pulls by hand.
 
 ---
@@ -33,6 +33,7 @@ is committed-but-unpushed. The CRM never auto-deploys — John pulls by hand.
 | `0adda4b` | Fix: refund checkbox + Fare Rules added to the **real** customer page `public/auth/index.php` (see §3). |
 | `2f2cff3` → `2f1ca5b` | **Exchange Future Travel Voucher** built, then **removed same week at client request** (clean revert; migration file kept because the columns exist live). Do not rebuild unless asked. |
 | `f16a6ca` | **AI email drafting upgrade** — `gemini-3.5-flash` via new `EMAIL_AI_MODEL` knob (VERTEX_MODEL untouched → buddy/analytics unchanged), rewritten prompt, thread history + booking flights as context, injection-resistant. `memory/email-ai-quality-upgrade.md` |
+| `ef8bbd5` | **Fix: "Record Transaction" silently did nothing** (6 Oct, JSR user #21). Importing an acceptance with an **additional/split card** (stored as `card_last_four` only) crashed `submit()` on `card_number.trim()` before posting. Latent since the 8 Apr release; only visible since the 12 Aug error pipeline. Imported cards now normalised ("ends 4242" hint, type preselected), null-safe trims, and `formAssembly.submit()` wraps errors in an agent-facing "nothing was saved" alert + rethrow to the Error Console. Confirmed in prod Error Console (4× at 22:55). Agents must still type the second card's full number. |
 
 Also confirmed live: **Call Logs** (`9a82c4d`, 24 Sep) — earlier notes wrongly said uncommitted.
 
@@ -60,6 +61,7 @@ Also confirmed live: **Call Logs** (`9a82c4d`, 24 Sep) — earlier notes wrongly
 
 ## 4. Known bugs / small follow-ups
 
+0. **Check whether the split-card crash hit anyone earlier:** search Error Console for `reading 'trim'` before 6 Oct (anything pre-12 Aug was never logged). Agents may have re-keyed or abandoned those bookings.
 1. **Transaction edit drops `data.fare_breakdown`** (pre-existing): `TransactionController::update()` never saves `fare_breakdown_json`. Views fall back to the acceptance, so mostly hidden. A task chip was raised for it.
 2. `TransactionService` warns `Undefined array key "travel_date"/"departure_time"/"return_date"` when a create POST omits them (only seen with a hand-built test request; the real form sends them).
 3. `scripts/buddy_redteam_admin.php` (untracked) has a PHP parse error — harmless, not deployed by git.
