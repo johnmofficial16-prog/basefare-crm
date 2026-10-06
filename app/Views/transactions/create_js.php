@@ -549,12 +549,12 @@ const cardMgr = {
       <div class="fare-row grid grid-cols-[1fr_1fr_auto_auto_auto] gap-2 items-end p-3 bg-slate-50 border border-slate-200 rounded-lg">
         <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Type</label>
           <select class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white" onchange="cardMgr._update(${i},'card_type',this.value)">
-            <option value="">--</option><option>Visa</option><option>Mastercard</option><option>Amex</option><option>Discover</option>
+            <option value="">--</option>${['Visa','Mastercard','Amex','Discover'].map(function(t) { return '<option' + (c.card_type === t ? ' selected' : '') + '>' + t + '</option>'; }).join('')}
           </select></div>
         <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Cardholder</label>
           <input type="text" placeholder="Name on card" value="${_esc(c.cardholder_name)}" class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white" autocomplete="off" oninput="cardMgr._update(${i},'cardholder_name',this.value)"></div>
         <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Card #</label>
-          <input type="text" maxlength="19" placeholder="•••• ••••" value="${_esc(c.card_number)}" class="w-24 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono bg-white" autocomplete="off" oninput="cardMgr._update(${i},'card_number',this.value.replace(/[^\\d\\s]/g,''))"></div>
+          <input type="text" maxlength="19" placeholder="${c.card_last_four ? 'ends ' + _esc(c.card_last_four) : '•••• ••••'}" value="${_esc(c.card_number)}" class="w-24 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono bg-white" autocomplete="off" oninput="cardMgr._update(${i},'card_number',this.value.replace(/[^\\d\\s]/g,''))"></div>
         <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">CVV</label>
           <input type="text" maxlength="4" placeholder="•••" value="${_esc(c.card_cvv)}" class="w-14 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono bg-white" autocomplete="off" oninput="cardMgr._update(${i},'card_cvv',this.value.replace(/\\D/g,''))"></div>
         <button type="button" onclick="cardMgr.remove(${i})" class="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg transition-colors self-end">
@@ -715,7 +715,14 @@ function importAcceptance(id) {
       
       // Additional Cards
       if (d.additional_cards && d.additional_cards.length) {
-         state.extraCards = d.additional_cards.slice();
+         // Acceptance cards carry only {cardholder_name, card_last_four, card_type}
+         // — no card_number/cvv. Normalise to the full shape this form uses, or
+         // submit() hit undefined.trim() and the button silently did nothing.
+         state.extraCards = d.additional_cards.map(function(c) { return {
+           cardholder_name: c.cardholder_name || '', card_type: c.card_type || '',
+           card_number: c.card_number || '', card_expiry: c.card_expiry || '', card_cvv: c.card_cvv || '',
+           card_last_four: c.card_last_four || ''
+         }; });
          cardMgr._render();
       }
       // Set acceptance_id hidden
@@ -811,7 +818,26 @@ const preview = {
 // FORM ASSEMBLY & SUBMIT
 // ═══════════════════════════════════════════════════════════════════════════
 const formAssembly = {
+  // Never fail silently: any unexpected error while assembling the form used to
+  // leave "Record Transaction" doing nothing. Show it, re-enable the button, and
+  // rethrow so error-beacon.js still reports it to the Error Console.
   submit: function() {
+    try {
+      this._submit();
+    } catch (e) {
+      var btn = document.getElementById('btn-submit');
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove('opacity-75', 'cursor-not-allowed');
+        btn.innerHTML = '<span class="material-symbols-outlined">save</span> Record Transaction';
+      }
+      alert('The transaction could not be submitted because of an error on this page:\n\n'
+        + (e && e.message ? e.message : e) + '\n\nNothing was saved. Please take a screenshot and send it to your manager.');
+      setTimeout(function() { throw e; }, 0);
+    }
+  },
+
+  _submit: function() {
     // Final validation on step 4
     const { valid, msg } = wizard.validate(4);
     if (!valid) { wizard.goTo(4); setTimeout(function() { alert('Please fix: ' + msg); }, 100); return; }
@@ -904,11 +930,11 @@ const formAssembly = {
 
     // Fare breakdown
     document.getElementById('hidFareBreakdown').value = JSON.stringify(
-      state.fareItems.filter(function(it) { return it.label.trim() || it.amount > 0; }).map(function(it) { return { label: it.label.trim(), amount: parseFloat(it.amount)||0 }; })
+      state.fareItems.filter(function(it) { return String(it.label || '').trim() || it.amount > 0; }).map(function(it) { return { label: String(it.label || '').trim(), amount: parseFloat(it.amount)||0 }; })
     );
 
     // Additional cards
-    const validCards = state.extraCards.filter(function(c) { return c.cardholder_name.trim() && c.card_number.trim(); });
+    const validCards = state.extraCards.filter(function(c) { return String(c.cardholder_name || '').trim() && String(c.card_number || '').trim(); });
     document.getElementById('hidAdditionalCards').value = validCards.length ? JSON.stringify(validCards) : 'null';
 
     // Lock submit
