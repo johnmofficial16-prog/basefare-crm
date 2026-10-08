@@ -33,6 +33,7 @@ class AcceptanceRequest extends Model
     // =========================================================================
     const TYPE_NEW_BOOKING      = 'new_booking';
     const TYPE_EXCHANGE         = 'exchange';
+    const TYPE_REISSUE          = 'reissue';   // new-booking style form + Future Travel Voucher (ReissueVoucherService)
     const TYPE_CANCEL_REFUND    = 'cancel_refund';
     const TYPE_CANCEL_CREDIT    = 'cancel_credit';
     const TYPE_SEAT_PURCHASE    = 'seat_purchase';
@@ -342,6 +343,7 @@ class AcceptanceRequest extends Model
         return match($this->type) {
             self::TYPE_NEW_BOOKING      => 'New Booking',
             self::TYPE_EXCHANGE         => 'Flight Exchange / Date Change',
+            self::TYPE_REISSUE          => 'Ticket Reissuance',
             self::TYPE_CANCEL_REFUND    => 'Cancellation & Refund',
             self::TYPE_CANCEL_CREDIT    => 'Cancellation & Future Credit',
             self::TYPE_SEAT_PURCHASE    => 'Seat Purchase',
@@ -360,6 +362,7 @@ class AcceptanceRequest extends Model
         return match($this->type) {
             self::TYPE_NEW_BOOKING      => 'review and authorize your new flight booking',
             self::TYPE_EXCHANGE         => 'authorize your flight change',
+            self::TYPE_REISSUE          => 'review and authorize your ticket reissuance',
             self::TYPE_CANCEL_REFUND    => 'authorize your cancellation and refund',
             self::TYPE_CANCEL_CREDIT    => 'authorize your cancellation and future travel credit',
             self::TYPE_SEAT_PURCHASE    => 'authorize your seat selection',
@@ -397,6 +400,7 @@ class AcceptanceRequest extends Model
     {
         return in_array($this->type, [
             self::TYPE_NEW_BOOKING,
+            self::TYPE_REISSUE,
             self::TYPE_SEAT_PURCHASE,
             self::TYPE_CABIN_UPGRADE,
             self::TYPE_NAME_CORRECTION,

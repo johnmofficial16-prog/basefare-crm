@@ -29,6 +29,7 @@ $ad  = $agentData      ?? [];
 function dbTypeLabel(string $t): string {
     return match($t) {
         'new_booking'     => 'New Booking',    'exchange'       => 'Exchange',
+        'reissue'         => 'Reissuance',
         'cancel_refund'   => 'Cancellation',   'cancel_credit'  => 'Cancel Credit',
         'seat_purchase'   => 'Seat Purchase',  'cabin_upgrade'  => 'Cabin Upgrade',
         'name_correction' => 'Name Correction','award_booking'  => 'Award Booking',

@@ -484,6 +484,9 @@ $app->group('/etickets', function ($group) {
     $group->get('/transaction-data/{id:[0-9]+}',      [ETicketController::class, 'transactionData']);
     $group->get('/{id:[0-9]+}',                       [ETicketController::class, 'view']);
     $group->post('/{id:[0-9]+}/send',                 [ETicketController::class, 'sendEmail']);
+    $group->get('/{id:[0-9]+}/preview',               [ETicketController::class, 'preview']);          // reissuance voucher: review before send
+    $group->post('/{id:[0-9]+}/voucher-pdf',          [ETicketController::class, 'uploadVoucherPdf']); // browser-rendered voucher PDF
+    $group->get('/{id:[0-9]+}/voucher.pdf',           [ETicketController::class, 'voucherPdf']);
     $group->post('/{id:[0-9]+}/note',                 [ETicketController::class, 'addNote']);
 })
 ->add(new AttendanceGateMiddleware())

@@ -739,6 +739,10 @@ class TransactionService
             // Class of service & Seat Number
             'class_of_service'     => $firstFlight['cabin_class'] ?? '',
             'seat_number'          => $acc->extra_data['seat_number'] ?? '',
+
+            // Reissuance: Future Travel Voucher promised on the acceptance (ReissueVoucherService)
+            'future_travel_voucher' => ($acc->type === 'reissue' && is_array($acc->extra_data['ftv'] ?? null))
+                                        ? $acc->extra_data['ftv'] : null,
             
             // Miles / Award booking
             'is_miles_booking'     => (bool)($acc->is_miles_booking ?? false),

@@ -13,14 +13,14 @@ const state = {
 };
 
 const TYPE_LABELS = {
-  new_booking:'New Booking', exchange:'Exchange / Date Change',
+  new_booking:'New Booking', exchange:'Exchange / Date Change', reissue:'Reissuance',
   cancel_refund:'Cancellation & Refund', cancel_credit:'Cancellation & Credit',
   seat_purchase:'Seat Purchase', cabin_upgrade:'Cabin Upgrade',
   name_correction:'Name Correction', award_booking:'Award / Miles Booking', other:'Other'
 };
 
 const COLOR_MAP = {
-  new_booking:'blue', exchange:'violet', cancel_refund:'rose', cancel_credit:'orange',
+  new_booking:'blue', exchange:'violet', reissue:'sky', cancel_refund:'rose', cancel_credit:'orange',
   seat_purchase:'cyan', cabin_upgrade:'emerald', name_correction:'amber', award_booking:'indigo', other:'gray'
 };
 
@@ -139,7 +139,7 @@ const wizard = {
     }
     if (step === 3) {
       // Flights are required for booking/exchange/seat types; optional for others
-      const needsFlights = ['new_booking', 'exchange', 'seat_purchase'].includes(state.type);
+      const needsFlights = ['new_booking', 'reissue', 'exchange', 'seat_purchase'].includes(state.type);
       if (needsFlights) {
         const confirmed = function(segs) {
           return (segs || []).filter(function(s) { return !s._editing && s.from && s.to && s.flight_no; }).length > 0;
@@ -224,7 +224,7 @@ function selectType(type) {
   document.getElementById('sum-type').textContent = TYPE_LABELS[type] || type;
 
   // Show/hide type-specific sections
-  const itin = ['new_booking','award_booking','seat_purchase','cabin_upgrade','name_correction'];
+  const itin = ['new_booking','reissue','award_booking','seat_purchase','cabin_upgrade','name_correction'];
   const oldF = ['exchange','cancel_refund','cancel_credit'];
   const newF = ['exchange'];
   const nc   = ['name_correction'];
@@ -733,7 +733,23 @@ function importAcceptance(id) {
         document.getElementById('txnForm').prepend(accInput);
       }
       accInput.value = id;
-      syncSummary(); 
+
+      // Reissuance: show the Future Travel Voucher promised on the acceptance
+      // (stored on the transaction server-side from the acceptance itself)
+      var ftvBox = document.getElementById('ftv-notice');
+      if (ftvBox) {
+        var ftv = d.future_travel_voucher;
+        if (ftv && parseFloat(ftv.amount) > 0) {
+          var vd = new Date((ftv.valid_until || '') + 'T00:00:00');
+          document.getElementById('ftv-notice-text').textContent =
+            (ftv.currency || 'USD') + ' ' + parseFloat(ftv.amount).toFixed(2) +
+            (isNaN(vd) ? '' : ' · valid until ' + vd.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }));
+          ftvBox.classList.remove('hidden');
+        } else {
+          ftvBox.classList.add('hidden');
+        }
+      }
+      syncSummary();
       var importedMsg = '\u2713 Acceptance #' + id + ' imported successfully.';
       if (!hasMain && !hasOld) importedMsg += '\n\nNote: No flight itinerary was found in this acceptance record. Please enter it manually.';
       alert(importedMsg + '\n\nReview and complete remaining fields.');
@@ -876,7 +892,7 @@ const formAssembly = {
       });
     };
 
-    if (['new_booking','award_booking','seat_purchase','cabin_upgrade','name_correction'].includes(t)) {
+    if (['new_booking','reissue','award_booking','seat_purchase','cabin_upgrade','name_correction'].includes(t)) {
       flightData = { flights: filterSegs(state.segments.main) };
     } else if (t === 'exchange') {
       flightData = { old_flights: filterSegs(state.segments.old), new_flights: filterSegs(state.segments.new) };

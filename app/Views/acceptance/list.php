@@ -41,6 +41,7 @@ function acceptanceTypeBadge(string $type): string {
     $labels = [
         'new_booking'     => ['label' => 'New Booking',      'class' => 'bg-blue-100 text-blue-800'],
         'exchange'        => ['label' => 'Exchange',          'class' => 'bg-violet-100 text-violet-800'],
+        'reissue'         => ['label' => 'Reissuance',        'class' => 'bg-sky-100 text-sky-800'],
         'cancel_refund'   => ['label' => 'Cancel / Refund',   'class' => 'bg-rose-100 text-rose-800'],
         'cancel_credit'   => ['label' => 'Cancel / Credit',   'class' => 'bg-orange-100 text-orange-800'],
         'seat_purchase'   => ['label' => 'Seat Purchase',     'class' => 'bg-cyan-100 text-cyan-800'],
@@ -166,6 +167,7 @@ tailwind.config = {
             <option value="">All Types</option>
             <option value="new_booking"     <?= ($filters['type'] ?? '') === 'new_booking'     ? 'selected' : '' ?>>New Booking</option>
             <option value="exchange"        <?= ($filters['type'] ?? '') === 'exchange'        ? 'selected' : '' ?>>Exchange</option>
+            <option value="reissue"         <?= ($filters['type'] ?? '') === 'reissue'         ? 'selected' : '' ?>>Reissuance</option>
             <option value="cancel_refund"   <?= ($filters['type'] ?? '') === 'cancel_refund'   ? 'selected' : '' ?>>Cancel / Refund</option>
             <option value="cancel_credit"   <?= ($filters['type'] ?? '') === 'cancel_credit'   ? 'selected' : '' ?>>Cancel / Credit</option>
             <option value="seat_purchase"   <?= ($filters['type'] ?? '') === 'seat_purchase'   ? 'selected' : '' ?>>Seat Purchase</option>

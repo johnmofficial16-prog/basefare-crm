@@ -83,6 +83,7 @@ class InternalAlertService
         return [
             'new_booking'     => 'New Booking',
             'exchange'        => 'Exchange / Date Change',
+            'reissue'         => 'Reissuance',
             'cancel_refund'   => 'Cancellation & Refund',
             'cancel_credit'   => 'Cancellation & Credit',
             'award_booking'   => 'Award Booking',

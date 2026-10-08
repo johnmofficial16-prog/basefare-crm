@@ -222,6 +222,7 @@ class LiveBoardController
         return match ($type) {
             'new_booking'   => 'New Booking',
             'exchange'      => 'Exchange',
+            'reissue'       => 'Reissuance',
             'seat_purchase' => 'Seat Purchase',
             'cabin_upgrade' => 'Cabin Upgrade',
             'cancel_refund' => 'Cancellation',

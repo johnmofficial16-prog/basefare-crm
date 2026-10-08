@@ -289,6 +289,19 @@ class TransactionController
             }
         }
 
+        // Reissuance: carry the Future Travel Voucher from the signed acceptance.
+        // Read from the acceptance itself, not the browser, so it can't drift
+        // (update() does the same, so an edit doesn't drop it).
+        if (($body['type'] ?? '') === 'reissue' && !empty($body['acceptance_id'])) {
+            $srcAcc = \App\Models\AcceptanceRequest::find((int) $body['acceptance_id']);
+            $srcFtv = ($srcAcc && $srcAcc->type === 'reissue' && is_array($srcAcc->extra_data['ftv'] ?? null))
+                ? $srcAcc->extra_data['ftv'] : null;
+            if ($srcFtv) {
+                $typeData = is_array($typeData) ? $typeData : [];
+                $typeData['future_travel_voucher'] = $srcFtv;
+            }
+        }
+
         $data = array_merge($body, [
             'passengers'         => $passengers,
             'type_specific_data' => $typeData,
@@ -567,6 +580,23 @@ class TransactionController
 
         if ($proofChanged) {
             $body['proof_of_sale_path'] = json_encode($existing);
+        }
+
+        // Reissuance: carry the Future Travel Voucher from the signed acceptance.
+        // Read from the acceptance itself, not the browser, so it can't drift
+        // (an edit rebuilds data from the form, so without this it'd be dropped).
+        // The edit form may not post acceptance_id/type — fall back to the record.
+        $ftvTxn   = Transaction::find($id, ['id', 'type', 'acceptance_id']);
+        $ftvType  = $body['type'] ?? $ftvTxn?->type;
+        $ftvAccId = $body['acceptance_id'] ?? $ftvTxn?->acceptance_id;
+        if ($ftvType === 'reissue' && !empty($ftvAccId)) {
+            $srcAcc = \App\Models\AcceptanceRequest::find((int) $ftvAccId);
+            $srcFtv = ($srcAcc && $srcAcc->type === 'reissue' && is_array($srcAcc->extra_data['ftv'] ?? null))
+                ? $srcAcc->extra_data['ftv'] : null;
+            if ($srcFtv) {
+                $typeData = is_array($typeData) ? $typeData : [];
+                $typeData['future_travel_voucher'] = $srcFtv;
+            }
         }
 
         $data = array_merge($body, [

@@ -622,6 +622,26 @@ if (session_status() === PHP_SESSION_NONE) {
       </div>
       <?php endif; ?>
 
+      <!-- ── EXCHANGE: FUTURE TRAVEL VOUCHER ───────────────── -->
+      <?php
+        $pubFtv = \App\Services\ReissueVoucherService::forEticket($et);
+        $pubVch = $pubFtv ? \App\Services\ReissueVoucherService::voucherFor($et) : null;
+      ?>
+      <?php if ($pubFtv): ?>
+      <div style="margin-bottom:28px;border:2px solid #bae6fd;border-radius:12px;overflow:hidden;">
+        <div style="background:linear-gradient(90deg,#163274,#1e4fad);color:#fff;padding:10px 16px;font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;">🎁 Future Travel Voucher</div>
+        <div style="background:#f0f9ff;padding:14px 16px;color:#0c4a6e;font-size:13px;line-height:1.6;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+            <span style="font-size:24px;font-weight:900;color:#163274;font-family:monospace;"><?= htmlspecialchars(\App\Services\ReissueVoucherService::money($pubFtv)) ?></span>
+            <?php if ($pubVch): ?>
+            <span style="font-size:11px;color:#475569;text-align:right;">Voucher no.<br><strong style="font-size:15px;color:#163274;font-family:monospace;letter-spacing:1px;"><?= htmlspecialchars($pubVch->voucher_no) ?></strong></span>
+            <?php endif; ?>
+          </div>
+          <p style="margin:8px 0 0;">Although this reissuance was charged, you receive a Future Travel Voucher for this amount, valid until <strong><?= htmlspecialchars(\App\Services\ReissueVoucherService::date($pubFtv['valid_until'] ?? '')) ?></strong>, to use on a future booking with us. The voucher was emailed to you as a PDF with this e-ticket.</p>
+          <p style="margin:6px 0 0;">To use it, call <strong>888-608-4011</strong> or email <strong>reservation@base-fare.com</strong> quoting the voucher number.</p>
+        </div>
+      </div>
+      <?php endif; ?>
 
       <!-- ── TICKET CONDITIONS ─────────────────────────────── -->
       <?php if ($et->endorsements || $et->baggage_info || $et->fare_rules): ?>

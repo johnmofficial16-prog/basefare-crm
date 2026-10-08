@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\AcceptanceService;
 use App\Services\AcceptanceEmailService;
 use App\Services\FareTermsService;
+use App\Services\ReissueVoucherService;
 use Carbon\Carbon;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -233,6 +234,24 @@ class AcceptanceController
         $data['endorsements']      = $terms['endorsements'];
         $data['policy_text']       = $terms['policy_text'];
         $data['refund_ack_text']   = $terms['refund_ack_text'];
+
+        // ── Reissuance: Future Travel Voucher for the Base Fare amount ──────
+        // Empty amount → fare line 1; 0 → no voucher; other types never carry one.
+        $ftv = ReissueVoucherService::normalize(
+            (string) ($body['type'] ?? ''),
+            ($body['is_preauth'] ?? '0') === '1',
+            is_array($extraData['ftv'] ?? null) ? $extraData['ftv'] : null,
+            $fareBreakdown,
+            (string) ($body['currency'] ?? 'USD')
+        );
+        $extraData = is_array($extraData) ? $extraData : [];
+        unset($extraData['ftv']);
+        if ($ftv) {
+            $extraData['ftv'] = $ftv;
+        }
+        $data['extra_data']  = $extraData ?: null;
+        // Clause 8: non-refundable in cash, voucher issued instead
+        $data['policy_text'] = FareTermsService::applyVoucherClause($data['policy_text'], $ftv);
 
         // ── Create record ─────────────────────────────────────────────────
         // create() now throws rather than saving a record whose card details failed

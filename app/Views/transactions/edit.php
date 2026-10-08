@@ -53,6 +53,7 @@ $statusInfo    = $statusMap[$currentStatus] ?? $statusMap['pending_review'];
 $typeCards = [
     ['value' => 'new_booking',     'label' => 'New Booking',            'icon' => 'flight_takeoff',            'color' => '#3b82f6'],
     ['value' => 'exchange',        'label' => 'Exchange / Date Change', 'icon' => 'swap_horiz',                'color' => '#8b5cf6'],
+    ['value' => 'reissue',         'label' => 'Reissuance',             'icon' => 'confirmation_number',       'color' => '#0ea5e9'],
     ['value' => 'cancel_refund',   'label' => 'Cancellation & Refund',  'icon' => 'money_off',                 'color' => '#ef4444'],
     ['value' => 'cancel_credit',   'label' => 'Cancellation & Credit',  'icon' => 'savings',                   'color' => '#f97316'],
     ['value' => 'seat_purchase',   'label' => 'Seat Purchase',           'icon' => 'airline_seat_recline_extra','color' => '#06b6d4'],

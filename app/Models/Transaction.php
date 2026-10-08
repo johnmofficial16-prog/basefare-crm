@@ -54,6 +54,7 @@ class Transaction extends Model
     // =========================================================================
     const TYPE_NEW_BOOKING      = 'new_booking';
     const TYPE_EXCHANGE         = 'exchange';
+    const TYPE_REISSUE          = 'reissue';
     const TYPE_SEAT_PURCHASE    = 'seat_purchase';
     const TYPE_CABIN_UPGRADE    = 'cabin_upgrade';
     const TYPE_CANCEL_REFUND    = 'cancel_refund';
@@ -427,6 +428,7 @@ class Transaction extends Model
         return match ($this->type) {
             self::TYPE_NEW_BOOKING     => 'New Booking',
             self::TYPE_EXCHANGE        => 'Exchange / Date Change',
+            self::TYPE_REISSUE         => 'Reissuance',
             self::TYPE_SEAT_PURCHASE   => 'Seat Purchase',
             self::TYPE_CABIN_UPGRADE   => 'Cabin Upgrade',
             self::TYPE_CANCEL_REFUND   => 'Cancellation & Refund',
@@ -445,6 +447,7 @@ class Transaction extends Model
         return match ($this->type) {
             self::TYPE_NEW_BOOKING     => 'Booking',
             self::TYPE_EXCHANGE        => 'Exchange',
+            self::TYPE_REISSUE         => 'Reissue',
             self::TYPE_SEAT_PURCHASE   => 'Seat',
             self::TYPE_CABIN_UPGRADE   => 'Upgrade',
             self::TYPE_CANCEL_REFUND   => 'Refund',
@@ -582,6 +585,7 @@ class Transaction extends Model
         return [
             self::TYPE_NEW_BOOKING     => 'New Booking',
             self::TYPE_EXCHANGE        => 'Exchange / Date Change',
+            self::TYPE_REISSUE         => 'Reissuance',
             self::TYPE_SEAT_PURCHASE   => 'Seat Purchase',
             self::TYPE_CABIN_UPGRADE   => 'Cabin Upgrade',
             self::TYPE_CANCEL_REFUND   => 'Cancellation & Refund',

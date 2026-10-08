@@ -44,6 +44,7 @@ $preJson = [
 $typeCards = [
     ['value' => 'new_booking',     'label' => 'New Booking',              'sub' => 'Authorize a new flight ticket purchase',       'icon' => 'flight_takeoff',           'color' => 'blue'],
     ['value' => 'exchange',        'label' => 'Exchange / Date Change',   'sub' => 'Authorize a flight change or date swap',        'icon' => 'swap_horiz',              'color' => 'violet'],
+    ['value' => 'reissue',         'label' => 'Reissuance',               'sub' => 'Reissued ticket, booked like a new sale + Future Travel Voucher', 'icon' => 'confirmation_number', 'color' => 'sky'],
     ['value' => 'cancel_refund',   'label' => 'Cancellation & Refund',    'sub' => 'Authorize cancellation with refund to card',    'icon' => 'money_off',               'color' => 'rose'],
     ['value' => 'cancel_credit',   'label' => 'Cancellation & Credit',    'sub' => 'Authorize cancellation with future credit',     'icon' => 'savings',                 'color' => 'orange'],
     ['value' => 'seat_purchase',   'label' => 'Seat Purchase',            'sub' => 'Authorize seat selection or upgrade fee',       'icon' => 'airline_seat_recline_extra', 'color' => 'cyan'],
@@ -63,6 +64,7 @@ $colorMap = [
     'teal'   => ['ring' => 'ring-teal-500',   'bg' => 'bg-teal-50',   'icon' => 'text-teal-600',   'badge' => 'bg-teal-100 text-teal-800'],
     'yellow' => ['ring' => 'ring-yellow-500', 'bg' => 'bg-yellow-50', 'icon' => 'text-yellow-600', 'badge' => 'bg-yellow-100 text-yellow-800'],
     'indigo' => ['ring' => 'ring-indigo-500', 'bg' => 'bg-indigo-50', 'icon' => 'text-indigo-600', 'badge' => 'bg-indigo-100 text-indigo-800'],
+    'sky'    => ['ring' => 'ring-sky-500',    'bg' => 'bg-sky-50',    'icon' => 'text-sky-600',    'badge' => 'bg-sky-100 text-sky-800'],
     'slate'  => ['ring' => 'ring-slate-400',  'bg' => 'bg-slate-50',  'icon' => 'text-slate-500',  'badge' => 'bg-slate-100 text-slate-700'],
 ];
 
@@ -458,7 +460,7 @@ tailwind.config = {
       <!-- ═══════════════════════════════════════════════════════════════ -->
       <div id="step-3" class="step-panel space-y-5">
 
-        <!-- Section: Standard Itinerary (new_booking, seat_purchase, cabin_upgrade, name_correction) -->
+        <!-- Section: Standard Itinerary (new_booking, reissue, seat_purchase, cabin_upgrade, name_correction) -->
         <div id="sec-itinerary" class="hidden bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
             <div>
@@ -847,6 +849,37 @@ tailwind.config = {
               <textarea name="cc_instructions" id="field_cc_instructions" rows="2"
                 placeholder="e.g. Credit valid for re-booking on same airline. Subject to fare difference at time of re-booking."
                 class="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm bg-violet-50 resize-none focus:outline-none focus:ring-2 focus:ring-violet-400"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- sec-reissue-voucher: Reissuance, full mode — see ReissueVoucherService -->
+        <div id="sec-reissue-voucher" class="hidden bg-white border-2 border-sky-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-sky-100 bg-sky-50/60 flex items-center gap-2">
+            <span class="material-symbols-outlined text-sky-600">card_giftcard</span>
+            <div>
+              <h2 class="font-bold text-sky-900" style="font-family:Manrope,sans-serif;">Future Travel Voucher</h2>
+              <p class="text-xs text-sky-700 mt-0.5">The amount charged under Base Fare comes back to the customer as a voucher. Shown on the authorization form, the transaction and the e-ticket.</p>
+            </div>
+          </div>
+          <div class="p-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-1.5">Voucher Amount</label>
+                <div class="flex items-center gap-2">
+                  <span id="ftv_currency" class="text-xs font-bold text-sky-700">USD</span>
+                  <input type="number" id="field_ftv_amount" step="0.01" min="0" placeholder="0.00"
+                    class="w-full border border-sky-200 rounded-lg px-3 py-2 text-sm font-mono font-bold text-sky-800 bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-400">
+                </div>
+                <p id="ftv_hint" class="text-[10px] text-sky-600 mt-1">Follows the Base Fare amount. Change it if the customer was promised a different amount; 0 = no voucher.</p>
+                <button type="button" id="ftv_reset" class="hidden mt-1 text-[10px] font-semibold text-sky-700 hover:text-sky-900 underline">Use the Base Fare amount again</button>
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-1.5">Valid Until</label>
+                <input type="date" id="field_ftv_valid_until"
+                  class="w-full border border-sky-200 rounded-lg px-3 py-2 text-sm bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-400">
+                <p class="text-[10px] text-sky-600 mt-1">Default: 1 year from today.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -1341,7 +1374,7 @@ const CITIES = {
 };
 
 const TYPE_LABELS = {
-  'new_booking':'New Booking','exchange':'Exchange / Date Change',
+  'new_booking':'New Booking','exchange':'Exchange / Date Change','reissue':'Reissuance',
   'cancel_refund':'Cancellation & Refund','cancel_credit':'Cancellation & Credit',
   'seat_purchase':'Seat Purchase','cabin_upgrade':'Cabin Upgrade',
   'name_correction':'Name Correction','other':'Other Authorization',
@@ -1661,7 +1694,7 @@ function selectType(type) {
   // Update sidebar
   document.getElementById('sum-type').textContent = TYPE_LABELS[type] || type;
   // Configure Step 3 sections
-  const itinerary   = ['new_booking','award_booking','seat_purchase','cabin_upgrade','name_correction'];
+  const itinerary   = ['new_booking','reissue','award_booking','seat_purchase','cabin_upgrade','name_correction'];
   const oldFlights  = ['exchange','cancel_refund','cancel_credit'];
   const newFlights  = ['exchange'];
   const nameCorrect = ['name_correction'];
@@ -1686,6 +1719,7 @@ function selectType(type) {
   // Show type-specific cancel sections (only in full mode)
   _toggleSec('sec-cancel-refund',  type === 'cancel_refund' && _currentMode === 'full');
   _toggleSec('sec-cancel-credit',  type === 'cancel_credit' && _currentMode === 'full');
+  if (typeof ftvMgr !== 'undefined') ftvMgr.syncVisibility();
   // Sync credit e-ticket rows with passenger count if switching to cancel_credit
   if (type === 'cancel_credit') creditEtktMgr.syncFromPassengers();
 }
@@ -2668,6 +2702,7 @@ const fareMgr = {
     const el = document.getElementById('field_total_amount');
     if (el && state.fareItems.length > 0) el.value = total.toFixed(2);
     syncSummary();
+    if (typeof ftvMgr !== 'undefined') ftvMgr.followBaseFare();
   },
   _render() {
     // Ensure there is always at least one primary item
@@ -2950,7 +2985,7 @@ const formAssembly = {
     // 3. Assemble flight_data JSON based on type
     let flightData = null;
     const t = state.type;
-    if (['new_booking','award_booking','seat_purchase','cabin_upgrade','name_correction'].includes(t)) {
+    if (['new_booking','reissue','award_booking','seat_purchase','cabin_upgrade','name_correction'].includes(t)) {
       flightData = { flights: state.segments.main || [] };
     } else if (t === 'exchange') {
       flightData = { old_flights: state.segments.old || [], new_flights: state.segments.new || [] };
@@ -2999,6 +3034,9 @@ const formAssembly = {
       extraData.cancel_fee      = parseFloat(document.getElementById('field_cr_cancel_fee')?.value || 0) || 0;
       extraData.refund_method   = document.getElementById('field_cr_refund_method')?.value || '';
       extraData.refund_timeline = document.getElementById('field_cr_refund_timeline')?.value || '';
+    } else if (t === 'reissue' && ftvMgr.active()) {
+      // Server re-checks: empty amount → fare line 1; 0 → no voucher; bad date → +1 year
+      extraData.ftv = ftvMgr.data();
     } else if (t === 'cancel_credit') {
       extraData.credit_amount = parseFloat(document.getElementById('field_cc_credit_amount')?.value || 0) || 0;
       extraData.valid_until   = document.getElementById('field_cc_valid_until')?.value || '';
@@ -3149,6 +3187,7 @@ function setMode(mode) {
     var el = document.getElementById(id);
     if (el) el.style.display = 'none'; // reset; selectType() handles show logic
   });
+  if (typeof ftvMgr !== 'undefined') ftvMgr.syncVisibility();
 
   // Sync currency from preauth total selector to main
   if (mode === 'preauth') {
@@ -3249,6 +3288,74 @@ function serializeExtraData() {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// REISSUANCE FUTURE TRAVEL VOUCHER (see App\Services\ReissueVoucherService)
+// The amount follows fare line 1 until someone types their own; clearing the
+// box goes back to following it. `var` (not const): selectType()/fareMgr call
+// this before the script reaches here, and typeof on a const in TDZ throws.
+// ─────────────────────────────────────────────────────────────────────────────
+var ftvMgr = {
+  edited: false,
+  el(id) { return document.getElementById(id); },
+  active() {
+    return state.type === 'reissue' && _currentMode === 'full';
+  },
+  baseFare() {
+    return parseFloat((state.fareItems[0] || {}).amount) || 0;
+  },
+  syncVisibility() {
+    _toggleSec('sec-reissue-voucher', this.active());
+    this.followBaseFare();
+    if (window.fareTermsPicker) fareTermsPicker.refresh();
+  },
+  followBaseFare() {
+    const amt = this.el('field_ftv_amount');
+    if (!amt) return;
+    if (!this.edited) amt.value = this.baseFare() ? this.baseFare().toFixed(2) : '';
+    this.el('ftv_currency').textContent = this.el('field_currency')?.value || 'USD';
+    this.el('ftv_reset').classList.toggle('hidden', !this.edited);
+    if (window.fareTermsPicker) fareTermsPicker.refresh();
+  },
+  amount() {
+    return Math.max(0, parseFloat(this.el('field_ftv_amount')?.value) || 0);
+  },
+  validUntil() {
+    return this.el('field_ftv_valid_until')?.value || '';
+  },
+  data() {
+    return {
+      amount: this.edited ? this.amount().toFixed(2) : '',   // '' → server uses fare line 1
+      valid_until: this.validUntil(),
+    };
+  },
+  /** Clause 8 → voucher wording (mirrors FareTermsService::applyVoucherClause). */
+  policyTransform(policy, cfg) {
+    if (!this.active() || this.amount() <= 0) return policy;
+    const cur = this.el('field_currency')?.value || 'USD';
+    const d = this.validUntil() ? new Date(this.validUntil() + 'T00:00:00') : null;
+    const date = d ? d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '____';
+    const clause = cfg.serviceFeeClauseVoucher
+      .replace('{{voucher_amount}}', cur + ' ' + this.amount().toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }))
+      .replace('{{voucher_valid_until}}', date);
+    return policy.replace(cfg.serviceFeeClause, clause);
+  },
+  init() {
+    const valid = this.el('field_ftv_valid_until');
+    if (valid && !valid.value) {
+      const d = new Date(); d.setFullYear(d.getFullYear() + 1);
+      valid.value = d.toISOString().slice(0, 10);
+    }
+    this.el('field_ftv_amount')?.addEventListener('input', (e) => {
+      this.edited = e.target.value.trim() !== '';
+      this.followBaseFare();
+    });
+    valid?.addEventListener('change', () => this.followBaseFare());
+    this.el('ftv_reset')?.addEventListener('click', () => { this.edited = false; this.followBaseFare(); });
+    this.el('field_currency')?.addEventListener('change', () => this.followBaseFare());
+    this.syncVisibility();
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // FARE TERMS — fare type picker (see public/assets/js/fare-terms.js)
 // ─────────────────────────────────────────────────────────────────────────────
 function fareTermsCabin() {
@@ -3263,10 +3370,12 @@ function fareTermsSyncCabin() {
   if (window.fareTermsPicker) fareTermsPicker.setCabin(fareTermsCabin());
 }
 (function() {
+  const ftCfg = <?= json_encode($fareTermsConfig, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
   window.fareTermsPicker = FareTerms.mount({
     root: document.getElementById('fare-terms-picker'),
-    config: <?= json_encode($fareTermsConfig, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>,
+    config: ftCfg,
     policy: 'acceptance',
+    policyTransform: (text) => ftvMgr.policyTransform(text, ftCfg),
     canEdit: <?= $canEditTerms ? 'true' : 'false' ?>,
     initial: <?= json_encode($fareTermsInitial, JSON_HEX_TAG | JSON_HEX_AMP) ?>,
     getCurrency: () => document.getElementById('field_currency')?.value || 'USD',
@@ -3278,6 +3387,7 @@ function fareTermsSyncCabin() {
   });
   document.getElementById('field_currency')?.addEventListener('change', () => fareTermsPicker.refresh());
   fareTermsSyncCabin();
+  ftvMgr.init();
 })();
 
 </script>

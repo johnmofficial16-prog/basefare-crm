@@ -174,6 +174,10 @@ class ETicketService
             $baggageInfo   = $acc->baggage_info  ?? '';
             $fareRules     = $acc->fare_rules    ?? '';
             $extraData     = is_array($acc->extra_data) ? $acc->extra_data : (json_decode((string)$acc->extra_data, true) ?: null);
+            // Future Travel Voucher belongs to Reissuance only (old 4–5 Oct exchanges may carry one)
+            if (is_array($extraData) && $acc->type !== ReissueVoucherService::TYPE) {
+                unset($extraData['ftv']);
+            }
 
             // Pre-fill ticket numbers from acceptance etkt_list
             foreach ($extraData['etkt_list'] ?? [] as $etktRow) {

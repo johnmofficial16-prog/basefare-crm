@@ -34,6 +34,7 @@ $pre = [
 $typeCards = [
     ['value'=>'new_booking','label'=>'New Booking','sub'=>'New flight ticket purchase','icon'=>'flight_takeoff','color'=>'blue'],
     ['value'=>'exchange','label'=>'Exchange / Date Change','sub'=>'Flight change or date swap','icon'=>'swap_horiz','color'=>'violet'],
+    ['value'=>'reissue','label'=>'Reissuance','sub'=>'Reissued ticket + travel voucher','icon'=>'confirmation_number','color'=>'sky'],
     ['value'=>'cancel_refund','label'=>'Cancellation & Refund','sub'=>'Refund to card','icon'=>'money_off','color'=>'rose'],
     ['value'=>'cancel_credit','label'=>'Cancellation & Credit','sub'=>'Future credit','icon'=>'savings','color'=>'orange'],
     ['value'=>'seat_purchase','label'=>'Seat Purchase','sub'=>'Seat selection fee','icon'=>'airline_seat_recline_extra','color'=>'cyan'],
@@ -49,6 +50,7 @@ $colorMap = [
     'cyan'=>['ring'=>'ring-cyan-500','bg'=>'bg-cyan-50','icon'=>'text-cyan-600'],
     'emerald'=>['ring'=>'ring-emerald-500','bg'=>'bg-emerald-50','icon'=>'text-emerald-600'],
     'amber'=>['ring'=>'ring-amber-500','bg'=>'bg-amber-50','icon'=>'text-amber-600'],
+    'sky'=>['ring'=>'ring-sky-500','bg'=>'bg-sky-50','icon'=>'text-sky-600'],
     'gray'=>['ring'=>'ring-gray-400','bg'=>'bg-gray-50','icon'=>'text-gray-500'],
 ];
 $activePage = 'transactions';
@@ -307,7 +309,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','Manr
     <!-- ═══════════════════════════════════════════════════════════════ -->
     <div class="step-panel" id="step-3">
       <div class="space-y-4">
-        <!-- Main itinerary — new_booking, seat_purchase, cabin_upgrade, name_correction -->
+        <!-- Main itinerary — new_booking, reissue, seat_purchase, cabin_upgrade, name_correction -->
         <div id="sec-itinerary" class="hidden">
           <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">

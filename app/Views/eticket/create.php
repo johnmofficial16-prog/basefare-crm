@@ -197,6 +197,15 @@ tailwind.config = {
     <!-- Ticket Conditions -->
     <div class="bg-white border border-slate-200 rounded-xl p-5 mb-5">
       <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">📋 Ticket Conditions</p>
+      <!-- Reissuance: Future Travel Voucher carried from the acceptance (shown after Load Data) -->
+      <div id="ftv-et-notice" class="hidden mb-4 flex items-center gap-3 p-3 rounded-lg border-2 border-sky-200 bg-sky-50">
+        <span class="material-symbols-outlined text-sky-600">card_giftcard</span>
+        <div>
+          <p class="text-[10px] font-bold text-sky-700 uppercase tracking-wider">Future Travel Voucher</p>
+          <p id="ftv-et-text" class="text-sm font-bold text-sky-900"></p>
+          <p class="text-[10px] text-sky-600">After you create the e-ticket you'll see a preview of the email and the voucher; the voucher PDF is attached when you send.</p>
+        </div>
+      </div>
       <!-- Fare type picker: drives Endorsements, Fare Rules, policy refund clause & customer acknowledgement -->
       <div id="fare-terms-picker" class="mb-4"></div>
       <div class="grid grid-cols-2 gap-4 mb-4">
@@ -345,6 +354,18 @@ async function loadAutofill() {
         }
 
         fillField('f-baggage_info', d.baggage_info);
+
+        // Reissuance voucher from the acceptance (travels in extra_data → saved on the e-ticket)
+        const ftv = (d.extra_data && d.extra_data.ftv) || null;
+        const ftvBox = document.getElementById('ftv-et-notice');
+        if (ftv && parseFloat(ftv.amount) > 0) {
+            const vd = new Date((ftv.valid_until || '') + 'T00:00:00');
+            document.getElementById('ftv-et-text').textContent = (ftv.currency || 'USD') + ' ' + parseFloat(ftv.amount).toFixed(2)
+                + (isNaN(vd) ? '' : ' · valid until ' + vd.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }));
+            ftvBox.classList.remove('hidden');
+        } else {
+            ftvBox.classList.add('hidden');
+        }
 
         // Fare type follows the acceptance the customer signed; older acceptances
         // (no fare type) fall back to the cabin default.

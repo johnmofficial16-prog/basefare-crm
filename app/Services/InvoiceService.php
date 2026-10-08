@@ -103,7 +103,7 @@ class InvoiceService
     {
         return match ($type) {
             Transaction::TYPE_NEW_BOOKING                          => Invoice::PURPOSE_NEW_BOOKING,
-            Transaction::TYPE_EXCHANGE, Transaction::TYPE_CABIN_UPGRADE,
+            Transaction::TYPE_EXCHANGE, Transaction::TYPE_REISSUE, Transaction::TYPE_CABIN_UPGRADE,
             Transaction::TYPE_NAME_CORRECTION                      => Invoice::PURPOSE_CHANGES,
             Transaction::TYPE_SEAT_PURCHASE                        => Invoice::PURPOSE_SEAT_TYPE,
             default                                                => Invoice::PURPOSE_OTHER,
