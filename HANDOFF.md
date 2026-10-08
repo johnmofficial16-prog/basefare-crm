@@ -5,7 +5,7 @@ one-off documents. `MEMORY.md` + `memory/` carry durable facts and load
 automatically — **this document is the action list**. Previous handoff archived as
 `HANDOFF-2026-08-31.md`.
 
-**Production is at `ef8bbd5`** (John pulled 6 Oct; all migrations applied). Nothing
+**Production is at `bfec501`** (8 Oct: Reissuance type + voucher live, migration 2026_10_08 applied; earlier: `ef8bbd5`) (John pulled 6 Oct; all migrations applied). Nothing
 is committed-but-unpushed. The CRM never auto-deploys — John pulls by hand.
 
 ---
@@ -19,6 +19,7 @@ is committed-but-unpushed. The CRM never auto-deploys — John pulls by hand.
 | 3 | **Trio letterhead v3** | Sent 5 Oct; no verdict yet after two rejections. Phone/email not on it (none found publicly) — add if John sends them. |
 | 4 | **Persad e-ticket PDF amount** | PDF shows "Fiji Airlines USD 133.32" (John's breakdown); Amadeus receipt says USD 132.90. Unconfirmed which is right. |
 | 5 | **Fare-terms legal review** | Template wording (incl. the DOT refund line) should be checked by whoever handles merchant/legal. Editable at `/admin/fare-terms` (managers + admins). |
+| 7 | **Award transactions never recorded** | 0 award_booking transactions ever existed (type missing live until 8 Oct). Ask the team whether the 8 Award acceptances were recorded as New Booking or not at all. |
 | 6 | **Live checks never done** | Real Gmail send of an email **with attachments**; an attachment upload **from JSR** (WAF risk, `memory/hosting-waf-constraint.md`); one real refundable acceptance signed on the live `/auth/` page. |
 
 ---
@@ -34,6 +35,7 @@ is committed-but-unpushed. The CRM never auto-deploys — John pulls by hand.
 | `2f2cff3` → `2f1ca5b` | **Exchange Future Travel Voucher** built, then **removed same week at client request** (clean revert; migration file kept because the columns exist live). Do not rebuild unless asked. |
 | `f16a6ca` | **AI email drafting upgrade** — `gemini-3.5-flash` via new `EMAIL_AI_MODEL` knob (VERTEX_MODEL untouched → buddy/analytics unchanged), rewritten prompt, thread history + booking flights as context, injection-resistant. `memory/email-ai-quality-upgrade.md` |
 | `ef8bbd5` | **Fix: "Record Transaction" silently did nothing** (6 Oct, user #21, 4× in Error Console at 22:55: `Cannot read properties of undefined (reading 'trim')`). Only two `.trim()` calls run on submit: imported split-card (`card_number` missing — acceptances store `card_last_four` only) and imported fare-line `label`. Both made null-safe, imported cards normalised ("ends 4242" hint), and `formAssembly.submit()` now shows a "nothing was saved" alert + rethrows to the Error Console. **Agent confirmed working after the fix.** Exact triggering data not identified: the agent's only recent acceptance (#1143) has no extra card and labelled fare lines and was already recorded (txn #887, 03:47 same day) — likely a re-import / other acceptance via link. Bug latent since the 8 Apr release. |
+| `b7fb596` + `bfec501` | **Reissuance type (8 Oct)** — new acceptance/transaction type `reissue`, filled like a New Booking; carries the Future Travel Voucher (fare line 1, 1 yr) through signing → transaction → e-ticket Preview & Send with PDF. Exchange has no voucher. Migration also added `award_booking` (never existed live) and restored 8 Award acceptances saved with a blank type. Live, migrated 8 Oct. `memory/exchange-future-travel-voucher.md` |
 
 Also confirmed live: **Call Logs** (`9a82c4d`, 24 Sep) — earlier notes wrongly said uncommitted.
 
