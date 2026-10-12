@@ -194,6 +194,19 @@ class UserController
             return $response->withHeader('Location', '/users/' . $userId . '/edit')->withStatus(302);
         }
 
+        // Simple view switch (admin accounts only; the box is only on their form)
+        if (!empty($body['simple_view_present']) && ($_SESSION['role'] ?? '') === User::ROLE_ADMIN) {
+            $target = User::find($userId);
+            if ($target && $target->role === User::ROLE_ADMIN) {
+                try {
+                    $target->simple_view = !empty($body['simple_view']) ? 1 : 0;
+                    $target->save();
+                } catch (\Throwable $e) {
+                    error_log('[UserController] simple_view not saved (migration 2026_10_12 run?): ' . $e->getMessage());
+                }
+            }
+        }
+
         $_SESSION['flash_success'] = 'User updated successfully.';
         return $response->withHeader('Location', '/users')->withStatus(302);
     }

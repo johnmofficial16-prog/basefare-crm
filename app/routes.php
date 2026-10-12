@@ -19,6 +19,7 @@ use App\Controllers\NotificationController;
 use App\Controllers\AdminController;
 use App\Controllers\FareTermsController;
 use App\Controllers\MobileAdminController;
+use App\Controllers\SimpleViewController;
 use App\Controllers\LetterController;
 use App\Controllers\PayrollController;
 use App\Controllers\VoucherController;
@@ -277,6 +278,25 @@ $app->group('/admin/fare-terms', function ($group) {
 // ==========================================================================
 $app->group('/admin/mobile', function ($group) {
     $group->get('', [MobileAdminController::class, 'page']);
+})
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
+
+// ==========================================================================
+// Simple view — simplified admin interface (admin ONLY, no AttendanceGate).
+// Same powers as the full CRM; JSON actions reuse the same services.
+// ==========================================================================
+$app->group('/simple', function ($group) {
+    $group->get('',            [SimpleViewController::class, 'home']);
+    $group->get('/approvals',  [SimpleViewController::class, 'approvals']);
+    $group->get('/team',       [SimpleViewController::class, 'team']);
+    $group->get('/sales',      [SimpleViewController::class, 'sales']);
+    $group->get('/reports',    [SimpleViewController::class, 'reports']);
+    $group->post('/mode',      [SimpleViewController::class, 'mode']);
+    $group->post('/api/booking/{id:[0-9]+}/approve',                   [SimpleViewController::class, 'approveBooking']);
+    $group->post('/api/email/{id:[0-9]+}/{action:approve|reject}',     [SimpleViewController::class, 'email']);
+    $group->post('/api/invoice/{id:[0-9]+}/{action:approve|reject}',   [SimpleViewController::class, 'invoice']);
+    $group->post('/api/team/add',                                      [SimpleViewController::class, 'addPerson']);
 })
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN]));

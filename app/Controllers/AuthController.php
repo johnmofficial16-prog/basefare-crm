@@ -118,6 +118,10 @@ class AuthController
             // means "they just arrived". Closing and reopening the browser ends
             // the session, so the next sign-in gets a fresh greeting.
             $_SESSION['buddy_greet_due'] = true;
+            // Simple view: an admin account flagged for the simplified interface
+            // starts there on every sign-in (full access is one click away).
+            $_SESSION['simple_mode'] = $user->role === \App\Models\User::ROLE_ADMIN && !empty($user->simple_view);
+            $_SESSION['simple_available'] = $_SESSION['simple_mode'];   // shows "Back to Simple view" in the full CRM
 
             // ── Audit: record the successful login ──────────────────────────
             // Until now nothing recorded a successful login anywhere: logout was
@@ -143,6 +147,10 @@ class AuthController
                 ]);
             } catch (\Throwable $e) {
                 error_log('[AuthController] login activity_log insert failed: ' . $e->getMessage());
+            }
+
+            if ($redirect === '/dashboard' && $_SESSION['simple_mode']) {
+                $redirect = '/simple';
             }
 
             // Auto-redirect mobile admins to the mobile panel

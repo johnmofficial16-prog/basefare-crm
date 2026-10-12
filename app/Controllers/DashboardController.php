@@ -29,6 +29,11 @@ class DashboardController
         $userId = $_SESSION['user_id'];
         $role   = $_SESSION['role'] ?? 'agent';
 
+        // Simple view: its Home page replaces the dashboard
+        if ($role === User::ROLE_ADMIN && !empty($_SESSION['simple_mode'])) {
+            return $response->withHeader('Location', '/simple')->withStatus(302);
+        }
+
         // Auto-redirect mobile admins to the mobile panel
         if ($role === User::ROLE_ADMIN) {
             $userAgent = $request->getHeaderLine('User-Agent');

@@ -9,7 +9,10 @@
  */
 $activePage = $activePage ?? 'acceptance';
 $_sidebarRole = $_SESSION['role'] ?? 'agent';
-if ($_sidebarRole === 'admin') {
+if ($_sidebarRole === 'admin' && !empty($_SESSION['simple_mode'])) {
+    // Simple view: same admin powers, short menu + plain-English confirmations
+    require __DIR__ . '/../partials/simple_sidebar.php';
+} elseif ($_sidebarRole === 'admin') {
     require __DIR__ . '/../partials/admin_sidebar.php';
 } elseif ($_sidebarRole === 'manager') {
     require __DIR__ . '/../partials/manager_sidebar.php';

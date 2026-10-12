@@ -69,6 +69,17 @@ $navItems = [
     <?php endforeach; ?>
   </nav>
 
+  <?php if (!empty($_SESSION['simple_available'])): ?>
+  <!-- Simple view account: way back to the easy interface -->
+  <form method="POST" action="/simple/mode" class="px-4 pb-3">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
+    <input type="hidden" name="mode" value="simple">
+    <button type="submit" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#163274] text-white text-sm font-bold hover:opacity-90">
+      <span class="material-symbols-outlined text-[18px]">home</span> Back to Simple view
+    </button>
+  </form>
+  <?php endif; ?>
+
   <!-- Bottom user info -->
   <div class="px-5 py-4 border-t border-gray-100">
     <div class="flex items-center gap-3">

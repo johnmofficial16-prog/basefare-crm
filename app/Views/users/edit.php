@@ -146,6 +146,18 @@ tailwind.config = {
             <p class="text-[10px] text-slate-400 mt-1">Agents and supervisors must report to a manager or supervisor. Managers/admins do not report to anyone.</p>
           </div>
 
+          <?php if (($user->role ?? '') === 'admin' && ($_SESSION['role'] ?? '') === 'admin'): ?>
+          <!-- Simple view (admins only): same powers, simplified interface -->
+          <input type="hidden" name="simple_view_present" value="1">
+          <label class="flex items-start gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer">
+            <input type="checkbox" name="simple_view" value="1" class="mt-0.5" <?= !empty($old['simple_view'] ?? $user->simple_view) ? 'checked' : '' ?>>
+            <span>
+              <span class="block text-sm font-bold text-slate-800">Simple view</span>
+              <span class="block text-xs text-slate-500 mt-0.5">Signs in to the easy owner's interface (Home, Approvals, Team, Sales, Reports) with a confirmation before every approval. Full admin access stays — "Full CRM" is one click away. Takes effect at their next sign-in.</span>
+            </span>
+          </label>
+          <?php endif; ?>
+
         </div>
       </div>
 
