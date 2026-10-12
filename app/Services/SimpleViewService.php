@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\AcceptanceRequest;
+use App\Models\AttendanceOverride;
+use App\Models\AttendanceSession;
 use App\Models\ChargebackRefund;
 use App\Models\CustomerEmailMessage;
 use App\Models\Invoice;
@@ -302,11 +304,38 @@ class SimpleViewService
         $try('bookings', fn() => Transaction::where('status', Transaction::STATUS_PENDING)->count());
         $try('emails',   fn() => CustomerEmailMessage::pendingApproval()->count());
         $try('invoices', fn() => Invoice::pendingApproval()->count());
-        $try('clockins', fn() => count($this->teamNow()['asking']));
+        $try('clockins', fn() => $this->clockinRequestCount());
         $try('shifts',   fn() => count((new ShiftService())->getPendingApprovals()));
         $c['total'] = array_sum($c);
 
         return $cache = $c;
+    }
+
+    /**
+     * How many people are waiting for a late clock-in decision — the same rule
+     * as AttendanceService::getLiveBoardData()'s pending_override bucket, in
+     * three queries instead of two per team member (this runs on every page
+     * via the sidebar badge).
+     */
+    public function clockinRequestCount(): int
+    {
+        $today = date('Y-m-d');
+        $blocked = DB::table('activity_log')->where('action', 'clock_in_blocked')
+            ->where('created_at', '>=', $today . ' 00:00:00')->distinct()->pluck('user_id')->all();
+        if (!$blocked) return 0;
+
+        $eligible = User::whereIn('id', $blocked)
+            ->whereIn('role', [User::ROLE_AGENT, User::ROLE_MANAGER, User::ROLE_SUPERVISOR, User::ROLE_CSA])
+            ->where('status', User::STATUS_ACTIVE)->whereNull('deleted_at')->pluck('id')->all();
+        if (!$eligible) return 0;
+
+        $hasSession = AttendanceSession::whereIn('user_id', $eligible)
+            ->where(fn($q) => $q->where('date', $today)->orWhere('status', AttendanceSession::STATUS_ACTIVE))
+            ->distinct()->pluck('user_id')->all();
+        $hasOverride = AttendanceOverride::whereIn('agent_id', $eligible)->where('shift_date', $today)
+            ->distinct()->pluck('agent_id')->all();
+
+        return count(array_diff($eligible, $hasSession, $hasOverride));
     }
 
     // =========================================================================
@@ -361,14 +390,14 @@ class SimpleViewService
         } catch (\Throwable $e) {}
 
         try {
+            // expires_at, not created_at: a resend gives the link a fresh 12 hours
             $expiring = AcceptanceRequest::where('status', AcceptanceRequest::STATUS_PENDING)->where('is_preauth', false)
-                ->where('created_at', '<=', Carbon::now()->subHours(8))
-                ->where('created_at', '>', Carbon::now()->subHours(12))->count();
+                ->whereBetween('expires_at', [Carbon::now(), Carbon::now()->addHours(4)])->count();
             if ($expiring > 0) {
                 $out[] = [
                     'icon' => 'timer', 'tone' => 'slate',
                     'title' => $expiring . ' customer authorization' . ($expiring > 1 ? 's' : '') . ' about to expire',
-                    'detail' => 'Sent to the customer but not signed yet; the link stops working 12 hours after it was sent.',
+                    'detail' => 'Sent to the customer but not signed yet; the link stops working within the next 4 hours.',
                     'href' => '/acceptance?status=PENDING',
                 ];
             }

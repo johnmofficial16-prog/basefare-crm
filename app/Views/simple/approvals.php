@@ -77,7 +77,10 @@ $section = function (string $id, string $icon, string $title, string $help, int 
 <?php if ($a['emails']): $section('emails', 'mail', 'Customer emails to check',
     'Agents wrote these to customers. "Send it" emails the customer right away; "Send back" returns it to the agent with your note.', count($a['emails'])); ?>
   <div class="space-y-3">
-  <?php foreach ($a['emails'] as $m): $to = $m->thread->customer_email ?? ''; $body = $plain($m->final_body); ?>
+  <?php foreach ($a['emails'] as $m):
+      $to = $m->thread->customer_email ?? ''; $body = $plain($m->final_body);
+      $mBlock = $m->hasPlaceholders() ? "This email still has a blank the agent needs to fill in, so it can't be sent yet. Please use \"Send back\"."
+              : (!filter_var($to, FILTER_VALIDATE_EMAIL) ? "This email has no valid customer address, so it can't be sent. Please use \"Send back\"." : ''); ?>
     <article class="card p-5" data-item>
       <div class="flex items-start gap-5">
         <div class="flex-1 min-w-0">
@@ -87,10 +90,16 @@ $section = function (string $id, string $icon, string $title, string $help, int 
         <div class="flex items-center gap-2">
           <button type="button" class="px-4 py-2.5 rounded-xl border border-slate-300 text-[14px] font-semibold text-slate-700 hover:bg-slate-50"
             data-act="email-reject" data-id="<?= $m->id ?>" data-who="<?= sv_e($m->author->name ?? 'the agent') ?>">Send back</button>
-          <button type="button" class="px-5 py-2.5 rounded-xl bg-primary text-white text-[14px] font-bold hover:bg-[#0f2557]"
-            data-act="email-approve" data-id="<?= $m->id ?>" data-to="<?= sv_e($to) ?>" data-subject="<?= sv_e($m->final_subject) ?>">Send it</button>
+          <button type="button" class="px-5 py-2.5 rounded-xl bg-primary text-white text-[14px] font-bold hover:bg-[#0f2557] disabled:opacity-40 disabled:cursor-not-allowed"
+            data-act="email-approve" data-id="<?= $m->id ?>" data-to="<?= sv_e($to) ?>" data-subject="<?= sv_e($m->final_subject) ?>"
+            <?= $mBlock ? 'disabled data-blocked="1" title="' . sv_e($mBlock) . '"' : '' ?>>Send it</button>
         </div>
       </div>
+      <?php if ($mBlock): ?>
+      <p class="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[14px] flex items-center gap-2">
+        <span class="material-symbols-outlined text-[20px]">warning</span><?= sv_e($mBlock) ?>
+      </p>
+      <?php endif; ?>
       <details class="mt-3 group">
         <summary class="cursor-pointer text-[14px] font-semibold text-primary list-none flex items-center gap-1">
           <span class="material-symbols-outlined text-[18px] group-open:rotate-90 transition-transform">chevron_right</span> Read the email
@@ -108,8 +117,11 @@ $section = function (string $id, string $icon, string $title, string $help, int 
 <?php if ($a['invoices']): $section('invoices', 'request_quote', 'Invoices to check',
     'Approving emails the invoice to the customer right away.', count($a['invoices'])); ?>
   <div class="space-y-3">
-  <?php foreach ($a['invoices'] as $inv): $cur = $inv->currency ?: $currency; ?>
-    <article class="card p-5 flex items-center gap-5" data-item>
+  <?php foreach ($a['invoices'] as $inv): $cur = $inv->currency ?: $currency;
+      $iBlock = filter_var((string) $inv->customer_email, FILTER_VALIDATE_EMAIL) ? ''
+              : "No customer email address on this invoice, so it can't be sent. Please use \"Send back\"."; ?>
+    <article class="card p-5" data-item>
+    <div class="flex items-center gap-5">
       <div class="flex-1 min-w-0">
         <h3 class="text-[17px] font-bold"><?= sv_e($inv->customer_name) ?> <span class="text-[14px] font-semibold text-slate-400 ml-1"><?= sv_e($inv->invoice_no) ?></span></h3>
         <p class="text-[14px] text-slate-500 mt-1"><?= sv_e($inv->purposeLabel()) ?><?= $inv->pnr ? ' · PNR ' . sv_e($inv->pnr) : '' ?> · by <strong class="text-slate-700"><?= sv_e($inv->creator->name ?? 'Unknown') ?></strong> · <?= sv_e($ago($inv->created_at)) ?></p>
@@ -119,10 +131,17 @@ $section = function (string $id, string $icon, string $title, string $help, int 
         <a href="/invoices/<?= $inv->id ?>" class="px-4 py-2.5 rounded-xl border border-slate-300 text-[14px] font-semibold text-slate-700 hover:bg-slate-50 no-underline">See invoice</a>
         <button type="button" class="px-4 py-2.5 rounded-xl border border-slate-300 text-[14px] font-semibold text-slate-700 hover:bg-slate-50"
           data-act="invoice-reject" data-id="<?= $inv->id ?>" data-who="<?= sv_e($inv->creator->name ?? 'the agent') ?>">Send back</button>
-        <button type="button" class="px-5 py-2.5 rounded-xl bg-primary text-white text-[14px] font-bold hover:bg-[#0f2557]"
+        <button type="button" class="px-5 py-2.5 rounded-xl bg-primary text-white text-[14px] font-bold hover:bg-[#0f2557] disabled:opacity-40 disabled:cursor-not-allowed"
           data-act="invoice-approve" data-id="<?= $inv->id ?>" data-to="<?= sv_e($inv->customer_email) ?>"
-          data-summary="<?= sv_e($inv->invoice_no . ' · ' . $inv->customer_name . ' · ' . sv_money((float) $inv->total_amount, $cur)) ?>">Approve &amp; send</button>
+          data-summary="<?= sv_e($inv->invoice_no . ' · ' . $inv->customer_name . ' · ' . sv_money((float) $inv->total_amount, $cur)) ?>"
+          <?= $iBlock ? 'disabled data-blocked="1" title="' . sv_e($iBlock) . '"' : '' ?>>Approve &amp; send</button>
       </div>
+    </div>
+    <?php if ($iBlock): ?>
+    <p class="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[14px] flex items-center gap-2">
+      <span class="material-symbols-outlined text-[20px]">warning</span><?= sv_e($iBlock) ?>
+    </p>
+    <?php endif; ?>
     </article>
   <?php endforeach; ?>
   </div>
@@ -176,8 +195,12 @@ $section = function (string $id, string $icon, string $title, string $help, int 
   var TODAY = <?= json_encode($today) ?>;
 
   function done(btn, res) {
-    if (!res.success) { SimpleUI.toast(res.error || 'Something went wrong. Nothing was changed.', 'error'); return; }
-    SimpleUI.toast(res.message || 'Done.');
+    if (!res.success) {
+      SimpleUI.toast(res.error || 'Something went wrong. Nothing was changed.', 'error');
+      if (!res.remove) return;          // still waiting: leave the card so she can retry or send back
+    } else {
+      SimpleUI.toast(res.message || 'Done.');
+    }
     var item = btn.closest('[data-item]');
     var section = btn.closest('[data-section]');
     item.classList.add('fade-out');
@@ -192,7 +215,7 @@ $section = function (string $id, string $icon, string $title, string $help, int 
     }, 350);
   }
 
-  function busy(btn, on) { btn.disabled = on; btn.style.opacity = on ? .6 : ''; }
+  function busy(btn, on) { if (btn.dataset.blocked) return; btn.disabled = on; btn.style.opacity = on ? .6 : ''; }
 
   var actions = {
     booking: function (b) {
@@ -231,14 +254,14 @@ $section = function (string $id, string $icon, string $title, string $help, int 
       return SimpleUI.confirm({
         title: 'Let ' + b.dataset.name + ' start work?', confirmText: 'Yes, allow', icon: 'schedule',
         text: 'They\'ll be able to clock in now, even though it\'s outside their shift time.',
-        input: { label: 'Reason (saved in the attendance record)', placeholder: 'e.g. Shift changed today', required: true, requiredText: 'Please add a short reason.' }
+        input: { label: 'Reason (saved in the attendance record)', placeholder: 'e.g. Shift changed today', required: true, minLength: 5, requiredText: 'Please add a short reason (at least 5 letters).' }
       }).then(function (r) { return r.ok && SimpleUI.postJson('/attendance/override', { agent_id: +b.dataset.id, date: TODAY, reason: r.value }); });
     },
     'clockin-deny': function (b) {
       return SimpleUI.confirm({
         title: 'Don\'t let ' + b.dataset.name + ' clock in today?', confirmText: 'Yes, don\'t allow', tone: 'danger',
         text: 'They won\'t be able to start work outside their shift time today.',
-        input: { label: 'Reason (they will see this)', placeholder: 'e.g. Not scheduled today', required: true, requiredText: 'Please add a short reason.' }
+        input: { label: 'Reason (they will see this)', placeholder: 'e.g. Not scheduled today', required: true, minLength: 3, requiredText: 'Please add a short reason (at least 3 letters).' }
       }).then(function (r) { return r.ok && SimpleUI.postJson('/attendance/deny', { agent_id: +b.dataset.id, date: TODAY, reason: r.value }); });
     },
     shift: function (b) {

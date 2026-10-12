@@ -96,7 +96,7 @@
 
       function close(ok) {
         var v = inEl ? inEl.value.trim() : '';
-        if (ok && o.input && o.input.required && !v) {
+        if (ok && o.input && ((o.input.required && !v) || v.length < (o.input.minLength || 0))) {
           ov.querySelector('#sui-err').style.display = 'block';
           inEl.focus();
           return;
@@ -106,8 +106,14 @@
         resolve({ ok: ok, value: v });
       }
       function onKey(e) {
-        if (e.key === 'Escape') { e.preventDefault(); close(false); }
-        if (e.key === 'Enter' && (!inEl || inEl.tagName !== 'TEXTAREA')) { e.preventDefault(); close(true); }
+        // Keys belong to the box while it is open: don't let them reach the page
+        // (e.g. Escape would also close the "Add a person" form underneath).
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(false); return; }
+        if (e.key !== 'Enter') return;
+        var a = document.activeElement;
+        if (a && a.tagName === 'BUTTON' && ov.contains(a)) return;   // Enter presses the focused button itself
+        if (a === inEl && inEl.tagName === 'TEXTAREA') return;        // new line in a note
+        e.preventDefault(); e.stopPropagation(); close(true);
       }
       document.addEventListener('keydown', onKey, true);
       ov.addEventListener('click', function (e) {
@@ -135,6 +141,10 @@
   var NET_ERR = 'That didn\'t go through — please check the internet connection and try again. Nothing was changed.';
 
   function handle(res) {
+    // Not signed in any more (session ended / account changed): the server redirects to /login
+    if (res.redirected && /\/login/.test(res.url)) {
+      return Promise.resolve({ success: false, error: 'You have been signed out. Please refresh the page and sign in again — nothing was changed.' });
+    }
     return res.text().then(function (txt) {
       var data = null;
       try { data = JSON.parse(txt); } catch (e) { /* not JSON */ }
@@ -143,6 +153,8 @@
         return data;
       }
       if (res.status === 403) return { success: false, error: 'The page has expired or the network blocked it. Please refresh the page and try again. Nothing was changed.' };
+      // A server error may have happened half-way, so don't promise nothing changed
+      if (res.status >= 500) return { success: false, error: 'Something went wrong on the server. Please refresh the page to see whether it went through before trying again.' };
       return { success: false, error: NET_ERR };
     });
   }
@@ -184,14 +196,11 @@
       lines: ['The customer will not receive it.', 'The agent sees your note and can fix it.'] },
     { re: /\/invoices\/\d+\/send$/, title: 'Email this invoice to the customer?', confirmText: 'Yes, send it',
       lines: ['It goes out right away and can\'t be called back.'] },
-    { re: /\/users\/\d+\/delete$/, title: 'Remove this person from the CRM?', confirmText: 'Yes, remove', tone: 'danger',
-      lines: ['They can no longer sign in.', 'Their past bookings and records stay.', 'To only pause their access, use "Turn off login" on the Team page instead.'] },
-    { re: /\/acceptance\/\d+\/cancel$/, title: 'Cancel this customer authorization?', confirmText: 'Yes, cancel it', tone: 'danger',
-      lines: ['The link sent to the customer stops working.', 'They will not be able to sign it.'] },
-    { re: /\/acceptance\/\d+\/resend$/, title: 'Email the authorization link to the customer again?', confirmText: 'Yes, resend',
-      lines: ['The customer gets the same authorization email again.'] },
     { re: /\/etickets\/\d+\/send$/, title: 'Email this e-ticket to the customer?', confirmText: 'Yes, send it',
       lines: ['It goes out right away and can\'t be called back.'] }
+    // Not here on purpose: acceptance resend/cancel and user removal are fetch()
+    // calls with their own browser confirm(), not form posts, so a form rule
+    // would never fire.
   ];
 
   function ruleFor(form) {
@@ -201,27 +210,42 @@
     return null;
   }
 
-  // Capture phase: runs before the page's own onsubmit confirm(), which we skip.
+  // Capture phase: runs before the page's own onsubmit handlers (their terse
+  // confirm() and their double-click guards), so after "Yes" this does the
+  // double-click guarding itself: the form is marked as sending, its buttons
+  // are disabled, and any further submit of it is swallowed.
   document.addEventListener('submit', function (e) {
     var form = e.target;
     if (!(form instanceof HTMLFormElement) || (form.method || '').toLowerCase() !== 'post') return;
-    if (form.dataset.suiConfirmed === '1') return;
     var rule = ruleFor(form);
     if (!rule) return;
 
     e.preventDefault();
     e.stopImmediatePropagation();
+    if (form.dataset.suiSending === '1') return;     // already confirmed and on its way
     var submitter = e.submitter;
 
     confirmBox({ title: rule.title, lines: rule.lines, confirmText: rule.confirmText, tone: rule.tone }).then(function (r) {
-      if (!r.ok) return;
-      form.dataset.suiConfirmed = '1';
+      if (!r.ok || form.dataset.suiSending === '1') return;
+      form.dataset.suiSending = '1';
       if (submitter && submitter.name) {
         var h = document.createElement('input');
         h.type = 'hidden'; h.name = submitter.name; h.value = submitter.value;
         form.appendChild(h);
       }
+      form.querySelectorAll('button, input[type="submit"]').forEach(function (b) { b.disabled = true; b.style.opacity = '.6'; });
+      if (submitter && !form.contains(submitter)) { submitter.disabled = true; }
       HTMLFormElement.prototype.submit.call(form);   // no second submit event / confirm()
     });
   }, true);
+
+  // Coming back with the browser's Back button restores the page as it was:
+  // let the forms be used again.
+  window.addEventListener('pageshow', function (ev) {
+    if (!ev.persisted) return;
+    document.querySelectorAll('form[data-sui-sending]').forEach(function (f) {
+      delete f.dataset.suiSending;
+      f.querySelectorAll('button, input[type="submit"]').forEach(function (b) { b.disabled = false; b.style.opacity = ''; });
+    });
+  });
 })();
