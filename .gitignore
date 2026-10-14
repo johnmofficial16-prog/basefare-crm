@@ -102,3 +102,6 @@ scratch/
 
 # Generated email previews (runtime, not source)
 storage/email_previews/
+
+# HR portal design concepts — local only (docs/ is not web-denied by .htaccess)
+docs/hr/
