@@ -78,12 +78,12 @@
 
 ### 2.1 Address
 
-`hr.<domain>`. This is a decision for the client; see §10.
-- **Recommended:** a Trio domain (for example `triotours.in`, about ₹700–900 a year). It gives:
-  - `hr.triotours.in` for the portal;
-  - an `hr@` mailbox, so HR emails come from Trio rather than Base Fare;
-  - a careers page that fixes Trio's missing online presence for hiring.
-- **Works today:** `hr.base-fare.com`, using the hosting pattern already proven.
+**`hr.triotoursandtravels.in`** (decided 14 Oct).
+- **The group already owns this domain.** It is registered to Lets Fly Travel through Hostinger (17 Mar 2025, expires 17 Mar 2027) and is currently parked, so there is nothing to buy.
+- **It also gives:**
+  - an `hr@triotoursandtravels.in` mailbox, so HR emails come from Trio rather than Base Fare;
+  - a careers page later, which fixes Trio's missing online presence for hiring.
+- **Fallback:** `hr.base-fare.com`, if the domain can't point at the CRM's folder on the hosting. In that case a tiny forwarding file in the domain's own folder does the job.
 
 ### 2.2 Roles
 
@@ -775,7 +775,7 @@ The Fumist approach: plain JavaScript modules, one stylesheet and a JSON API. Th
 
 ## 10. Needed from the client
 
-1. **Address.** Buy a Trio domain (recommended) or use `hr.base-fare.com`. Plus an `hr@` mailbox.
+1. **Address.** Decided: `hr.triotoursandtravels.in`, which the group already owns. Still needed: connect it to the hosting and create an `hr@` mailbox.
 2. **Company details**
    - Trio's **TAN** and **PAN**.
    - The **authorised signatory** (name and designation) for letters and Form 130.
