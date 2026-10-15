@@ -18,7 +18,7 @@ On 15 Oct John asked to **see the HR module running on a local server first**, u
 
 | # | Item | State / next action |
 |---|---|---|
-| 1 | **Build the HR portal locally (Phase 1 foundation) and show it to John** | Just started. Layout and ports are in §2. Show it in the browser pane at `http://127.0.0.1:8471`. Nothing goes to the live server until John has seen it locally and approves |
+| 1 | **HR portal: first slice BUILT LOCALLY (15 Oct), being shown to John** | Runs at `http://127.0.0.1:8471` (how to run: §2 "Local build"). 60/60 API checks pass; screenshots at 1366/1536/1920 + phone + tablet are clean. **All HR code is UNCOMMITTED on purpose** (John wants to see it before anything ships). **Never `git add -A` on dev**: `public_hr/` would become reachable under the CRM domain and the migration would run on production. Next: John's reaction, then the rest of Phase 1 (§2) |
 | 2 | **Phase 0, step 1: John runs the read-only check on the server** | `git pull origin dev` then `php scripts/hr_phase0_checks.php`, and he pastes the output. **Not run yet.** The CRM attendance fixes (§4) depend on what it shows |
 | 3 | **Client message with deadlines for their CA** | Drafted in chat on 14 Oct. **Unknown whether sent.** It covers: Form 138 (old 24Q) for Q2 due **31 Oct**; incentives are salary TDS (s.392), not the 5% "194H" the old slip maker used; PF ceiling ₹25,000 from 17 Sep 2026, with the EPF enrolment campaign ending **31 Oct**; Punjab PSDT ₹200/month; night-shift permission for women in Mohali |
 | 4 | **John's steps after the checks, one at a time** | (a) Rotate the DB password (exposed July, still unrotated). (b) Create the staging subdomain (`STAGING.md`). (c) Connect `triotoursandtravels.in` to the hosting, create `hr.` and an `hr@` mailbox |
@@ -78,24 +78,84 @@ On 15 Oct John asked to **see the HR module running on a local server first**, u
 - Hanken Grotesk on token sizes 32/28/20/17/16/15/14/12. EB Garamond for brand moments only.
 - Full CSS lives in the concept file.
 
-**Local build plan (in progress)**
-- **Ports, verified free on 15 Oct with `Get-NetTCPConnection`:**
-  - a private MySQL 8.4 on **3417**, own datadir;
-  - the HR portal (`php -S` + router) on **8471**.
-- **Before starting anything**, re-check the ports and check what is already running.
-- **Never stop a process by name** (`taskkill /IM php.exe` kills other projects' servers). Stop only PIDs you started.
-- **Local kit:** `docs/hr/local-test-kit/` is a copy of the CRM smoke-test kit: seed, router, fake SMTP, server.cmd. The original test DB datadir is in the session scratchpad (`scratchpad/smoke/mysqldata`, database `crm_smoke`), which may be gone in a new session. In that case rebuild from `database/schema.sql` + migrations (recipe in `memory/customer-pages-are-standalone.md`).
-- **Point the HR bootstrap at the local DB via env vars and refuse non-local DB hosts when `HR_ENV=local`.** The repo `.env` holds production credentials.
-- **Intended first look:**
-  - Sign-in screen.
-  - The app shell (navy sidebar, Ctrl K search).
-  - **Today** ("Needs you" from real pending items, tonight's floor from CRM sessions/roster by business day, compliance dates, a "What happened" feed).
-  - **People**: directory + full-page record linked to the CRM user, with "Invite to Trio HR".
-  - **Approvals** inbox with plain-English confirm sheets.
-  - The remaining modules shown in the nav as "Coming next".
-  - Then the staff phone view.
-- **Seed** about 30 fictional employees locally. Never use real staff names in demos.
-- **Be honest with John about what works and what is next.** A thin slice called "done" was what he rejected on the Fumist CRM.
+**Local build (built 15 Oct, UNCOMMITTED, local only)**
+
+*What exists (all new files; nothing in the CRM changed):*
+- `database/migrations/2026_10_15_hr_foundation.sql`: 15 `hr_*` tables (people, secrets, history, accounts, sessions, tokens, login attempts, requests, leave types/balances/days, settings, compliance items, audit log, outbox). Applied to the LOCAL db only.
+- `app/Hr/`:
+  - `Kernel` (boot; `crm` + `hr` connections; local mode refuses non-loopback DB and never reads `.env`)
+  - `Api` (Slim, `/api` base, guard = session + role + CSRF + same-Origin + JSON-only; one error handler with `HR-xxxxxx` refs, also written to the CRM Error Console tagged `[HR …]`)
+  - `Http/{ApiError,Ctx}`, `Support/{Clock,Fmt,Audit,Vault,Outbox}`, `Auth/Auth`, `Crm/CrmGateway` (read-only)
+  - `Domain/{Settings,People,Privacy,Leave,Floor,Approvals,Today,Me}`
+- `public_hr/`: `index.html`, `.htaccess` (CSP, HTTPS, deny php except entry), `api/index.php`, `assets/css/hr.css`, `assets/js/{app.js, core/*, screens/*}`.
+
+*What works:*
+- **Sign-in**:
+  - Argon2id; lockout after 5 tries; per-IP throttle; timing-safe unknown email.
+  - Invite links and resets (single use, token in the URL fragment).
+  - Admin idle sign-out after 30 min, with a 2-minute warning; background polling doesn't count as activity.
+  - Devices list; password change.
+- **Today**:
+  - KPIs.
+  - "Needs you", built on the server: a late clock-in waiting, approvals by kind, roster ending, probation and contract end, missed clock-outs, invites, compliance.
+  - Tonight's floor, live every 15 s from CRM sessions by shift day (fixes the CRM's calendar-day board).
+  - Compliance dates.
+  - People moments.
+  - "What happened" feed, including CRM late-login approvals.
+- **`#/floor`** (everyone tonight) and **`#/compliance`** (mark done).
+- **People**:
+  - Directory: filters, live dots, invite everyone.
+  - Full-page record with tabs: Overview, Attendance (CRM nights, month by month), Leave, Requests, Private details, Timeline.
+  - Add a person (+ invite), edit drawer with a dated job history.
+  - Private details encrypted (libsodium, `HR_VAULT_KEY`); "Show" needs the admin's password; every look is logged and listed.
+- **Approvals**:
+  - Request types: leave (balance / notice / coverage per night vs `min_floor` / history), attendance fix (CRM night check), profile change (diff), bank change (name match, IFSC, cooling-off; the account number stays encrypted while pending).
+  - Actions: approve, approve some nights, send back with reason chips, bulk-approve routine ones.
+  - J/K/A keys; can't decide your own request; emails the employee via the outbox.
+- **Staff phone app**:
+  - Home: tonight's shift in India + New York time with a US DST note, clocked-in state, needs, leave, requests.
+  - Attendance month with "Fix" (a few taps).
+  - Ask for leave (3 taps).
+  - Pay (honest "from December pay").
+  - My details and bank (both go to approval); devices; password.
+- **Coming-next pages** for every unbuilt module, saying which phase delivers it.
+
+*NOT done yet (rest of Phase 1, honest list):*
+- TOTP for admins.
+- New-device alert email.
+- Letters (appointment-letter catch-up, LOI move).
+- Settings screen (company, centres, law tables, admins).
+- Documents vault, policies and acknowledgements.
+- Org chart.
+- Notification bell.
+- Self-hosted fonts (Google Fonts link for now).
+- Dark mode.
+- Health/outbox page.
+- CRM bridge writes (none yet).
+- Leave: accruals, holidays and opening-balance screen (Phase 2).
+
+*Run it (ports re-checked free; kill ONLY these PIDs, never by name):*
+1. **MySQL on 3417**, private datadir `scratchpad/hrlocal/mysqldata` (a copy of the smoke db; the `crm_smoke` schema + `hr_*`):
+   `mysqld.exe --no-defaults --datadir=<scratchpad>\hrlocal\mysqldata --port=3417 --bind-address=127.0.0.1 --mysqlx=OFF --disable-log-bin --default-time-zone=+05:30 --sql-mode=NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION`
+2. **Mail sink on 2526**: `python docs/hr/local-test-kit/hr_fake_smtp.py` (env `HR_MAIL_DIR` = `scratchpad/hrlocal/mail`).
+3. **Portal on 8471**:
+   - Run `docs/hr/local-test-kit/hr_server.cmd`; it seeds first, then serves.
+   - Or from bash: `source docs/hr/local-test-kit/hr_env.sh`, then `php hr_seed.php`, then `php -d openssl.cafile=<kit>/smtp.crt -S 127.0.0.1:8471 hr_router.php`.
+4. **Sign-in details** are in `hr_seed.php` (header comment + constants). They are local-only and never go in chat.
+5. **The seed is re-runnable.** It rebuilds all `hr_*` rows plus the demo CRM users, roster and nights around the current time.
+   - 33 fictional people on `@trio-demo.test`; "tonight" is built live.
+   - It sets the old `@smoke.test` users to `is_dev=1`.
+6. **PIDs on 15 Oct:** mysqld 5892, mail 10888, php 16296. They will differ next time; find them with `netstat -ano | grep -E ":(3417|2526|8471) "`.
+7. **Tests** (`scratchpad/hrlocal`):
+   - `python -X utf8 api_test.py`: 60 checks covering auth, CSRF/Origin/JSON, roles, own-data-only, reveal + audit, approvals, staff flows, and emails reaching the sink.
+   - `node shoot.cjs all 1366,1536,1920`: screenshots plus a console / blocked-request / sideways-scroll / <12px sweep.
+   - Re-seed after `api_test.py`, because it changes data.
+
+*Gotchas found while building:*
+- **Never load the entry module with `?v=`.** `app.js?v=…` plus screens importing `../app.js` created TWO app instances with separate sessions.
+- **Slim's PSR request drops the port from `Host`.** The Origin check uses raw `$_SERVER['HTTP_HOST']`.
+- **Event listeners on `#main` leaked across screens.** The router now gives each screen a fresh `<main>`.
+- **Python on Windows** reads UTF-8 as cp1252 unless run with `-X utf8`.
 
 **Facts verified in research (Oct 2026; the CA confirms before go-live)**
 - **New Income-tax Act 2025** (from 1 Apr 2026): salary TDS is now **s.392**; Form 16 → **130**; 24Q → **138**; 12BB → **124**; 12B → **122**.
