@@ -78,6 +78,58 @@ On 15 Oct John asked to **see the HR module running on a local server first**, u
 - Hanken Grotesk on token sizes 32/28/20/17/16/15/14/12. EB Garamond for brand moments only.
 - Full CSS lives in the concept file.
 
+**▶ PHASE 1 COMPLETION — IN PROGRESS (John said "i likes,, proceed", 15 Oct night). Stopped mid-way at the usage limit.**
+
+*State right now:*
+- The local portal on 8471 is **STOPPED**: I killed my PID 16296 to restart with the new `HR_STORAGE_DIR`.
+- MySQL on 3417 (PID 5892) and the mail sink on 2526 (PID 10888) may still be running; they are mine.
+- The local DB still has the **old** hr_* schema. To bring it back: `source docs/hr/local-test-kit/hr_env.sh` (it now sets `HR_STORAGE_DIR` = `scratchpad/hrlocal/storage`), then `php hr_seed.php` (the seed now **drops and rebuilds all hr_* tables from the migration**), then start `php -S` as below.
+
+*Written this round (uncommitted; every file passes `php -l`):*
+- **Migration `2026_10_15_hr_foundation.sql`:** now 25 tables, plus new columns:
+  - `hr_employees.pan_status/uan/esic_ip`;
+  - `hr_accounts.totp_pending_enc/totp_last_step`;
+  - `hr_sessions.must_setup_2fa`;
+  - `hr_requests.type += document`.
+- **New support and bridge files:**
+  - `Support/Notify.php`: HR bell, plus `Crm/CrmBridge::notify`, which writes CRM `notifications` with type `hr` (bridge command 5).
+  - `Support/Markup.php`: safe light-markup to HTML and `{{field}}` fill. Tested: escapes HTML; values can't inject formatting.
+- **Sign-in and security:**
+  - `Auth/Totp.php`: passes the RFC 6238 vectors.
+  - `Auth/SecondStep.php`: challenges, emailed codes, backup codes, remembered-device cookie, new-device alert email.
+  - `Auth/Auth.php`: `checkPassword()` + `complete()` replace `signIn()`; `sendAccountInvite()` for admin accounts.
+  - `Domain/Account.php`: my account, TOTP start/confirm/disable, backup codes, devices.
+- **Settings:**
+  - `Domain/Settings.php` rewritten: `set()`, `security()`, `RULES`, company/centres defaults.
+  - `Domain/Setup.php`: company, centres, rules, security (owner-only), law table, admins (owner-only), health, audit-log viewer, compliance add/edit.
+- **Content:** `Domain/Defaults.php` holds the law values (sourced), 8 letter templates and 5 policy drafts. It is **NOT yet hooked**: call `Defaults::ensure()` in `Api::run()` after `Kernel::boot()`.
+- **Policies, letters, documents:**
+  - `Domain/Policies.php` (versions, publish, remind, sign, withdraw consent).
+  - `Domain/Letters.php` (fill, second-admin check, number `TT/HR/YYYY/NNNN`, frozen archive, verify code, catch-up, staff ack, public verify).
+  - `Domain/Documents.php` (raw-body upload ≤ 8 MB sniffed by content, encrypted outside the web root, view-logged).
+- **Approvals:** handles `letter` (approve creates the letter) and `document` (verify/reject).
+- **Api.php routes added:** `/session/verify`, `/session/resend`, `/notifications`, `/account/*`, `/settings*`, `/law`, `/admins*`, `/health*`, `/audit`, `/compliance` POST/PATCH.
+
+*Still to do, in order:*
+1. Hook `Defaults::ensure()`.
+2. Routes for policies, letters, documents, public `/verify` and `Me::requestLetter`.
+   - **Uploads:** let the guard accept non-JSON types for upload routes only.
+   - **File download:** a raw (non-JSON) response.
+3. **Front end:**
+   - The bell.
+   - Settings tabs.
+   - `#/account` with the TOTP setup; it needs `core/qr.js`.
+   - Sign-in code screens and the forced 2FA setup.
+   - Policies (admin and staff).
+   - Letters: list, new and detail, plus `print.html`/`print.js` with the v3 letterhead (recipe: memory `design-deliverables-standard`).
+   - Documents: a tab on the record, and a staff screen.
+   - `#/verify/CODE`.
+   - Org chart, statutory fields, dark mode.
+4. **Seed:** for the demo, set `security` to `admin_totp=false` and `staff_email_code=false`. Call `Defaults::install()` through the Kernel. Publish policies plus sample sign-offs, letters, documents and notifications.
+5. **Tests:** extend `api_test.py` (TOTP, email code, policies, letters, documents, verify), then screenshots, then an independent audit agent, then fixes.
+
+*QR encoder:* delegated to a background helper. It writes `public_hr/assets/js/core/qr.js`, with tests in `scratchpad/qrtest`. The result was **unconfirmed** at the cut-off. Check that the file exists and that its decode tests (cv2 + pyzbar) pass before using it; otherwise redo it.
+
 **Local build (built 15 Oct, UNCOMMITTED, local only)**
 
 *What exists (all new files; nothing in the CRM changed):*
