@@ -18,7 +18,7 @@ On 15 Oct John asked to **see the HR module running on a local server first**, u
 
 | # | Item | State / next action |
 |---|---|---|
-| 1 | **HR portal: first slice BUILT LOCALLY (15 Oct), being shown to John** | Runs at `http://127.0.0.1:8471` (how to run: §2 "Local build"). 60/60 API checks pass; screenshots at 1366/1536/1920 + phone + tablet are clean. **All HR code is UNCOMMITTED on purpose** (John wants to see it before anything ships). **Never `git add -A` on dev**: `public_hr/` would become reachable under the CRM domain and the migration would run on production. Next: John's reaction, then the rest of Phase 1 (§2) |
+| 1 | **HR portal: Phase 1 BUILT LOCALLY (15–16 Oct)** | John saw the first slice and said "i likes,, proceed". Phase 1 is now built and checked locally (§2 "PHASE 1 COMPLETION"). Runs at `http://127.0.0.1:8471` (how to run: §2 "Local build"). **All HR code is UNCOMMITTED on purpose.** **Never `git add -A` on dev**: `public_hr/` would become reachable under the CRM domain and the migration would run on production. Next: independent audit, fixes, then the summary to John |
 | 2 | **Phase 0, step 1: John runs the read-only check on the server** | `git pull origin dev` then `php scripts/hr_phase0_checks.php`, and he pastes the output. **Not run yet.** The CRM attendance fixes (§4) depend on what it shows |
 | 3 | **Client message with deadlines for their CA** | Drafted in chat on 14 Oct. **Unknown whether sent.** It covers: Form 138 (old 24Q) for Q2 due **31 Oct**; incentives are salary TDS (s.392), not the 5% "194H" the old slip maker used; PF ceiling ₹25,000 from 17 Sep 2026, with the EPF enrolment campaign ending **31 Oct**; Punjab PSDT ₹200/month; night-shift permission for women in Mohali |
 | 4 | **John's steps after the checks, one at a time** | (a) Rotate the DB password (exposed July, still unrotated). (b) Create the staging subdomain (`STAGING.md`). (c) Connect `triotoursandtravels.in` to the hosting, create `hr.` and an `hr@` mailbox |
@@ -78,7 +78,21 @@ On 15 Oct John asked to **see the HR module running on a local server first**, u
 - Hanken Grotesk on token sizes 32/28/20/17/16/15/14/12. EB Garamond for brand moments only.
 - Full CSS lives in the concept file.
 
-**▶ PHASE 1 COMPLETION — IN PROGRESS (16 Oct). Server side DONE and tested; front end next.**
+**▶ PHASE 1 COMPLETION — 16 Oct, late: server AND front end BUILT and checked locally. Next: an independent audit agent, fix what it finds, then the plain summary to John.**
+
+*Status at this point (16 Oct, ~01:30 IST):*
+- Every Phase 1 screen is built: bell, Settings (8 tabs), account, policies (admin + staff), letters (admin list/new/check/issue/void + staff ask/read/acknowledge), print page, documents (record tab + staff), public verify, org chart, statutory fields, dark mode, Today/Home needs.
+- **Tests:** `api_test.py` 58/58 and `api_test2.py` 57/57 ALL PASSED after a fresh seed (run with `PYTHONIOENCODING=utf-8`). `shoot.cjs all 1366,1536,1920` and `shoot2.cjs 1366,1536,1920 all` are clean (no console errors, failed requests, sideways scroll or <12px text). Screens were also reviewed by eye.
+- **Letter print (`print.html`) is one A4 page** for the appointment letter (checked with `pdfcheck.cjs` + `pdfcheck.py` in `scratchpad/hrlocal`: page count, render, and the QR decodes from the PDF). Long letters flow onto a clean page 2.
+  - How: the letter body sits in a table whose `thead`/`tfoot` are blank spacer rows, so Chrome repeats the margins on every printed page. In print, the bands, watermark, arcs, stamp and footer line are `position: fixed`, so they repeat on every page.
+  - The verification box (QR + code) sits beside the signature. The printed address is the short `{host}/verify`, which redirects to `/#/verify` (`.htaccess` rule + local router).
+- **Fixed during the review:** form inputs misaligned (`.field { align-content: start }`); stacked Settings blocks touching (`#tab` is a `.stack`); law table "7 th" / "50 %" and the DPDP "not in force yet" row; dark-mode contrast (new tokens `--navy-ink` and `--gold-on-navy`); task rows on the admin phone squeezing text; staff Home icons off-centre; "aadhaar card" / "Show pan?" (new `Fmt::lower` / `Fmt::an` / `Fmt::lowerFirst` + JS `f.lower` / `f.lowerFirst`); CRM-bell audit rows now read "Posted to their CRM bell: …"; laptop/image/folder/org icons.
+- **Servers running now:** MySQL 3417 (PID 5892), mail sink 2526 (PID 10888), portal 8471 (PID 21604).
+
+*Gotchas from this stretch:*
+- **Class names `.sheet*` are taken by the confirm dialog** (opacity 0, fixed position). The letter uses `.ltr*`.
+- **Bash heredocs on this PC mangle backslashes** (`\\b` arrived as a backspace byte in a JS file). Write Python/JS helper scripts with the Write tool, then run them.
+- **Playwright `page.pdf()` after `emulateMedia({media: 'screen'})` prints SCREEN css.** Reset with `emulateMedia({ media: null })`.
 
 **Decision (John, 16 Oct): NO authenticator app in Trio HR** ("for godsake its an hr module"). All TOTP code, routes, columns and the backup-code table were removed. Sign-in is now:
 - email + password;
@@ -109,21 +123,7 @@ On 15 Oct John asked to **see the HR module running on a local server first**, u
 
 *Tests:* `scratchpad/hrlocal/api_test.py` (original 60 checks; expects 11 pending requests) and `api_test2.py` (settings, law, admins, health, audit, emailed code + remembered phone, policies, letters end to end + verify, documents + upload security). **Both ALL PASSED on 16 Oct.** Re-seed after each run.
 
-*Front end still to do, in order:*
-1. The bell (both shells).
-2. Settings tabs: company, centres, rules, law, admins, security, health, audit.
-3. `#/account`: password, devices, remembered devices.
-4. The emailed-code sign-in screen.
-5. Policies: admin list/edit/publish/remind and staff read/sign/withdraw.
-6. Letters:
-   - admin list/new/detail with the check/approve flow and catch-up;
-   - `print.html` + `print.js` with the v3 letterhead and verification QR (recipe: memory `design-deliverables-standard`);
-   - staff letters, acknowledge, and ask for a letter.
-7. Documents: a record tab and a staff screen with upload.
-8. Public `#/verify/CODE`.
-9. Org chart, statutory fields on the record, dark mode.
-10. Today needs and staff Home needs for policies to sign, letters to check or acknowledge, and consents withdrawn.
-11. Screenshots at 1366/1536/1920 + phone + tablet, then an independent audit agent, then fixes.
+*Front end:* all 11 items of the earlier to-do list are DONE (see the status block above). What remains: the independent audit agent → fixes → re-test → summary to John.
 
 **Local build (built 15 Oct, UNCOMMITTED, local only)**
 
