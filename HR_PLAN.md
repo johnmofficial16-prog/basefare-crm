@@ -107,12 +107,12 @@ Trio HR has its own accounts. **It never touches CRM logins or CRM sessions.** T
 - **Sessions:** a list of signed-in devices with "Sign out that device".
 
 **Admins and the owner**
-- **Authenticator-app code required.**
+- **Email and password only. No authenticator app** (John, 16 Oct: "for godsake its an hr module").
 - **30-minute idle timeout.**
-- **Re-check before sensitive actions:** the password or code is asked again before viewing or changing bank details, salaries or ID numbers.
+- **Re-check before sensitive actions:** the password is asked again before viewing or changing bank details, salaries or ID numbers.
 
 **Staff**
-- **One-time email code** on a new device; the phone is then remembered.
+- **Optional emailed code on a new phone.** It is off by default; the owner can switch it on in Settings. Once used, the phone is remembered.
 - Passkeys (Face ID / fingerprint) can come later.
 
 **Leavers** keep a read-only "alumni" sign-in for 12 months, to download payslips and Form 130. Their CRM access ends on their last working day.
