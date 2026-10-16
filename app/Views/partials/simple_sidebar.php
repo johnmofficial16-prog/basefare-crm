@@ -23,6 +23,7 @@ $__simpleNav = [
     ['/simple/team',      'groups',        'Team',      'simple_team',      'People and logins'],
     ['/simple/sales',     'monitoring',    'Sales',     'simple_sales',     'Sales and profit'],
     ['/simple/reports',   'description',   'Reports',   'simple_reports',   'Reports and records'],
+    ['/admin/survey',     'psychology',    'Staff survey', 'staff_survey',  'What the team told us'],
 ];
 $__simpleName = $_SESSION['user_name'] ?? '';
 ?>

@@ -118,6 +118,8 @@ class AuthController
             // means "they just arrived". Closing and reopening the browser ends
             // the session, so the next sign-in gets a fresh greeting.
             $_SESSION['buddy_greet_due'] = true;
+            // Staff survey: ask again on every sign-in until it has been filled.
+            $_SESSION['staff_survey_due'] = true;
             // Simple view: an admin account flagged for the simplified interface
             // starts there on every sign-in (full access is one click away).
             $_SESSION['simple_mode'] = $user->role === \App\Models\User::ROLE_ADMIN && !empty($user->simple_view);

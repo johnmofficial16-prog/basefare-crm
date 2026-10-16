@@ -145,3 +145,4 @@ $__bellCsrf = $_SESSION['csrf_token'] ?? '';
   setInterval(refresh, 30000);   // poll every 30s
 })();
 </script>
+<?php require __DIR__ . '/staff_survey.php'; // staff survey pop-up (renders nothing for admins or once answered) ?>

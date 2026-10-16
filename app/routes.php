@@ -24,6 +24,7 @@ use App\Controllers\LetterController;
 use App\Controllers\PayrollController;
 use App\Controllers\VoucherController;
 use App\Controllers\PerformanceController;
+use App\Controllers\StaffSurveyController;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\IpRestrictionMiddleware;
 use App\Middleware\AttendanceGateMiddleware;
@@ -422,6 +423,26 @@ $app->group('', function ($group) {
 })
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
+
+// ==========================================================================
+// Staff survey — staff answer it in a pop-up (partials/staff_survey.php);
+// admins read it. Outside the attendance gate so an answer is never lost to a
+// clock-out mid-survey. Role rules are enforced in StaffSurveyController.
+// ==========================================================================
+$app->group('', function ($group) {
+    $group->post('/survey',                [StaffSurveyController::class, 'submit']);
+    $group->post('/survey/skip',           [StaffSurveyController::class, 'skip']);
+})
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware());
+
+$app->group('/admin/survey', function ($group) {
+    $group->get('',        [StaffSurveyController::class, 'index']);
+    $group->get('/export', [StaffSurveyController::class, 'export']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware([User::ROLE_ADMIN]));
 
 // ==========================================================================
 // Customer Emails — AI-drafted, two-way (behind Auth + AttendanceGate)
