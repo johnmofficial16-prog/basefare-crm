@@ -62,7 +62,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 /* Preview-only wrapper: the paper itself. */
 .loi-sheet{position:relative;width:210mm;min-height:297mm;padding:16mm 18mm 14mm;background:#fff;box-sizing:border-box;transform-origin:top left}
 
-/* Preview-only page-break guides. Never captured — makeCapture() and
+/* Preview-only page-break guides. Never captured — makeFrame() and
    printLetter() clone .loi-content, which does not contain these. */
 .pg-guides{position:absolute;inset:0;pointer-events:none}
 .pg-line{position:absolute;left:0;right:0;border-top:1px dashed #b9c4d4}
@@ -754,21 +754,34 @@ function waitForFonts(){
   return new Promise(r => setTimeout(r, 500));
 }
 
-/* Off-screen clone at natural size. The live preview is CSS-scaled, and
-   html2canvas cannot see through a transform — cloning is what makes the PDF
-   identical regardless of window width. */
-function makeCapture(){
-  document.getElementById('__loiCapture')?.remove();
-  const holder = document.createElement('div');
-  holder.id = '__loiCapture';
-  holder.style.cssText =
-    `position:fixed;left:-10000px;top:0;width:${CONTENT_MM}mm;background:#fff;padding:0;margin:0`;
-  const clone = document.querySelector('#loi-sheet .loi-content').cloneNode(true);
-  clone.style.width = '100%';
-  clone.style.boxShadow = 'none';
-  holder.appendChild(clone);
-  document.body.appendChild(holder);
-  return { holder, clone };
+/* The PDF is drawn inside its own off-screen page (an iframe), at the letter's
+   natural 174mm width, never from the live page. html2canvas measures positions
+   against the window it runs in, so when the CRM page was zoomed in (touchpad
+   pinch, touchscreen) the letter came out shifted right and cut off (16 Oct).
+   The iframe is never zoomed or scrolled, so the PDF is the same on every
+   screen. The live preview is CSS-scaled too, which html2canvas can't see
+   through either — another reason to render a separate copy. */
+function makeFrame(){
+  document.getElementById('__pdfFrame')?.remove();
+  const content   = document.querySelector('#loi-sheet .loi-content');
+  const styles    = [...document.querySelectorAll('style')].map(s => s.outerHTML).join('');
+  const fontLinks = [...document.querySelectorAll('link[rel="stylesheet"]')].map(l => l.outerHTML).join('');
+  const f = document.createElement('iframe');
+  f.id = '__pdfFrame';
+  f.setAttribute('aria-hidden', 'true');
+  f.tabIndex = -1;
+  f.style.cssText = `position:fixed;left:-10000px;top:0;width:${CONTENT_MM}mm;height:297mm;border:0`;
+  document.body.appendChild(f);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('The PDF page did not load.')), 20000);
+    f.onload = () => { clearTimeout(timer); resolve(f); };
+    const doc = f.contentWindow.document;
+    doc.open();
+    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8">${fontLinks}${styles}`
+      + `<style>html,body{margin:0;padding:0;background:#fff}.loi-content{width:100%;box-shadow:none}</style></head>`
+      + `<body>${content.outerHTML}<script src="/assets/js/html2pdf.bundle.min.js"><\/script></body></html>`);
+    doc.close();
+  });
 }
 
 function fileName(){
@@ -780,25 +793,36 @@ function fileName(){
 async function downloadPDF(){
   const btn = document.getElementById('dlBtn'), lbl = document.getElementById('dlLabel');
   btn.disabled = true; lbl.textContent = 'Preparing…';
-  let cap = null;
+  let frame = null;
   try{
     await waitForFonts();
-    cap = makeCapture();
-    await html2pdf().set({
+    frame = await makeFrame();
+    const w = frame.contentWindow;
+    // The frame loads its own fonts: wait for them too (a fallback font would shift the layout).
+    await Promise.race([w.document.fonts ? w.document.fonts.ready : Promise.resolve(), new Promise(r => setTimeout(r, 2500))]);
+    const opts = {
       margin:      [PAGE.top, PAGE.right, PAGE.bottom, PAGE.left],   // mm, applied to EVERY page
-      filename:    fileName(),
       image:       { type:'jpeg', quality:0.98 },
       html2canvas: { scale:3, useCORS:true, backgroundColor:'#ffffff', logging:false },
       jsPDF:       { unit:'mm', format:'a4', orientation:'portrait', compress:true },
       // Keep small units whole; let the table and the conditions list split
       // between rows/items rather than jumping to the next page as a lump.
       pagebreak:   { mode:['css','legacy'], avoid:['.blk','tr','li','.acc','.sig-block'] },
-    }).from(cap.clone).save();
+    };
+    // Rebuilt inside the frame: html2pdf there doesn't recognise this page's arrays as arrays.
+    const blob = await w.html2pdf().set(w.JSON.parse(JSON.stringify(opts)))
+      .from(w.document.querySelector('.loi-content')).outputPdf('blob');
+    // Saved from this page, so the download behaves like any other.
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName();
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
   }catch(e){
     console.error(e);
     alert('Could not generate the PDF. Use Print → Save as PDF as a fallback.');
   }finally{
-    cap?.holder.remove();
+    frame?.remove();
     btn.disabled = false; lbl.textContent = 'Download PDF';
   }
 }
