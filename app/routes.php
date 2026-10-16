@@ -432,6 +432,8 @@ $app->group('', function ($group) {
 $app->group('', function ($group) {
     $group->post('/survey',                [StaffSurveyController::class, 'submit']);
     $group->post('/survey/skip',           [StaffSurveyController::class, 'skip']);
+    $group->post('/survey/more',           [StaffSurveyController::class, 'more']);
+    $group->post('/survey/more/skip',      [StaffSurveyController::class, 'moreSkip']);
 })
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
@@ -439,6 +441,7 @@ $app->group('', function ($group) {
 $app->group('/admin/survey', function ($group) {
     $group->get('',        [StaffSurveyController::class, 'index']);
     $group->get('/export', [StaffSurveyController::class, 'export']);
+    $group->get('/person/{id:[0-9]+}', [StaffSurveyController::class, 'person']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
