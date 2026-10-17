@@ -25,6 +25,7 @@ $__simpleNav = [
     ['/simple/reports',   'description',   'Reports',   'simple_reports',   'Reports and records'],
     ['/admin/survey',     'psychology',    'Staff survey', 'staff_survey',  'What the team told us'],
 ];
+if (\App\Services\HrLink::enabled()) { $__simpleNav[] = ['/hr', 'badge', 'Trio HR', 'trio_hr', 'Staff, letters and HR messages (opens in a new tab)']; }
 $__simpleName = $_SESSION['user_name'] ?? '';
 ?>
 <meta name="simple-csrf" content="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
@@ -41,7 +42,7 @@ $__simpleName = $_SESSION['user_name'] ?? '';
 
   <nav class="flex-1 px-3 space-y-1 overflow-y-auto" aria-label="Main">
     <?php foreach ($__simpleNav as [$__sHref, $__sIcon, $__sLabel, $__sKey, $__sHint]): $__sOn = $activePage === $__sKey; ?>
-    <a href="<?= $__sHref ?>" title="<?= htmlspecialchars($__sHint) ?>"
+    <a href="<?= $__sHref ?>" title="<?= htmlspecialchars($__sHint) ?>"<?= $__sKey === 'trio_hr' ? ' target="_blank" rel="noopener"' : '' ?>
        class="flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-semibold transition-colors no-underline
               <?= $__sOn ? 'bg-[#163274] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' ?>"
        <?= $__sOn ? 'aria-current="page"' : '' ?>>

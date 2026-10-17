@@ -25,6 +25,7 @@ $navItems = [
     ['href' => '/admin/fare-terms',         'icon' => 'gavel',          'label' => 'Fare Terms',    'key' => 'fare_terms'],
     ['href' => '/users',                    'icon' => 'manage_accounts', 'label' => 'My Team',       'key' => 'users'],
 ];
+if ($__hr = \App\Services\HrLink::navItem()) { $navItems[] = $__hr; } // Trio HR (only when the link is switched on)
 ?>
 <aside class="fixed left-0 top-0 h-full w-60 bg-white border-r border-gray-100 flex flex-col z-30 shadow-sm">
   <!-- Logo -->
@@ -40,7 +41,7 @@ $navItems = [
   <!-- Navigation -->
   <nav class="flex-1 py-4 overflow-y-auto">
     <?php foreach ($navItems as $item): ?>
-    <a href="<?= $item['href'] ?>"
+    <a href="<?= $item['href'] ?>"<?= !empty($item['new_tab']) ? ' target="_blank" rel="noopener"' : '' ?>
        class="flex items-center gap-3 px-5 py-3 text-sm font-semibold transition-all
        <?= $activePage === $item['key']
            ? 'bg-primary/10 text-primary border-r-4 border-primary'

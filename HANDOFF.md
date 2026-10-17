@@ -18,6 +18,8 @@ On 15 Oct John asked to **see the HR module running on a local server first**, u
 
 | # | Item | State / next action |
 |---|---|---|
+| 0a | **HR portal: Phase 2 (Time) BUILT LOCALLY (16 Oct night)** | Punch in/out on the Trio HR button (office network only, the CRM's own `ip_whitelist`; empty list = no punching), agents' punch = CRM clock-in, days and gross hours from punches, missed punch-outs (Trio Mail note with a "Tell HR when you left" button, CRM last-activity hint, never guessed), "No punch" facts, holidays (leave skips them), opening balances, month close (decide no-punch days, one-click weekly offs up to the allowance, set punch-outs) and the lock with a payroll snapshot. Roster/late code removed from HR. See §2c. **UNCOMMITTED.** Next: John reviews at 127.0.0.1:8471 |
+| 0 | **HR portal: Phase 1b BUILT LOCALLY (16–17 Oct)** | John's round-2 brief ("remove a human HR"): Trio Mail, CRM connection, punch in/out (Phase 2), and his decisions. All of it is in `HR_PLAN.md` §14. Built and tested locally; see §2b below. **Still UNCOMMITTED, like all HR code.** The CRM-side files changed are inert without `HR_APP_URL` + `HR_HANDOFF_KEY`. Security review done and fixed. Next: John reviews it at 127.0.0.1:8471 |
 | 1 | **HR portal: Phase 1 BUILT LOCALLY (15–16 Oct)** | John saw the first slice and said "i likes,, proceed". Phase 1 is now built and checked locally (§2 "PHASE 1 COMPLETION"). Runs at `http://127.0.0.1:8471` (how to run: §2 "Local build"). **All HR code is UNCOMMITTED on purpose.** **Never `git add -A` on dev**: `public_hr/` would become reachable under the CRM domain and the migration would run on production. Next: independent audit, fixes, then the summary to John |
 | 2 | **Phase 0, step 1: John runs the read-only check on the server** | `git pull origin dev` then `php scripts/hr_phase0_checks.php`, and he pastes the output. **Not run yet.** The CRM attendance fixes (§4) depend on what it shows |
 | 3 | **Client message with deadlines for their CA** | Drafted in chat on 14 Oct. **Unknown whether sent.** It covers: Form 138 (old 24Q) for Q2 due **31 Oct**; incentives are salary TDS (s.392), not the 5% "194H" the old slip maker used; PF ceiling ₹25,000 from 17 Sep 2026, with the EPF enrolment campaign ending **31 Oct**; Punjab PSDT ₹200/month; night-shift permission for women in Mohali |
@@ -39,6 +41,73 @@ On 15 Oct John asked to **see the HR module running on a local server first**, u
 ---
 
 ## 2. HR portal — everything needed to continue
+
+### 2c. Phase 2 — Time (16 Oct night, built locally, uncommitted)
+
+**Rule (John, 16 Oct): punch in and punch out only, no assumptions.** No late, no absent, no shift times. A day with no punch is a fact; an admin decides it at month end.
+
+- **Migration** `database/migrations/2026_10_18_hr_time.sql`: `hr_employees.punch_via` (NULL = from CRM role), `hr_punches`, `hr_holidays`, `hr_day_marks` (day_off / unpaid / worked), `hr_attendance_months` (lock + JSON snapshot), `hr_nudges`, and `hr_threads.action_ref`.
+- **`app/Hr/Domain/Attendance.php`** is the engine: `people()`, `grid()` (per person per day: worked / in / missing_out / leave / holiday / no_punch / today / upcoming), `summarize()` (paid days = days − unpaid), `issues()`, register, close view, `mark()`, `markWeeklyOffs()`, `setOut()`, lock/unlock, holidays, the punch (`punchCard`, `punch`), `myMonth`, `fixable`, `nudge()` (Trio Mail note, once per missed punch-out, throttled 10 min, runs from /nav and /me), `alerts()` (no-punch streaks for Today).
+- **Day rule:** a punch belongs to the day it was punched in on, with `Clock::sessionNight` (06:00 cutoff), same as CRM sessions. An open punch older than 16 h is "punch-out missing".
+- **Who punches where:** CRM floor roles (agent, CSA, team leader, manager) = CRM clock-in; everyone else = Trio HR button. Admin can override per person (person → Attendance tab).
+- **Office network:** `CrmGateway::officeNetwork()` copies `IpRestrictionMiddleware` matching (exact, `x.y.z.*` prefix, DDNS host). Uses `Ctx::clientIp()` (TRUSTED_PROXIES). **If the HR domain sits behind a different proxy than the CRM, punches will be refused (fails closed). Test from each centre before launch.**
+- **Leave:** `Leave::apply` drops company holidays from a request; locked months refuse leave, fixes, marks and holidays (`Attendance::assertOpen`).
+- **Reworked from Phase 1:** Floor has no roster/late (adds HR punchers); Today drops late feed and adds missing punch-outs, no-punch streaks, "last month not closed"; leave coverage = CRM-floor headcount minus approved leave; fix approvals show CRM last activity; staff home has the punch card; settings add `days_off_per_month` (4) and `no_punch_alert_days` (3).
+- **Admin screens:** `#/attendance` (register grid, phone list), `#/attendance/close`, `#/attendance/holidays`, `#/attendance/balances`. Staff: punch card on Home, `#/me/attendance`, `#/me/fix/{p12|s345}`.
+- **Tests (scratchpad hrlocal):** `runall.sh` = api_test 58, api_test2 57, api_test3 50, api_test4 58, api_test4_crm 35, **api_test5_time 84**, all green. `shoot4.cjs` (Phase 2 screens) clean at 768/1024/1280/1366/1536/1920 + 390 phone, light and dark; shoot/shoot2/shoot3/uxcheck clean.
+- **Seed:** Sunita Bhatia (accounts, no CRM) punches on Trio HR; last month is whole (older nights added), Team Vikram's weekly offs pre-decided, Abhishek has a 3-day no-punch streak, holidays incl. Dussehra 20 Oct and Diwali 8 Nov.
+
+### 2b. Phase 1b — Trio Mail and the CRM connection (16–17 Oct, built locally)
+
+**John's decisions (16 Oct). Do not re-propose these:**
+- **No shift timings in HR.** Only punch in and punch out matter. No lateness, no no-show checks, no shift-based half days, no roster authoring.
+- **No assumptions.** A day with no punch is shown as a fact, never auto-"absent". No automatic absconding notices or pay holds.
+- **No:** holidays-worked automation, ID cards, probation (removed from Phase 1 too), photo at punch.
+- **Punch:** office network only, with no "request from home". The CRM clock-in counts as an agent's punch.
+- **Yes:** the Ask HR AI assistant (answers only), "Seen by HR", Trio Mail.
+- **Hosting:** same Hostinger account and same repo, on `hr.triotoursandtravels.in` (fallback `hr.base-fare.com`).
+
+**What was built (uncommitted)**
+- **Migration** `database/migrations/2026_10_17_hr_mail.sql`: threads, messages, mail files, announcements and their reads, and used hand-off ids.
+- **HR code:**
+  - `app/Hr/Domain/Mail.php`: staff and admin inbox, smart topics that file leave, fix or letter requests, decisions posted into the thread, private complaints, notes for admins, quick replies, AI "Suggest a reply" (`GeminiService::complete`), 24h amber / 48h escalation to the owner, attachments encrypted like documents.
+  - `Announcements.php`: everyone, or chosen centres, with read receipts.
+  - `Auth/Handoff.php`: one-click sign-in from the CRM, staff only.
+  - `People::crmCandidates()` / `bringIn()` ("Bring in from the CRM").
+  - `CrmGateway::sales()` (approved bookings, Net MCO).
+  - `Me::fileLeave()` / `fileFix()` / `fileLetter()` refactor.
+- **CRM-side code:**
+  - `app/Services/HrLink.php`, `app/Controllers/HrLinkController.php`, route `GET /hr` (plus `?to=/me/…`).
+  - A "Trio HR" entry in all 5 sidebars, shown only when `HR_APP_URL` and `HR_HANDOFF_KEY` are set.
+  - `CrmBridge` bell links go through `/hr?to=` when on.
+  - **These are tracked files.** Keep them out of commits until HR ships, or ship them: they are inert without the settings (tested).
+- **Screens:**
+  - Admin: `#/mail`, `#/mail/new`, `#/announcements`, `#/people/from-crm`. The person page gets "Sales from the CRM" and "Messages"; Today gets "N messages waiting for a reply".
+  - Staff: an Inbox tab (Pay moved under More), thread, announcement, compose. "Ask HR" on every request, and HR replies on Home.
+- **Removed (probation, per John):** the person-form field, the Today reminder, the confirmation and extension letters, and the appointment-letter clause. The appointment letter no longer says "as per the roster".
+
+**To go live later (with the rest of HR)**
+- Run the migration.
+- Add to `.env`: `HR_HANDOFF_KEY` (32+ random characters, the same value read by CRM and HR) and `HR_APP_URL=https://hr.triotoursandtravels.in`. Also `HR_CRM_URL=https://crm.base-fare.com`, so CRM bell notices open through `/hr`.
+
+**Tests (scratchpad `hrlocal/`):**
+- `runall.sh` runs every API suite, each on a fresh seed: api_test 58, api_test2 57, api_test3 49, **api_test4 52 (mail)**, **api_test4_crm 25 (bring-in, sales, hand-off, bell links)**. All green 17 Oct.
+- `uxcheck.cjs`, `shoot.cjs`, `shoot2.cjs` and **`shoot3.cjs`** (new screens, light and dark, 1366/1536/1920 plus 390/768) are clean.
+- **`crm_hr_link.cjs on|off`** (CRM sidebar → HR signed in; `?to=`; admins go to sign-in; off = no link) passes.
+- `crm_sweep.cjs` (CRM pages for every role) passes with the link on and off.
+- The local hand-off key is in the git-ignored `hr_env.sh`. The CRM server must be started with `HR_APP_URL` + `HR_HANDOFF_KEY` for the "on" test.
+
+**Security review (17 Oct): 2 medium and 4 low, all fixed and tested.**
+- Private subjects are masked.
+- CRM sign-ins (`hr_sessions.via=crm`) need a password sign-in for bank changes and ID documents, and get the new-device email.
+- Accounts are auto-created only on the work email.
+- No silent swap of who is signed in.
+- Bad links are throttled.
+- Staff replies are limited to 30/hour and uploads to 100 MB/day.
+- No AI drafting on private threads.
+- **Foundation migration edits (uncommitted, never run on prod):** `hr_sessions.via`, and `hr_login_attempts.kind` gains `handoff`.
+
+**Still roster/shift-based from Phase 1 (rework in Phase 2, per "no shift timings"):** "Tonight on the floor" counts, the leave coverage check, the late marks and shift times on the person page and the staff Home.
 
 **Decisions (John, 12–15 Oct)**
 - **Separate portal:** own URL and own login.

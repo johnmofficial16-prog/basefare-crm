@@ -162,6 +162,28 @@ class GeminiService
         return ['success' => true, 'reply' => trim($result['text'])];
     }
 
+    /**
+     * A JSON-mode completion with the email model (falling back like
+     * draftEmail does). For callers that build their own prompt, e.g. Trio HR's
+     * reply drafts. Fail-soft like every public method here.
+     *
+     * @return array {success:bool, text?:string, model?:string, error?:string}
+     */
+    public function complete(string $system, string $user, int $maxTokens = 1200): array
+    {
+        if (!$this->isConfigured()) {
+            return ['success' => false, 'error' => 'AI is not configured (missing VERTEX_API_KEY).'];
+        }
+        $result = ['success' => false, 'error' => 'No model answered.'];
+        foreach (array_unique([$this->emailModel, $this->model, self::DEFAULT_MODEL]) as $model) {
+            $result = $this->generate($system, $user, true, max($maxTokens, self::EMAIL_MAX_TOKENS), $model);
+            if ($result['success'] || empty($result['model_unavailable'])) {
+                break;
+            }
+        }
+        return $result;
+    }
+
     // =========================================================================
     // PUBLIC — CONSOLIDATED PERFORMANCE ANALYSIS (admin analytics)
     // =========================================================================

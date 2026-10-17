@@ -1,0 +1,51 @@
+# Trio HR web root (hr.triotoursandtravels.in points here).
+# Static app shell + one PHP entry point for the JSON API.
+
+Options -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # This folder also sits inside the CRM's web root (crm.../public_hr/).
+  # Serve it only on the HR address (hr.triotoursandtravels.in or hr.base-fare.com).
+  RewriteCond %{HTTP_HOST} !^hr\. [NC]
+  RewriteRule ^ - [R=404,L]
+  # Force HTTPS (Hostinger terminates TLS at a proxy and sets X-Forwarded-Proto)
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteCond %{HTTPS} !=on
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+  # The short address printed on letters opens the "check a letter" screen
+  RewriteRule ^verify/?$ /#/verify [R=302,NE,L]
+  # Every API call goes to the one entry point
+  RewriteRule ^api(/.*)?$ api/index.php [L,QSA]
+</IfModule>
+
+# Nothing but the app shell, assets and the API entry point is served.
+<FilesMatch "\.(php|phtml|sql|md|env|log|ini|lock|json)$">
+  Require all denied
+</FilesMatch>
+<Files "index.php">
+  Require all granted
+</Files>
+<Files "manifest.webmanifest">
+  Require all granted
+</Files>
+
+<IfModule mod_headers.c>
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "same-origin"
+  Header always set X-Frame-Options "DENY"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+  Header always set Strict-Transport-Security "max-age=31536000"
+  # Always revalidate the app shell and its modules (cheap 304s), so a deploy
+  # is picked up at once. Module URLs carry no version: one URL per module.
+  <FilesMatch "\.(html|js|css|webmanifest)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+  AddType text/javascript .js
+</IfModule>

@@ -36,6 +36,7 @@ $navItems = [
     ['href' => '/admin/activity-log',      'icon' => 'history_edu',    'label' => 'Activity Log',     'key' => 'activity_log',  'roles' => ['admin', 'manager']],
     ['href' => '/admin/error-console',     'icon' => 'bug_report',     'label' => 'Error Console',    'key' => 'error_console', 'roles' => ['admin', 'manager']],
 ];
+if ($__hr = \App\Services\HrLink::navItem()) { $navItems[] = $__hr + ['roles' => ['admin', 'manager', 'supervisor']]; } // Trio HR (only when the link is switched on)
 ?>
 <aside class="fixed left-0 top-0 h-full w-60 bg-white border-r border-gray-100 flex flex-col z-30 shadow-sm">
   <!-- Logo -->
@@ -53,7 +54,7 @@ $navItems = [
     <?php foreach ($navItems as $item): ?>
     <?php if (!in_array($actorRole, $item['roles'])) continue; ?>
     <?php $isDisabled = !empty($item['disabled']); ?>
-    <a href="<?= $item['href'] ?>"
+    <a href="<?= $item['href'] ?>"<?= !empty($item['new_tab']) ? ' target="_blank" rel="noopener"' : '' ?>
        class="flex items-center gap-3 px-5 py-3 text-sm font-semibold transition-all
        <?= $activePage === $item['key']
            ? 'bg-primary/10 text-primary border-r-4 border-primary'

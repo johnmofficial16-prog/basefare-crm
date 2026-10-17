@@ -871,3 +871,149 @@ The visual concept is in **`docs/hr/trio-hr-concept.html`**. Open it in a browse
 - Every text colour passes WCAG AA.
 - Focus rings and field borders pass 3:1.
 - Light theme by default; dark mode follows the phone's setting.
+
+---
+
+## 14. Round 2 (16 Oct): no human HR
+
+John's brief: *"we are completely trying to remove a human HR from the purview. HR module will do everything, ie a bridge between the admin/owner and the employees."* He asked for four things:
+1. the portal connected to the CRM;
+2. an internal messaging system that looks like email;
+3. a punch in / punch out button feeding HR directly;
+4. a hosting recommendation.
+
+He also asked what else is missing. This section answers all of it and changes the phases (§14.7).
+
+**The test for every feature:** *what would a human HR person do here?* The portal does it, or prepares it so the owner only says yes or no. Staff never need to find a person to ask.
+
+### 14.1 Connected to the CRM
+
+**Already built in Phase 1 (read-only, live):**
+- CRM logins, linked to each HR person;
+- rosters;
+- clock-ins and breaks, giving the live floor;
+- late-login blocks and approvals;
+- attendance exceptions.
+
+Plus one write: a notice in the employee's CRM bell.
+
+**Added now**
+
+| What | How it works |
+|---|---|
+| **Bring in staff from the CRM** | One screen lists every active CRM login without an HR record. "Bring in" creates the record prefilled from the CRM (name, email, role, team leader, centre, CRM start date) and invites the person to complete the rest on their phone. This is a link to live data, not an import of old spreadsheets, so "fresh start" still holds |
+| **Stay in step** | Nightly check: CRM logins switched off or renamed outside HR, and HR leavers still active in the CRM. Each becomes one "Needs you" line. The CRM's user screens send people to HR once HR is master (§6.1) |
+| **Sales and performance in HR** | Per person per month: bookings, Net MCO (with refund losses, as Performance counts it), call logs and chargebacks. These feed incentives, scorecards, probation reviews and the "At work" panel that the staff survey already uses |
+| **One click from the CRM into HR (no second password for staff)** | An "HR" button in the CRM opens Trio HR already signed in. The CRM signs a one-time, 60-second link for the signed-in user; HR checks it and starts its **own** session. The CRM session is never touched, so nobody gets clocked out. **Admins still type their HR password**, because pay and ID data sit behind it. Staff can also sign in to HR directly on their phones |
+| **CRM bell ↔ HR** | Every HR message or decision also rings the CRM bell, so agents see it mid-shift without opening HR |
+| **Staff survey moves to HR** | The survey and its insights are people data. They become an HR module (pulse surveys, eNPS each quarter), still popping up inside the CRM |
+
+### 14.2 Trio Mail: internal messaging that looks like email
+
+One inbox where staff write to HR and admins reply, laid out like Gmail: folders, threads, unread in bold, attachments, search. It replaces the planned help desk and announcements (§3.13) with one familiar tool.
+
+**For staff (phone or PC, inside HR or from the CRM's HR button)**
+- **Compose → To: HR**, pick a topic (Leave, Attendance, Pay, Documents, Shift, Complaint, Other), then write freely in any language, with attachments (photo of a medical note, a PDF).
+- **Smart topics turn into proper requests.**
+  - Leave: two date boxes and a type appear under the message. Sending it creates the leave request and the email together.
+  - Attendance fix: pick the night and the real clock-out time.
+  - Same for shift swaps and letter requests.
+- **The thread shows the request's live status**: "Approved by Rajan, 10:42 pm". They reply in the same thread.
+- Folders: **Inbox · Sent · Requests · Announcements · Payslips & letters**.
+
+**For admins**
+- **One inbox for every conversation**, with filters: Waiting on me · Waiting on staff · Done. Each thread shows the person, their centre, and the **request card with Approve / Send back right inside the thread**. Approving writes the reply for you ("Your leave for 12–13 Nov is approved. Balance left: 4 days"), and you can edit it before it goes.
+- **Reply templates** for common answers, plus **AI-drafted replies** that use the person's real balance, attendance and policy text. Admins edit and send; nothing goes out by itself.
+- **Time limits:** a message unanswered for 24 hours turns amber, at 48 hours it escalates to the owner, and the staff member sees "HR usually replies within a day".
+- **Send to many:** one person, a team, a centre, a shift or everyone. It doubles as **announcements**, with read receipts, pinning and an expiry.
+- **Private threads:** complaints (POSH and grievance) are visible only to the people allowed to see them, and every open is logged.
+
+**How it is built**
+- Inside the portal, stored in the database: **not real email**. That means nothing to spam filters or the hosting's mail limits, and every message is tied to the person's record.
+- A real email or CRM-bell nudge ("You have a reply from HR") goes out through the outbox, which respects quiet hours.
+- Attachments use the existing encrypted document store. Messages are kept as HR records (8-year retention, legal hold).
+
+### 14.3 Punch in / punch out, and attendance built for payroll
+
+**John's rule (16 Oct): no shift timings, no assumptions.** Agents log in at different times. All that counts is **when someone punched in and when they punched out**. Nothing is inferred from an expected start time: there is no "late", no "no-show at start + 30 minutes", no half day worked out against a shift, and no holiday-worked automation. HR records facts, and admins decide what they mean for pay.
+
+**The punch**
+- A large **Punch in / Punch out** button on the HR staff home, with a live "punched in 3 h 12 m" timer. Every punch lands in HR instantly.
+- **Office network only, no exceptions.** HR uses the same office IP list as the CRM (the CRM is already IP-restricted). From anywhere else the button doesn't work: there is no "request a punch" from home.
+- **No photo.**
+- **Agents don't punch twice:** the CRM clock-in counts as the punch in, and the CRM clock-out as the punch out. The button is for everyone else (managers, supervisors, non-sales staff).
+- **Which day a punch belongs to:** the work day it was punched **in** on, using the CRM's business-day setting, so a punch at 1 am still belongs to the evening it started. This is a filing rule for counting days, not a shift time.
+- **Breaks:** CRM breaks are shown as recorded.
+
+**What makes the admin's payroll work easier** (facts only; admins see the exceptions)
+
+| Situation | What HR does |
+|---|---|
+| Forgotten punch-out | When a punch is still open as the next work day begins, the person gets a Trio Mail: "You didn't punch out on 14 Oct. When did you leave?" Their answer becomes a fix request that shows the CRM's last activity time, so the admin approves in one tap. Until it's fixed, that day shows "Punch-out missing" and is never guessed |
+| A day with no punch | Shown as **"No punch"**, a fact. If approved leave covers it, it shows as leave instead. Nothing is called "absent" automatically; the admin decides at month end |
+| Several days with no punch | A plain line on Today: "Aman: no punch for 3 work days, no leave asked". The admin can message them from there in one click. No automatic notices, no automatic pay hold |
+| Hours worked | Each day shows hours between punch in and punch out (breaks listed separately). Totals per month. Whether short hours affect pay is the admin's rule in Settings, off by default |
+| Leave vs attendance | Approved leave fills the day automatically. Leave asked for after the fact is matched to the "No punch" day |
+| End of month | **Payroll readiness page:** "29 of 31 people ready. 2 to sort: Aman (1 punch-out missing), Simran (leave not decided)." The admin locks attendance, and days worked plus paid leave flow into payroll. Nobody counts days in a sheet |
+| Payroll itself | Pay from the days worked and paid leave, approved incentives from the CRM's Net MCO, advances recovered and TDS, all prepared automatically. The admin reviews **only the lines that changed** against last month, then the owner approves (§3.8) |
+| Paying | Bank bulk-transfer file, then payslips published and sent to each person in Trio Mail, with "Why?" on every line |
+
+### 14.4 What else a human HR person does, and where the portal does it now
+
+Already in this plan (§3–5): joining, letters, leave, payroll, TDS, incentives, exits and settlements, compliance calendar, policies, POSH, reports. **New in round 2:**
+
+| Human HR job | In the portal |
+|---|---|
+| Answering "how many leaves do I have / why was my pay lower / what's the policy?" | **Ask HR (AI assistant), 24/7.** It answers from the person's own data and the policy library, in English or Hinglish, and quotes the policy. Anything it can't settle becomes a Trio Mail to the admin with the conversation attached. It never approves, changes or promises anything |
+| Chasing missing documents and signatures | Automatic reminders in Trio Mail (day 1, 3, 7), then the admin sees "still missing" |
+| Birthday and work-anniversary wishes | Automatic message and floor announcement (on/off per person, for privacy) |
+| Recognition | **Top performers each month, from CRM data** (Net MCO), announced after owner approval; certificates on letterhead. The staff survey showed "Recognition and awards" is a top ask |
+| Training | Assign training (GDS, sales scripts, POSH, card-data security) with short quizzes and completion tracking; yearly card-data training is a PCI requirement anyway |
+| Referrals for hiring | Staff refer friends through HR; the referral is tracked to joining and to the 90-day mark, with a payout if the client wants one |
+| Increments | Review prefilled with CRM results and days worked; the increment letter is drafted for approval |
+| Warnings | Drafted by the admin from a template (no automatic triggers); the 7-day reply runs in Trio Mail |
+| Exit interviews | Sent automatically on resignation; answers feed attrition reports |
+| Pulse surveys | The staff survey, moved into HR (§14.1), run quarterly |
+| Knowing what's going on | **Owner's morning digest** in Trio Mail and email (§5 E1), including unanswered messages and payroll readiness |
+
+### 14.5 Hosting: Trio domain or Base Fare?
+
+**Recommendation: same Hostinger account and same code repo as the CRM, on the Trio domain `hr.triotoursandtravels.in`.**
+
+- **"Internal connections" depend on where the code runs, not on the domain name.** HR and the CRM share the same server and the same database, so HR reads CRM data directly in milliseconds. Nothing travels over the internet and there's no API to expose. That is true whichever name is on the front.
+- **So the name is a branding and safety choice:**
+  - the Trio domain matches the employer on every letter and payslip;
+  - it gives `hr@triotoursandtravels.in` for HR mail;
+  - a different domain from the CRM keeps their sign-in cookies completely apart, which is safer.
+- **What John does on Hostinger (we'll go one step at a time):** add `triotoursandtravels.in` to the same hosting plan, create the `hr` subdomain, and point its folder at the CRM's `public_hr` folder. No second repo, no second deploy: `git pull` updates both.
+- **Fallback, if the plan won't take a second domain:** `hr.base-fare.com`. Same setup; only the name differs.
+- **A separate repo or separate hosting would make it worse:** two deploys, CRM data reached over the internet, and two copies of the business rules that drift apart.
+- **Watch item:** Hostinger's firewall has blocked CRM saves before (Mohali's IP is now allowlisted). We'll ask for the same allowlist on the HR domain and test from each centre before launch.
+
+### 14.6 Decided by John (16 Oct)
+
+| # | Question | Decision |
+|---|---|---|
+| D1 | Does the CRM clock-in count as the agent's punch? | **Yes.** Agents do one action; the button is for everyone else |
+| D2 | Punching from home or mobile data? | **No, never.** Office network only (the CRM is IP-restricted too); no "request a punch" fallback |
+| D3 | Ask HR (AI assistant)? | **Yes**, answers only, never actions |
+| D4 | "Seen by HR" on staff messages? | **Yes** |
+| D5 | Photo at punch? | **No** |
+
+**Removed from the plan by John:**
+- **Shift timings and everything built on them.** No shift start times, lateness, late marks, "no-show" checks, shift-based half days, or roster authoring in HR (§3.6). HR records punch in and punch out only. The CRM's own 24/7 roster and clock-in gate stay as they are.
+- **Holidays-worked automation** (double pay / comp-off).
+- **ID cards.**
+- **Probation:** probation dates, reviews, confirmation and extension letters, the 7/30/60/90-day check-ins (§3.4, §3.14, automations A4–A5).
+- **Automatic absconding notices and pay holds.** Days with no punch are shown as facts; the admin decides.
+
+### 14.7 Phases, revised
+
+| Phase | Contents |
+|---|---|
+| **0. Groundwork** (unchanged) | Server checks, DB password, Trio domain on the same hosting, CRM attendance fixes (§7) |
+| **1. Foundation** | **Built locally** (people, letters, policies, documents, approvals, settings, today) |
+| **1b. Connected + Trio Mail** (**built locally 17 Oct**) | Bring in staff from the CRM, CRM → HR one-click sign-in, CRM sales data in HR, **Trio Mail** with smart request topics and in-thread approvals, "Seen by HR", announcements, CRM bell nudges |
+| **2. Time** (**built locally 16 Oct**) | **Punch in/out** (office network only), days and hours from punches, missing punch-out fixes, "No punch" facts, leave and holidays, monthly lock with the payroll readiness page. Built as planned, plus one-click "weekly offs for everyone" (up to the monthly allowance in Settings) and admins setting a punch-out directly |
+| **3. Money** | Payroll, payslips, TDS, incentives from Net MCO, bank file, settlements |
+| **4. Lifecycle and insight** | Hiring, referrals, joining, training, recognition, increments, warnings, exit, POSH, pulse surveys, Ask HR assistant, digests, reports |

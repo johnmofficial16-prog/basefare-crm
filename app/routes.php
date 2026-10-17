@@ -25,6 +25,7 @@ use App\Controllers\PayrollController;
 use App\Controllers\VoucherController;
 use App\Controllers\PerformanceController;
 use App\Controllers\StaffSurveyController;
+use App\Controllers\HrLinkController;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\IpRestrictionMiddleware;
 use App\Middleware\AttendanceGateMiddleware;
@@ -437,6 +438,12 @@ $app->group('', function ($group) {
 })
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
+
+// Trio HR — "Trio HR" in the sidebar: staff arrive signed in (signed one-time
+// link), admins at the HR sign-in. No attendance gate: it works before clock-in.
+$app->get('/hr', [HrLinkController::class, 'open'])
+    ->add(new IpRestrictionMiddleware())
+    ->add(new AuthMiddleware());
 
 $app->group('/admin/survey', function ($group) {
     $group->get('',        [StaffSurveyController::class, 'index']);
