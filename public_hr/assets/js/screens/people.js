@@ -4,7 +4,7 @@ import { html, mount, $, $$, icon } from '../core/dom.js';
 import { api } from '../core/api.js';
 import { skeleton, errorView, confirmSheet, toast, busy } from '../core/ui.js';
 import * as f from '../core/fmt.js';
-import { go } from '../app.js';
+import { go, state } from '../app.js';
 
 const HR_PILL = {
   joined: ['p-ok', 'On Trio HR'], invited: ['p-gold', 'Invited'], not_invited: ['p-neutral', 'Not invited'], disabled: ['p-bad', 'Switched off'],
@@ -98,7 +98,7 @@ export async function render({ main, query, isCurrent }) {
         <p class="ph__s" id="pcount">${countLine(d)}</p></div>
       <div class="ph__a">
         ${d.crm_waiting ? html`<a class="btn" href="#/people/from-crm">${icon('link')}Bring in from the CRM (${d.crm_waiting})</a>` : ''}
-        ${counts.not_invited ? html`<button class="btn" type="button" id="inviteall">${icon('send')}Invite everyone not on Trio HR (${counts.not_invited})</button>` : ''}
+        ${counts.not_invited && state.emailOn ? html`<button class="btn" type="button" id="inviteall">${icon('send')}Invite everyone not on Trio HR (${counts.not_invited})</button>` : ''}
         <a class="btn btn--pri" href="#/people/new">${icon('plus')}Add a person</a>
       </div>
     </div>
@@ -189,7 +189,8 @@ export async function fromCrm({ main, isCurrent }) {
           <td class="hide-md">${p.team_leader ? p.team_leader.name : html`<span class="muted">Not in HR yet</span>`}</td>
         </tr>`)}</tbody></table></div>
       <div class="actbar">
-        <label class="check-row"><input type="checkbox" name="invite" checked> Also invite them to Trio HR by email</label>
+        ${state.emailOn ? html`<label class="check-row"><input type="checkbox" name="invite" checked> Also invite them to Trio HR by email</label>`
+          : html`<span class="meta">They open Trio HR from the CRM's Trio HR button. No invite needed.</span>`}
         <button class="btn btn--pri push" type="submit">${icon('check')}<span>Bring in</span></button>
       </div>
     </form>
@@ -224,7 +225,7 @@ export async function fromCrm({ main, isCurrent }) {
     }
     busy($('[type="submit"]', form), async () => {
       try {
-        const r = await api.post('/people/from-crm', { people: rows.map(({ i, ...x }) => x), invite: form.invite.checked });
+        const r = await api.post('/people/from-crm', { people: rows.map(({ i, ...x }) => x), invite: !!form.invite?.checked });
         toast(r.message);
         go('#/people', { replace: true });
       } catch (err) {

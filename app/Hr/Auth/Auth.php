@@ -149,6 +149,7 @@ final class Auth
             'has_password' => Kernel::hr()->table('hr_accounts')->where('id', $auth['account_id'])->whereNotNull('password_hash')->exists(),
             'local'        => Kernel::isLocal(),
             'crm_url'      => Kernel::env('HR_CRM_URL', 'https://crm.base-fare.com'),
+            'email_on'     => Outbox::enabled(),
         ];
     }
 
@@ -428,7 +429,29 @@ final class Auth
             'employee_id' => $employeeId, 'entity' => 'hr_accounts', 'entity_id' => $id,
             'summary' => Fmt::first($emp->full_name) . ($account ? "'s invite was sent again" : ' was invited to Trio HR'),
         ]);
-        return ['email' => $email, 'resent' => (bool) $account];
+        return ['email' => $email, 'resent' => (bool) $account, 'link' => Outbox::enabled() ? null : $link];
+    }
+
+    /**
+     * A one-time link an admin hands over in person or on WhatsApp (used when
+     * HR email is off). Someone still setting up gets their set-up link (7
+     * days); someone already signed up gets a new-password link (24 hours).
+     * Making a new link cancels the previous one.
+     */
+    public static function handoverLink(int $accountId, int $byAccount): array
+    {
+        $acc = Kernel::hr()->table('hr_accounts')->where('id', $accountId)->first();
+        if (!$acc || $acc->status === 'disabled') {
+            throw ApiError::conflict('That sign-in is switched off. Switch it back on first.');
+        }
+        $setup = $acc->status === 'invited';
+        $link = $setup
+            ? self::appUrl() . '/#/welcome/' . self::newToken($accountId, 'invite', 7 * 86400)
+            : self::appUrl() . '/#/reset/' . self::newToken($accountId, 'reset', 86400);
+        Audit::log('account.link', ['account_id' => $byAccount, 'entity' => 'hr_accounts', 'entity_id' => $accountId,
+            'summary' => 'A ' . ($setup ? 'set-up' : 'new-password') . ' link was made for ' . $acc->display_name]);
+        return ['link' => $link, 'setup' => $setup, 'name' => Fmt::first($acc->display_name),
+            'valid' => $setup ? '7 days' : '24 hours'];
     }
 
     /** Send (or resend) the set-up link for an invited account that has no staff record, e.g. a new admin. */
@@ -446,7 +469,8 @@ final class Auth
         return self::appUrl() . '/#/welcome/' . self::newToken($accountId, 'invite', 7 * 86400);
     }
 
-    public static function sendAccountInvite(int $accountId, int $byAccount): void
+    /** Returns the link itself when HR email is off (the owner hands it over), else null. */
+    public static function sendAccountInvite(int $accountId, int $byAccount): ?string
     {
         $acc = Kernel::hr()->table('hr_accounts')->where('id', $accountId)->first();
         if (!$acc || $acc->status !== 'invited') {
@@ -462,6 +486,7 @@ final class Auth
         Outbox::queue('invite:' . $accountId . ':' . substr(hash('sha256', $token), 0, 16), $acc->email, 'You have access to Trio HR',
             implode("\n\n", $lines) . "\n\n" . $link, Outbox::html('Welcome to Trio HR', $lines, ['Set up my account', $link]));
         Kernel::hr()->table('hr_accounts')->where('id', $accountId)->update(['invited_at' => Kernel::now()]);
+        return Outbox::enabled() ? null : $link;
     }
 
     /** Who an invite is for (shown on the welcome screen). */

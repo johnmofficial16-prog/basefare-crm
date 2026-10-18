@@ -513,7 +513,7 @@ final class People
         if ($errors) {
             throw ApiError::invalid('Please check the highlighted people.', $errors);
         }
-        $invite = (bool) $c->raw('invite');
+        $invite = (bool) $c->raw('invite') && \App\Hr\Support\Outbox::enabled(); // with email off, staff come in through the CRM's Trio HR button
         $made = [];
         $invited = 0;
         $admin = Fmt::first((string) ($c->auth['display_name'] ?? 'An admin'));

@@ -252,7 +252,7 @@ final class Api
         // Session
         $app->get('/session', function (Request $req, Response $res) {
             $auth = Auth::resolve($req);
-            return $auth ? self::json($res, Auth::describe($auth)) : self::json($res, ['signed_in' => false]);
+            return $auth ? self::json($res, Auth::describe($auth)) : self::json($res, ['signed_in' => false, 'email_on' => \App\Hr\Support\Outbox::enabled()]);
         });
         $app->post('/session', function (Request $req, Response $res) {
             $c = new Ctx($req, [], null);
@@ -312,6 +312,9 @@ final class Api
             return self::signedIn($res, Auth::acceptInvite((string) $c->str('token', 64, true), (string) $c->raw('password'), Ctx::clientIp(), Auth::clientUa($req)));
         })->add($open);
         $app->post('/password/forgot', self::h(function (Ctx $c) {
+            if (!\App\Hr\Support\Outbox::enabled()) {
+                return ['message' => "Trio HR doesn't send emails. If you use the CRM, open Trio HR with the CRM's Trio HR button. Otherwise ask HR for a new sign-in link.", 'email_off' => true];
+            }
             Auth::forgot((string) $c->email('email', true), Ctx::clientIp());
             \App\Hr\Support\Outbox::flushAfterResponse(2);
             return ['message' => "If that email has a Trio HR account, a reset link is on its way. It works for 1 hour."];
@@ -349,10 +352,28 @@ final class Api
         $app->patch('/people/{id}', self::h(fn(Ctx $c) => People::update($c, $c->id())))->add($admin);
         $app->post('/people/{id}/invite', self::h(function (Ctx $c) {
             $r = Auth::invite($c->id(), $c->accountId());
+            if ($r['link']) {
+                $name = Fmt::first((string) Kernel::hr()->table('hr_employees')->where('id', $c->id())->value('full_name'));
+                return ['message' => 'Here is ' . $name . "'s set-up link.", 'link' => ['link' => $r['link'], 'setup' => true, 'name' => $name, 'valid' => '7 days']];
+            }
             \App\Hr\Support\Outbox::flushAfterResponse(2);
             return $r + ['message' => ($r['resent'] ? 'Invite sent again to ' : 'Invite sent to ') . $r['email'] . '.'];
         }))->add($admin);
+        $app->post('/people/{id}/signin-link', self::h(function (Ctx $c) {
+            $acc = Kernel::hr()->table('hr_accounts')->where('employee_id', $c->id())->first(['id', 'role']);
+            if (!$acc) {
+                throw ApiError::conflict('They have no Trio HR sign-in yet. Use "Invite to Trio HR" first.');
+            }
+            if ($acc->role !== 'employee') {
+                throw ApiError::conflict('They have admin access. Only an owner can make their link, in Settings → Admins.');
+            }
+            $r = Auth::handoverLink((int) $acc->id, $c->accountId());
+            return ['message' => 'Here is ' . $r['name'] . "'s link.", 'link' => $r];
+        }))->add($admin);
         $app->post('/people/invite-all', self::h(function (Ctx $c) {
+            if (!\App\Hr\Support\Outbox::enabled()) {
+                throw ApiError::conflict("Email is switched off for Trio HR, so there is nothing to send. Staff with a CRM login open Trio HR from the CRM's Trio HR button. For anyone else, open their record and use \"Get a set-up link\".");
+            }
             $rows = Kernel::hr()->table('hr_employees as e')->leftJoin('hr_accounts as a', 'a.employee_id', '=', 'e.id')
                 ->whereIn('e.status', ['joining', 'active', 'notice'])->whereNull('a.id')->orderBy('e.full_name')
                 ->get(['e.id', 'e.full_name', 'e.work_email', 'e.personal_email']);
@@ -481,9 +502,23 @@ final class Api
         $app->post('/admins', self::h(fn(Ctx $c) => Setup::addAdmin($c)))->add($owner);
         $app->patch('/admins/{id}', self::h(fn(Ctx $c) => Setup::updateAdmin($c, $c->id())))->add($owner);
         $app->post('/admins/{id}/invite', self::h(function (Ctx $c) {
-            Auth::sendAccountInvite($c->id(), $c->accountId());
+            $link = Auth::sendAccountInvite($c->id(), $c->accountId());
+            if ($link) {
+                $r = Auth::handoverLink($c->id(), $c->accountId());
+                return ['message' => 'Here is ' . $r['name'] . "'s set-up link.", 'link' => $r];
+            }
             \App\Hr\Support\Outbox::flushAfterResponse(2);
             return ['message' => 'Invitation sent again.'];
+        }))->add($owner);
+        $app->post('/admins/{id}/signin-link', self::h(function (Ctx $c) {
+            if ($c->id() === $c->accountId()) {
+                throw ApiError::forbidden('Use "Change password" in My account for your own sign-in.');
+            }
+            if (!Kernel::hr()->table('hr_accounts')->where('id', $c->id())->whereIn('role', ['owner', 'admin'])->exists()) {
+                throw ApiError::notFound('That admin');
+            }
+            $r = Auth::handoverLink($c->id(), $c->accountId());
+            return ['message' => 'Here is ' . $r['name'] . "'s link.", 'link' => $r];
         }))->add($owner);
         $app->get('/health', self::h(fn(Ctx $c) => Setup::health()))->add($admin);
         $app->post('/health/retry', self::h(fn(Ctx $c) => Setup::retryOutbox($c)))->add($admin);

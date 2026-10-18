@@ -4,7 +4,7 @@ import { html, raw, mount, $, $$, icon } from '../core/dom.js';
 import { api } from '../core/api.js';
 import { skeleton, errorView, confirmSheet, toast } from '../core/ui.js';
 import * as f from '../core/fmt.js';
-import { go, refreshNav } from '../app.js';
+import { go, refreshNav, state } from '../app.js';
 
 const TONE = { ok: 'd-ok', warn: 'd-warn', bad: 'd-bad', info: 'd-info' };
 const TONE_ICON = { ok: 'check', warn: 'alert', bad: 'alert', info: 'info' };
@@ -84,7 +84,7 @@ export async function render({ main, query, isCurrent }) {
   $('#bulk', main)?.addEventListener('click', async () => {
     const r = await confirmSheet({
       title: `Approve ${f.plural(routineIds.length, 'routine request')}?`,
-      text: 'Routine means every check passed: within balance, enough notice, enough people on the floor, or contact details only. Everyone is told by email.',
+      text: 'Routine means every check passed: within balance, enough notice, enough people on the floor, or contact details only. Everyone is told ' + (state.emailOn ? 'by email.' : 'in Trio HR and the CRM bell.'),
       confirm: `Approve ${routineIds.length}`,
       onConfirm: () => api.post('/approvals/bulk', { ids: routineIds }),
     });
@@ -199,7 +199,7 @@ export async function requestPanel(slot, id, { back = null, latest = () => true,
     const leaveCheck = d.checks.find((c) => c.title === 'Within balance' || c.title === 'More than the balance');
     const res = await confirmSheet({
       title: confirmTitle(r, p, days, nights),
-      text: `${p.first} will be told by email.${leaveCheck && !days ? ' ' + leaveCheck.text.split(' · ')[0] + '.' : ''}${d.checks.some((c) => c.tone === 'warn' || c.tone === 'bad') ? ' Some checks need a look, so make sure you are happy with them.' : ''}`,
+      text: `${p.first} will be told ${state.emailOn ? 'by email' : 'in Trio HR and the CRM bell'}.${leaveCheck && !days ? ' ' + leaveCheck.text.split(' · ')[0] + '.' : ''}${d.checks.some((c) => c.tone === 'warn' || c.tone === 'bad') ? ' Some checks need a look, so make sure you are happy with them.' : ''}`,
       summary,
       confirm: 'Yes, approve',
       onConfirm: () => api.post(`/approvals/${id}/approve`, days ? { days } : {}),

@@ -3,7 +3,7 @@
 
 import { html, raw, mount, $, $$, icon, formData, showFieldErrors } from '../core/dom.js';
 import { api } from '../core/api.js';
-import { skeleton, errorView, confirmSheet, openDrawer, toast, busy } from '../core/ui.js';
+import { skeleton, errorView, confirmSheet, openDrawer, toast, busy, linkSheet } from '../core/ui.js';
 import * as f from '../core/fmt.js';
 import { go, state } from '../app.js';
 
@@ -172,17 +172,22 @@ async function admins(slot, d) {
     const layer = openDrawer({
       title: 'Add an admin',
       body: html`<form class="form" id="af" novalidate>
-        ${field('name', 'Name', '')}${field('email', 'Email', '', { type: 'email', help: 'Their invitation goes here. Use their own address, not a shared one.' })}
+        ${field('name', 'Name', '')}${field('email', 'Email', '', { type: 'email', help: state.emailOn ? 'Their invitation goes here. Use their own address, not a shared one.' : 'They sign in with this. Use their own address, not a shared one.' })}
         <div class="field"><span class="flabel">Access</span><div class="radio-cards">
           <label class="radio-card"><input type="radio" name="role" value="admin" checked><span><b>Admin</b><small>Runs HR day to day</small></span></label>
           <label class="radio-card"><input type="radio" name="role" value="owner"><span><b>Owner</b><small>Everything, including admins and security</small></span></label>
         </div></div></form>`,
-      foot: html`<button class="btn btn--quiet" type="button" data-close>Cancel</button><button class="btn btn--pri" type="button" id="asave">Send the invitation</button>`,
+      foot: html`<button class="btn btn--quiet" type="button" data-close>Cancel</button><button class="btn btn--pri" type="button" id="asave">${state.emailOn ? 'Send the invitation' : 'Add and get their link'}</button>`,
     });
     const form = $('#af', layer.el);
     $('[data-close]', layer.el).addEventListener('click', () => layer.close());
     $('#asave', layer.el).addEventListener('click', (e) => busy(e.currentTarget, async () => {
-      try { toast((await api.post('/admins', formData(form))).message); layer.close(); go('#/settings?tab=admins', { replace: true }); }
+      try {
+        const r = await api.post('/admins', formData(form));
+        layer.close();
+        if (r.link) await linkSheet(r.link); else toast(r.message);
+        go('#/settings?tab=admins', { replace: true });
+      }
       catch (err) { if (!showFieldErrors(form, err.fields)) toast(err.message, { tone: 'bad' }); }
     }));
   });
@@ -196,7 +201,9 @@ async function admins(slot, d) {
       if (r) { toast(r.message); go('#/settings?tab=admins', { replace: true }); }
     };
     const items = [];
-    if (x.status === 'invited') items.push({ label: 'Send the invitation again', icon: 'send', onClick: async () => { try { toast((await api.post(`/admins/${x.id}/invite`)).message); } catch (err) { toast(err.message, { tone: 'bad' }); } } });
+    const showLink = async (path) => { try { const r = await api.post(path); if (r.link) await linkSheet(r.link); else toast(r.message); } catch (err) { toast(err.message, { tone: 'bad' }); } };
+    if (x.status === 'invited') items.push({ label: state.emailOn ? 'Send the invitation again' : 'Get their set-up link', icon: state.emailOn ? 'send' : 'link', onClick: () => showLink(`/admins/${x.id}/invite`) });
+    if (x.status === 'active' && x.id !== state.session?.account?.id) items.push({ label: 'New sign-in link (forgotten password)', icon: 'link', onClick: () => showLink(`/admins/${x.id}/signin-link`) });
     if (x.role === 'admin') items.push({ label: 'Make an owner', icon: 'key', onClick: act({ role: 'owner' }, `Make ${x.name} an owner?`) });
     if (x.role === 'owner') items.push({ label: 'Make an admin', icon: 'user', onClick: act({ role: 'admin' }, `Make ${x.name} an admin instead of an owner?`) });
     if (x.status === 'active') items.push({ label: 'Switch off access', icon: 'lock', onClick: act({ status: 'disabled' }, `Switch off ${x.name}'s access? They are signed out at once.`) });

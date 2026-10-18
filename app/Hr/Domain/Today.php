@@ -213,7 +213,7 @@ final class Today
         }
         $stuck = $db->table('hr_accounts')->where('status', 'invited')->where('invited_at', '<', date('Y-m-d H:i:s', strtotime('-3 days')))->count();
         if ($stuck) {
-            $add(45, 'neutral', 'users', Fmt::plural($stuck, 'invite') . ' not accepted after 3 days', 'Send a reminder or check their email address', 'See who', '#/people?hr=invited');
+            $add(45, 'neutral', 'users', Fmt::plural($stuck, 'invite') . ' not accepted after 3 days', \App\Hr\Support\Outbox::enabled() ? 'Send a reminder or check their email address' : 'Give them their set-up link again, or let them use the CRM button', 'See who', '#/people?hr=invited');
         }
 
         usort($items, fn($a, $b) => $a['rank'] <=> $b['rank']);

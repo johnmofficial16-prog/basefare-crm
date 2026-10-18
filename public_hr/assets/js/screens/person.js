@@ -2,10 +2,10 @@
 
 import { html, raw, mount, $, $$, icon, formData, showFieldErrors } from '../core/dom.js';
 import { api } from '../core/api.js';
-import { skeleton, errorView, confirmSheet, openDrawer, openMenu, toast, busy } from '../core/ui.js';
+import { skeleton, errorView, confirmSheet, openDrawer, openMenu, toast, busy, linkSheet } from '../core/ui.js';
 import * as f from '../core/fmt.js';
 import * as att from '../core/att.js';
-import { go, setTitle } from '../app.js';
+import { go, setTitle, state } from '../app.js';
 
 const STATUS_PILL = { joining: 'p-info', active: 'p-ok', notice: 'p-warn', left: 'p-neutral' };
 const TONIGHT = {
@@ -65,7 +65,7 @@ export async function render({ main, params, query }) {
         </div>
       </div>
       <div class="ph__a">
-        ${hrState !== 'active' ? html`<button class="btn btn--gold" type="button" id="invite">${icon('send')}${hrState === 'invited' ? 'Send invite again' : 'Invite to Trio HR'}</button>` : ''}
+        ${hrState !== 'active' ? html`<button class="btn btn--gold" type="button" id="invite">${icon(state.emailOn ? 'send' : 'link')}${state.emailOn ? (hrState === 'invited' ? 'Send invite again' : 'Invite to Trio HR') : 'Get a set-up link'}</button>` : ''}
         <button class="btn btn--pri" type="button" id="edit">${icon('edit')}Edit</button>
         <button class="btn btn--icon" type="button" id="more" aria-label="More actions">${icon('more')}</button>
       </div>
@@ -80,6 +80,7 @@ export async function render({ main, params, query }) {
     { label: 'Edit job and contact details', icon: 'edit', onClick: () => editDrawer(d) },
     { label: 'Add or change private details', icon: 'lock', onClick: () => privateDrawer(d) },
     { label: 'See attendance', icon: 'clock', href: `#/people/${id}?tab=attendance` },
+    ...(d.account && d.account.role === 'employee' && d.account.status === 'active' ? [{ label: 'New sign-in link (forgotten password)', icon: 'link', onClick: () => newLink(d) }] : []),
     ...(d.account && d.account.role === 'employee' ? [d.account.status === 'disabled'
       ? { label: 'Switch Trio HR sign-in back on', icon: 'check', onClick: () => accessSheet(d, true) }
       : { label: 'Switch off Trio HR sign-in', icon: 'lock', onClick: () => accessSheet(d, false) }] : []),
@@ -385,6 +386,14 @@ async function invite(d) {
     return;
   }
   const again = d.account?.status === 'invited';
+  if (!state.emailOn) {
+    try {
+      const r = await api.post(`/people/${p.id}/invite`);
+      if (r.link) await linkSheet(r.link); else toast(r.message);
+      go(location.hash, { replace: true });
+    } catch (err) { toast(err.message, { tone: 'bad' }); }
+    return;
+  }
   const r = await confirmSheet({
     title: again ? `Send ${p.first}'s invite again?` : `Invite ${p.first} to Trio HR?`,
     text: `${p.first} gets an email with a link to set a password and check their details. ${again ? 'The earlier link stops working.' : 'The link works for 7 days.'}`,
@@ -393,6 +402,18 @@ async function invite(d) {
     onConfirm: () => api.post(`/people/${p.id}/invite`),
   });
   if (r) { toast(r.message); go(location.hash, { replace: true }); }
+}
+
+/** A forgotten password: a fresh link for the admin to hand over. */
+async function newLink(d) {
+  const p = d.person;
+  const r = await confirmSheet({
+    title: `Make a new sign-in link for ${p.first}?`,
+    text: `${p.first} opens it to choose a new password. It works once, for 24 hours. Their current password keeps working until they do.`,
+    confirm: 'Make the link',
+    onConfirm: () => api.post(`/people/${p.id}/signin-link`),
+  });
+  if (r && r.link) await linkSheet(r.link);
 }
 
 function privateDrawer(d) {
@@ -565,7 +586,7 @@ export async function create({ main }) {
       <p class="ph__s">Just the basics. Once invited, they fill in the rest themselves from their phone.</p></div></div>
     <div class="card"><div class="card__b">${personForm(meta, { date_joined: f.todayIST() })}</div>
       <div class="actbar">
-        <label class="check-row"><input type="checkbox" id="sendinvite" checked> Send the Trio HR invitation now</label>
+        <label class="check-row"><input type="checkbox" id="sendinvite" checked> ${state.emailOn ? 'Send the Trio HR invitation now' : 'Make their Trio HR set-up link now'}</label>
         <span class="push"></span>
         <a class="btn btn--quiet" href="#/people">Cancel</a>
         <button class="btn btn--pri" type="button" id="add">${icon('plus')}Add person</button>
@@ -586,7 +607,10 @@ export async function create({ main }) {
       let msg = `${body.full_name} was added.`;
       let failed = false;
       if ($('#sendinvite', main).checked && (body.work_email || body.personal_email)) {
-        try { const inv = await api.post(`/people/${r.id}/invite`); msg += ' ' + inv.message; } catch (err) { failed = true; msg += ` The invite didn't go: ${err.message}`; }
+        try {
+          const inv = await api.post(`/people/${r.id}/invite`);
+          if (inv.link) await linkSheet(inv.link); else msg += ' ' + inv.message;
+        } catch (err) { failed = true; msg += ` The invite didn't go: ${err.message}`; }
       }
       toast(msg, { tone: failed ? 'bad' : 'ok' });
       go(`#/people/${r.id}`, { replace: true });

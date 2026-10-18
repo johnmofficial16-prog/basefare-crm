@@ -9,7 +9,7 @@ import { toast, openPalette, openMenu, openPanel, closeAll, confirmSheet, holdFo
 import { ago } from './core/fmt.js';
 
 const root = document.getElementById('app');
-export const state = { session: null, shell: null, cleanup: null, navTimer: null };
+export const state = { session: null, shell: null, cleanup: null, navTimer: null, emailOn: false };
 
 const ROLE_LABELS = { owner: 'Owner', admin: 'Admin', employee: 'Staff' };
 
@@ -142,6 +142,7 @@ export function homeHash() {
 async function boot() {
   try {
     const s = await api.get('/session');
+    state.emailOn = !!s.email_on;
     setSession(s.signed_in === false ? null : s);
   } catch (err) {
     mount(root, html`<div class="auth"><div class="auth__panel"><h1>Trio HR is unavailable</h1><p class="lead">${err.message}</p><button class="btn btn--pri" type="button" id="retry">Try again</button></div></div>`);
@@ -169,6 +170,7 @@ async function boot() {
 
 export function setSession(s) {
   state.session = s;
+  if (s && 'email_on' in s) state.emailOn = !!s.email_on;
   setCsrf(s?.csrf || null);
   state.shell = null;
   if (s) startIdleWatch(); else stopIdleWatch();

@@ -7,7 +7,7 @@ import { html, raw, mount, $, $$, icon, formData, showFieldErrors } from '../cor
 import { api } from '../core/api.js';
 import { skeleton, errorView, confirmSheet, toast, busy, openDrawer } from '../core/ui.js';
 import * as f from '../core/fmt.js';
-import { go, refreshNav, setTitle } from '../app.js';
+import { go, refreshNav, setTitle, state } from '../app.js';
 import { requestPanel } from './approvals.js';
 
 const REQ_PILL = { pending: 'p-warn', approved: 'p-ok', partly_approved: 'p-ok', sent_back: 'p-bad', withdrawn: 'p-neutral' };
@@ -202,7 +202,7 @@ function composer(d) {
       <label class="check-row composer__done"><input type="checkbox" name="close" ${d.thread.status === 'done' ? raw('disabled') : ''}> Mark done after sending</label>
       <button class="btn btn--pri push" type="submit">${icon('send')}<span>Send</span></button>
     </div>
-    <p class="meta composer__hint" id="cmp-hint">${d.person.has_account ? `${d.person.first} is told on Trio HR, in the CRM bell and by email (without the message itself).` : `${d.person.first} hasn't joined Trio HR yet, so they'll see it in the CRM bell and once they join.`}<span class="kbdhint"> Ctrl+Enter sends.</span></p>
+    <p class="meta composer__hint" id="cmp-hint">${d.person.has_account ? `${d.person.first} is told on Trio HR and in the CRM bell${state.emailOn ? ', and by email (without the message itself)' : ''}.` : `${d.person.first} hasn't joined Trio HR yet, so they'll see it in the CRM bell and once they join.`}<span class="kbdhint"> Ctrl+Enter sends.</span></p>
   </form>`;
 }
 

@@ -183,6 +183,41 @@ export function confirmSheet({ title, text = '', summary = [], confirm = 'Confir
   });
 }
 
+/**
+ * A one-time sign-in link for an admin to hand over (Trio HR sends no email).
+ * r = { link, setup, name, valid }. Shown once; making a new one cancels it.
+ */
+export function linkSheet(r) {
+  return new Promise((resolve) => {
+    const el = document.createElement('div');
+    el.className = 'sheet';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'sheet-t');
+    mount(el, html`
+      <div class="sheet__b">
+        <h2 id="sheet-t">${r.setup ? `${r.name}'s set-up link` : `New sign-in link for ${r.name}`}</h2>
+        <p>Send this to ${r.name} yourself, on WhatsApp or in person. ${r.setup ? 'They open it to choose a password.' : 'They open it to choose a new password.'} It works once, for ${r.valid}. Don't post it in a group: anyone with the link can use it.</p>
+        <div class="field"><label for="sheet-link">Link</label>
+          <input class="input" id="sheet-link" readonly value="${r.link}"></div>
+      </div>
+      <div class="sheet__f">
+        <button type="button" class="btn btn--quiet" data-act="close">Done</button>
+        <button type="button" class="btn btn--pri" data-act="copy">${icon('link')}Copy the link</button>
+      </div>`);
+    const layer = openLayer(el, { onClose: () => resolve(true) });
+    const inp = $('#sheet-link', el);
+    const copy = $('[data-act="copy"]', el);
+    copy.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(r.link); } catch { inp.select(); document.execCommand('copy'); }
+      copy.textContent = 'Copied';
+    });
+    $('[data-act="close"]', el).addEventListener('click', () => layer.close());
+    inp.addEventListener('focus', () => inp.select());
+    copy.focus();
+  });
+}
+
 // ---- drawer ----------------------------------------------------------------------
 
 export function openDrawer({ title, body, foot = '', wide = false, onClose }) {

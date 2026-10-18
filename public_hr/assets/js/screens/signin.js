@@ -3,7 +3,7 @@
 import { html, mount, $, icon, formData, showFieldErrors } from '../core/dom.js';
 import { api, ApiError } from '../core/api.js';
 import { busy, toast } from '../core/ui.js';
-import { setSession, go, homeHash } from '../app.js';
+import { setSession, go, homeHash, state } from '../app.js';
 
 function frame(main, panel) {
   mount(main, html`
@@ -96,7 +96,7 @@ export function signin({ main }) {
       ${pwField('password', 'Password', 'current-password')}
       <button class="btn btn--pri btn--lg btn--block" type="submit">Sign in</button>
     </form>
-    <div class="auth__alt"><a href="#/forgot">Forgot your password?</a><span class="muted">New here? Use the link in your invitation email.</span></div>
+    <div class="auth__alt"><a href="#/forgot">Forgot your password?</a><span class="muted">${state.emailOn ? 'New here? Use the link in your invitation email.' : "New here? Open Trio HR from the CRM's Trio HR button, or use the link HR gave you."}</span></div>
     <div class="auth__alt"><a href="#/verify">Check a Trio letter is genuine</a></div>`);
   const form = $('#f', main);
   wirePeek(form);
@@ -173,6 +173,15 @@ function codeStep(main, info) {
 // ---- forgot --------------------------------------------------------------------
 
 export function forgot({ main }) {
+  if (!state.emailOn) {
+    frame(main, html`
+      <h1>Forgot your password?</h1>
+      <p class="lead">Trio HR doesn't send emails, so there's no reset email to wait for.</p>
+      <div class="banner banner--info">${icon('info')}<div><b>Use the CRM.</b>If you use the CRM, open Trio HR with its Trio HR button. You're signed in straight away.</div></div>
+      <div class="banner banner--info">${icon('users')}<div><b>Or ask HR.</b>An HR admin can give you a new sign-in link. It works once, for 24 hours.</div></div>
+      <div class="auth__alt"><a href="#/signin">${'← Back to sign in'}</a></div>`);
+    return;
+  }
   frame(main, html`
     <h1>Forgot your password?</h1>
     <p class="lead">Enter your email and we'll send a link to choose a new one. The link works for 1 hour.</p>

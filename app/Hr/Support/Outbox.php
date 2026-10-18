@@ -27,8 +27,23 @@ final class Outbox
     private const GIVE_UP_DAYS = 8; // set-up links last 7 days
 
     private static int $deferred = 0;
+    /**
+     * Is HR email switched on? Only when HR_SMTP_HOST is set. With it off,
+     * nothing is queued at all (no invite or reset links sitting in the
+     * database), messages stay inside Trio HR and the CRM bell, and admins
+     * hand people a one-time link instead (John, 18 Oct: the only mailbox
+     * available is shared with managers).
+     */
+    public static function enabled(): bool
+    {
+        return trim((string) Kernel::env('HR_SMTP_HOST', '')) !== '';
+    }
+
     public static function queue(string $dedupeKey, string $to, string $subject, string $text, ?string $html = null): void
     {
+        if (!self::enabled()) {
+            return;
+        }
         Kernel::hr()->table('hr_outbox')->insertOrIgnore([
             'dedupe_key' => substr($dedupeKey, 0, 120),
             'to_email'   => $to,
