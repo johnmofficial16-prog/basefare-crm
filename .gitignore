@@ -44,7 +44,7 @@ tests/_output/
 tests/_support/_generated/
 
 # Local-only bootstrap script (contains plain-text default credentials)
-setup.php
+/setup.php
 
 # Composer binary (3MB — use composer install on server instead)
 composer.phar
