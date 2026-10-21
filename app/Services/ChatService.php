@@ -34,11 +34,13 @@ class ChatService
 
     // ---- the directory ---------------------------------------------------------------
 
-    /** @return array<int, object> active CRM users by id (no test/dev logins) */
+    /** @return array<int, object> active CRM users by id */
     public function directory(): array
     {
         $out = [];
-        foreach (DB::table('users')->where('status', 'active')->whereNull('deleted_at')->where('is_dev', 0)
+        // Everyone with a working CRM login. (users.is_dev means "developer access to the AI
+        // maintenance buddy", not a test account, so it must not hide anyone here.)
+        foreach (DB::table('users')->where('status', 'active')->whereNull('deleted_at')
             ->orderBy('name')->get(['id', 'name', 'role']) as $u) {
             $out[(int) $u->id] = $u;
         }
