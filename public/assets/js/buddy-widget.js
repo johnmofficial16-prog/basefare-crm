@@ -99,6 +99,77 @@
     setBadge(boot.nudges | 0);
     document.body.appendChild(orb);
 
+    // ── Drag the orb anywhere (John, 22 Oct: "it comes over things") ────────
+    // Press and drag to move it; a plain tap still opens the chat. The spot is
+    // remembered per browser (as a share of the window, so it survives resizes)
+    // and the chat panel and toast open next to wherever the orb sits.
+    var ORB = 58, EDGE = 8;
+    function clampPos(x, y) {
+      return [Math.min(Math.max(EDGE, x), window.innerWidth - ORB - EDGE),
+              Math.min(Math.max(EDGE, y), window.innerHeight - ORB - EDGE)];
+    }
+    function placeOrb(x, y) {
+      var c = clampPos(x, y);
+      orb.style.left = c[0] + 'px'; orb.style.top = c[1] + 'px';
+      orb.style.right = 'auto'; orb.style.bottom = 'auto';
+    }
+    function savedPos() {
+      try {
+        var v = JSON.parse(localStorage.getItem('bwOrbPos') || 'null');
+        if (v && typeof v.fx === 'number' && typeof v.fy === 'number') return v;
+      } catch (e) { /* private mode */ }
+      return null;
+    }
+    function applySaved() {
+      var v = savedPos();
+      if (v) placeOrb(v.fx * window.innerWidth, v.fy * window.innerHeight);
+    }
+    applySaved();
+    window.addEventListener('resize', function () { applySaved(); if (opened) placeNear(panel); });
+    var drag = null;
+    orb.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      var r = orb.getBoundingClientRect();
+      drag = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, moved: false, id: e.pointerId };
+    });
+    window.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+      if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 6) return;
+      if (!drag.moved) { drag.moved = true; orb.classList.add('bw-orb-drag'); try { orb.setPointerCapture(drag.id); } catch (er) {} }
+      placeOrb(drag.ox + dx, drag.oy + dy);
+      e.preventDefault();
+    });
+    function endDrag() {
+      if (!drag) return;
+      if (drag.moved) {
+        orb.__dragged = true;   // swallow the click that follows a drag
+        orb.classList.remove('bw-orb-drag');
+        var r = orb.getBoundingClientRect();
+        try { localStorage.setItem('bwOrbPos', JSON.stringify({ fx: r.left / window.innerWidth, fy: r.top / window.innerHeight })); } catch (e) {}
+        if (toast) placeNear(toast, true);
+      }
+      drag = null;
+    }
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+    // Open the panel / toast next to the orb, growing toward the side with room,
+    // and never past the window edge. `clear` puts the box above/below the orb
+    // instead of over it (the toast).
+    function placeNear(box, clear) {
+      var r = orb.getBoundingClientRect();
+      if (!orb.style.left) { box.style.left = box.style.top = box.style.right = box.style.bottom = ''; return; }
+      var w = box.offsetWidth, h = box.offsetHeight;
+      var right = r.left + r.width / 2 > window.innerWidth / 2;
+      var below = r.top + r.height / 2 > window.innerHeight / 2;
+      var x = right ? r.right - w : r.left;
+      var y = clear ? (below ? r.top - 12 - h : r.bottom + 12) : (below ? r.bottom - h : r.top);
+      x = Math.min(Math.max(EDGE, x), window.innerWidth - w - EDGE);
+      y = Math.min(Math.max(EDGE, y), window.innerHeight - h - EDGE);
+      box.style.left = x + 'px'; box.style.top = y + 'px';
+      box.style.right = 'auto'; box.style.bottom = 'auto';
+    }
+
     // ── Panel ──────────────────────────────────────────────────────────────
     var panel = el('div', 'bw-panel');
     var title = MODE === 'admin' ? 'Aisha · Super' : 'Aisha';
@@ -142,7 +213,9 @@
     };
 
     orb.addEventListener('click', function () {
+      if (orb.__dragged) { orb.__dragged = false; return; }
       opened = !opened;
+      if (opened) placeNear(panel);
       panel.classList.toggle('bw-open', opened);
       orb.classList.toggle('bw-orb-hidden', opened);
       if (opened && !panel.__loaded) { panel.__loaded = true; load(); }
@@ -501,6 +574,7 @@
         document.body.appendChild(toast);
       }
       toast.textContent = plain(text).slice(0, 140);
+      placeNear(toast, true);
       toast.classList.add('bw-toast-show');
       clearTimeout(toastTimer);
       toastTimer = setTimeout(hideToast, 14000);
@@ -822,6 +896,8 @@
     var css =
 '.bw-orb{position:fixed;right:22px;bottom:22px;z-index:9990;width:58px;height:58px;border-radius:50%;border:0;cursor:pointer;background:transparent;padding:0;transition:transform .25s ease,opacity .2s}' +
 '.bw-orb:hover{transform:scale(1.08)}' +
+'.bw-orb{touch-action:none;cursor:grab}' +
+'.bw-orb-drag{cursor:grabbing;transform:scale(1.1);transition:none}' +
 '.bw-orb-hidden{opacity:0;pointer-events:none;transform:scale(.6)}' +
 '.bw-orb-core{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 180deg,#163274,#5b8cff,#8b5cf6,#163274);animation:bw-spin 6s linear infinite;filter:saturate(1.2)}' +
 '.bw-orb-core::after{content:"";position:absolute;inset:-6px;border-radius:50%;background:inherit;filter:blur(14px);opacity:.55;animation:bw-pulse 2.6s ease-in-out infinite}' +

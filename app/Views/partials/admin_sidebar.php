@@ -38,6 +38,7 @@ $navItems = [
 ];
 if ($__hr = \App\Services\HrLink::navItem()) { $navItems[] = $__hr + ['roles' => ['admin', 'manager', 'supervisor']]; } // Trio HR (only when the link is switched on)
 array_splice($navItems, 1, 0, [\App\Services\ChatService::navItem() + ['roles' => ['admin', 'manager', 'supervisor']]]); // Messages, right after Dashboard
+array_splice($navItems, 2, 0, [['href' => '#notepad', 'icon' => 'edit_note', 'label' => 'Notepad', 'key' => 'notepad', 'roles' => ['admin', 'manager', 'supervisor']]]); // Notepad (opens the slide-in panel)
 ?>
 <aside class="fixed left-0 top-0 h-full w-60 bg-white border-r border-gray-100 flex flex-col z-30 shadow-sm">
   <!-- Logo -->
@@ -106,4 +107,5 @@ array_splice($navItems, 1, 0, [\App\Services\ChatService::navItem() + ['roles' =
     </a>
   </div>
 </aside>
+<?php require __DIR__ . '/notepad_quick.php'; ?>
 <?php require __DIR__ . "/notification_bell.php"; ?>

@@ -16,6 +16,7 @@ use App\Controllers\ChargebackController;
 use App\Controllers\ReminderController;
 use App\Controllers\CallLogController;
 use App\Controllers\ChatController;
+use App\Controllers\NoteController;
 use App\Controllers\NotificationController;
 use App\Controllers\AdminController;
 use App\Controllers\FareTermsController;
@@ -407,6 +408,19 @@ $app->group('', function ($group) {
     $group->get('/messages/all/{id:[0-9]+}',         [ChatController::class, 'allThread']);
 })
 ->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware());
+
+// ==========================================================================
+// Notepad — each user's own notes (slide-in panel on every page). Private to the writer.
+// ==========================================================================
+$app->group('/api/notes', function ($group) {
+    $group->get('',                           [NoteController::class, 'index']);
+    $group->post('',                          [NoteController::class, 'create']);
+    $group->get('/{id:[0-9]+}',               [NoteController::class, 'show']);
+    $group->post('/{id:[0-9]+}',              [NoteController::class, 'save']);
+    $group->post('/{id:[0-9]+}/delete',       [NoteController::class, 'delete']);
+})
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
 

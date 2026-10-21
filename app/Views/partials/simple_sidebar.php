@@ -25,7 +25,7 @@ $__simpleNav = [
     ['/simple/reports',   'description',   'Reports',   'simple_reports',   'Reports and records'],
     ['/admin/survey',     'psychology',    'Staff survey', 'staff_survey',  'What the team told us'],
 ];
-array_splice($__simpleNav, 1, 0, [['/messages', 'forum', 'Messages', 'messages', 'Write to anyone on the team']]);
+array_splice($__simpleNav, 1, 0, [['/messages', 'forum', 'Messages', 'messages', 'Write to anyone on the team'], ['#notepad', 'edit_note', 'Notepad', 'notepad', 'Your own notes (Alt+N)']]);
 $__simpleUnread = \App\Services\ChatService::navItem()['badge'];
 if (\App\Services\HrLink::enabled()) { $__simpleNav[] = ['/hr', 'badge', 'Trio HR', 'trio_hr', 'Staff, letters and HR messages (opens in a new tab)']; }
 $__simpleName = $_SESSION['user_name'] ?? '';
@@ -86,6 +86,7 @@ $__simpleName = $_SESSION['user_name'] ?? '';
     </span>
   </div>
 </aside>
+<?php require __DIR__ . '/notepad_quick.php'; ?>
 <script>window.SIMPLE_CSRF = <?= json_encode($_SESSION['csrf_token'] ?? '') ?>;</script>
 <script src="<?= \App\Services\Asset::url('assets/js/simple-ui.js') ?>"></script>
 <?php require __DIR__ . '/notification_bell.php'; ?>
