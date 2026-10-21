@@ -131,13 +131,20 @@ final class Mail
     }
 
     /** The attachments being sent: own, unattached uploads only. */
+    /** For colleague mail (Colleagues): the same check on the attachments sent with a message. */
+    public static function claimFilesFor(Ctx $c): array
+    {
+        return self::claimFiles($c);
+    }
+
     private static function claimFiles(Ctx $c): array
     {
         $ids = $c->ids('files', self::MAX_FILES);
         if (!$ids) {
             return [];
         }
-        $mine = self::db()->table('hr_mail_files')->whereIn('id', $ids)->where('uploaded_by', $c->accountId())->whereNull('message_id')->pluck('id')->all();
+        $mine = self::db()->table('hr_mail_files')->whereIn('id', $ids)->where('uploaded_by', $c->accountId())->whereNull('message_id')
+            ->whereNull('chat_message_id')->pluck('id')->all();
         if (count($mine) !== count($ids)) {
             throw ApiError::invalid('An attachment is missing. Please attach it again.');
         }
@@ -183,12 +190,12 @@ final class Mail
         $name = preg_replace('/[^\p{L}\p{N} ._()-]/u', '_', $name) ?? 'attachment';
         $db = self::db();
         // Tidy this person's own uploads that were never sent.
-        foreach ($db->table('hr_mail_files')->where('uploaded_by', $c->accountId())->whereNull('message_id')
+        foreach ($db->table('hr_mail_files')->where('uploaded_by', $c->accountId())->whereNull('message_id')->whereNull('chat_message_id')
             ->where('created_at', '<', date('Y-m-d H:i:s', time() - 86400))->get(['id', 'storage_key']) as $old) {
             @unlink(Documents::dir() . DIRECTORY_SEPARATOR . $old->storage_key . '.bin');
             $db->table('hr_mail_files')->where('id', $old->id)->delete();
         }
-        if ($db->table('hr_mail_files')->where('uploaded_by', $c->accountId())->whereNull('message_id')->count() >= 20) {
+        if ($db->table('hr_mail_files')->where('uploaded_by', $c->accountId())->whereNull('message_id')->whereNull('chat_message_id')->count() >= 20) {
             throw ApiError::conflict('You have too many attachments waiting to be sent. Send or discard your message first.');
         }
         $today = (int) $db->table('hr_mail_files')->where('uploaded_by', $c->accountId())
@@ -224,6 +231,11 @@ final class Mail
                 $allowed = !$db->table('hr_messages')->where('id', $f->message_id)->value('internal');
             }
         }
+        if (!$allowed && $f->chat_thread_id) {
+            // A file in a conversation between colleagues: its members, and admins.
+            $allowed = $c->isAdmin() || ($c->employeeId() !== null && $db->table('hr_chat_members')
+                ->where('thread_id', $f->chat_thread_id)->where('employee_id', $c->employeeId())->exists());
+        }
         if (!$allowed) {
             throw ApiError::notFound('That attachment');
         }
@@ -234,6 +246,9 @@ final class Mail
         $bytes = Vault::decrypt((string) file_get_contents($path));
         if (!hash_equals($f->sha256, hash('sha256', $bytes))) {
             throw new ApiError(500, 'integrity', 'This file does not match what was uploaded.');
+        }
+        if ($f->chat_thread_id && $c->isAdmin()) {
+            Audit::log('chat.file.view', ['entity' => 'hr_mail_files', 'entity_id' => $id, 'detail' => ['chat_thread_id' => (int) $f->chat_thread_id]]);
         }
         if ($thread && $c->isAdmin()) {
             Audit::log('mail.file.view', ['employee_id' => (int) $thread->employee_id, 'entity' => 'hr_mail_files', 'entity_id' => $id]);
@@ -260,6 +275,7 @@ final class Mail
             'threads' => $threads,
             'announcements' => Announcements::forEmployee((int) $e->id),
             'unread' => self::staffUnread((int) $e->id),
+            'colleagues' => empty($c->auth['leaver']) && isset(Colleagues::directory()[(int) $e->id]),
         ];
     }
 
@@ -267,7 +283,7 @@ final class Mail
     {
         $db = self::db();
         $mail = $db->table('hr_threads')->where('employee_id', $employeeId)->whereColumn('staff_read_upto', '<', 'last_message_id')->count();
-        return $mail + Announcements::unreadFor($employeeId);
+        return $mail + Announcements::unreadFor($employeeId) + Colleagues::unread($employeeId);
     }
 
     /** What the compose screen needs: topics, leave types and balances, nights to fix, letters. */

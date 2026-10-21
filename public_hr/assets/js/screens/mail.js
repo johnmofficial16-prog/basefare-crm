@@ -57,7 +57,7 @@ export async function render({ main, query, params, isCurrent }) {
   mount(main, html`
     <div class="ph">
       <div class="ph__t"><h1>Trio Mail</h1><p class="ph__s">Messages between staff and HR. Anyone waiting more than ${f.plural(list.reply_hours, 'hour')} turns amber; after 48 hours the owner is told.</p></div>
-      <div class="ph__a"><a class="btn" href="#/announcements">${icon('speaker')}Announcements</a><a class="btn btn--pri" href="#/mail/new">${icon('edit')}Write to someone</a></div>
+      <div class="ph__a"><a class="btn" href="#/mail/staff">${icon('users')}Staff conversations</a><a class="btn" href="#/announcements">${icon('speaker')}Announcements</a><a class="btn btn--pri" href="#/mail/new">${icon('edit')}Write to someone</a></div>
     </div>
     <div class="mailbar">
       <nav class="views" aria-label="Mail boxes">${list.boxes.map((b) => html`<a href="${hashFor(b.key, null, { topic, q })}" ${b.key === list.box ? raw('aria-current="true"') : ''}>${b.label}${b.count !== null ? html` <em>${b.count}</em>` : ''}</a>`)}</nav>

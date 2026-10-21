@@ -222,7 +222,7 @@ function security(slot, d) {
     <div class="card"><div class="card__h"><h2>Switches</h2>${!d.is_owner ? html`<span class="sub">Only an owner can change these</span>` : ''}</div><div class="card__b">
       <form id="secf" class="switches">
         ${row('letters_need_check', 'A second admin checks every letter before it is issued', 'Nobody can check a letter they prepared. Recommended.')}
-        ${row('staff_email_code', 'Ask staff for an emailed code on a new phone', 'Off by default. When on, a 6-digit code is emailed the first time someone signs in on a phone; the phone is then remembered.')}
+        ${row('staff_email_code', 'Ask staff for an emailed code on a new phone', state.emailOn ? 'Off by default. When on, a 6-digit code is emailed the first time someone signs in on a phone; the phone is then remembered.' : 'Trio HR sends no email, so this has no effect.')}
       </form></div></div>`);
   if (!d.is_owner) return;
   $('#secf', slot).addEventListener('change', async (e) => {

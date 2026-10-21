@@ -1260,3 +1260,13 @@ a.attchip:hover { border-color: var(--ink-2); }
 }
 .baltable-wrap { max-width: 100%; }
 .balcell { position: relative; } /* keeps its screen-reader label inside the scrolling table */
+
+/* Trio Mail between colleagues */
+.mailtabs { margin-bottom: 2px; }
+.mailtabs a { flex: 1; justify-content: center; }
+.tochips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.tochips:empty { display: none; }
+.tochip { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 6px 0 4px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--card); font-weight: 600; font-size: var(--fs-list); }
+.av--xs { width: 26px; height: 26px; font-size: 11.5px; }
+.chatsubj { font-weight: 600; color: var(--ink-2); }
+.rtable td small.meta { display: block; max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

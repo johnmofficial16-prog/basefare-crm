@@ -8,6 +8,7 @@ import { skeleton, errorView, toast, busy } from '../core/ui.js';
 import * as f from '../core/fmt.js';
 import { go } from '../app.js';
 import { fileChips } from './mail.js';
+import { mailTabs } from './chats.js';
 
 const REQ_PILL = { pending: 'p-warn', approved: 'p-ok', partly_approved: 'p-ok', sent_back: 'p-bad', withdrawn: 'p-neutral' };
 
@@ -25,7 +26,11 @@ export async function list({ main, head }) {
   mount(main, skeleton('list'));
   let d;
   try { d = await api.get('/me/mail'); } catch (err) { mount(main, errorView(err)); return; }
+  let chats = null;
+  if (d.colleagues) { try { chats = await api.get('/me/chats', { background: true }); } catch {} } // only staff with a CRM login
+  const hrUnread = d.threads.filter((t) => t.unread).length + d.announcements.filter((a) => a.unread).length;
   mount(main, html`
+    ${chats ? mailTabs('hr', { hr: hrUnread, colleagues: chats.unread }) : ''}
     <a class="bigbtn" href="#/me/mail/new">${icon('edit')}Write to HR</a>
     ${d.announcements.length ? html`<div class="tile tile--list"><div class="listhead"><b>Announcements</b></div>
       ${d.announcements.map((a) => html`<a class="listrow mrow-p ${a.unread ? 'is-unread' : ''}" href="#/me/mail/a${a.id}">
@@ -98,7 +103,7 @@ export async function announcement({ main, head, params }) {
 }
 
 /** Attachment picking: uploads at once, shows chips, remembers the ids. */
-function attachments(form, inputSel, listSel) {
+export function attachments(form, inputSel, listSel) {
   const files = [];
   const draw = () => mount($(listSel, form), html`${files.map((x, i) => html`<span class="attchip">${icon(x.mime === 'application/pdf' ? 'file' : 'image', 'i--sm')}<span>${x.name}</span><button type="button" class="iconbtn iconbtn--xs" data-rm="${i}" aria-label="Remove ${x.name}">${icon('x', 'i--sm')}</button></span>`)}`);
   $(listSel, form).addEventListener('click', (e) => { const b = e.target.closest('[data-rm]'); if (b) { files.splice(Number(b.dataset.rm), 1); draw(); } });

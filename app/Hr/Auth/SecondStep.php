@@ -76,7 +76,8 @@ final class SecondStep
     /** Does this account need an emailed code from this browser? */
     public static function needed(object $account, ?object $trusted): ?string
     {
-        return $account->role === 'employee' && !$trusted && Settings::security('staff_email_code') ? 'email' : null;
+        // With HR email off there is nowhere to send the code, so it never applies (it would lock staff out).
+        return $account->role === 'employee' && !$trusted && Settings::security('staff_email_code') && Outbox::enabled() ? 'email' : null;
     }
 
     /** @return array{0:string,1:array} [challenge token, what the screen should ask for] */

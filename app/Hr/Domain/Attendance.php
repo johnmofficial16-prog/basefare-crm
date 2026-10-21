@@ -1126,6 +1126,9 @@ final class Attendance
                 if ($d['day'] >= $today) {
                     continue; // the day under way doesn't count yet, whatever it shows
                 }
+                if ($d['state'] === 'holiday') {
+                    continue; // a company holiday neither counts nor breaks the run
+                }
                 if ($d['state'] === 'no_punch' && !$d['mark'] && !$d['pending_leave']) {
                     $run[] = $d['day'];
                     continue;
