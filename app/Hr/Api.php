@@ -468,12 +468,7 @@ final class Api
         $app->post('/me/mail', self::h(fn(Ctx $c) => Mail::compose($c)))->add($staff);
         $app->get('/me/mail/{id:[0-9]+}', self::h(fn(Ctx $c) => Mail::staffThread($c, $c->id())))->add($staff);
         $app->post('/me/mail/{id:[0-9]+}/reply', self::h(fn(Ctx $c) => Mail::staffReply($c, $c->id())))->add($staff);
-        // Trio Mail between colleagues (CRM users only; admins read everything, read-only)
-        $app->get('/me/colleagues', self::h(fn(Ctx $c) => Colleagues::list($c)))->add($staff);
-        $app->get('/me/chats', self::h(fn(Ctx $c) => Colleagues::inbox($c)))->add($staff);
-        $app->post('/me/chats', self::h(fn(Ctx $c) => Colleagues::compose($c)))->add($staff);
-        $app->get('/me/chats/{id:[0-9]+}', self::h(fn(Ctx $c) => Colleagues::thread($c, $c->id())))->add($staff);
-        $app->post('/me/chats/{id:[0-9]+}/reply', self::h(fn(Ctx $c) => Colleagues::reply($c, $c->id())))->add($staff);
+        // Staff conversations: messages between staff live in the CRM (CRM → Messages); admins read them here, read-only
         $app->get('/chats', self::h(fn(Ctx $c) => Colleagues::adminList($c)))->add($admin);
         $app->get('/chats/{id:[0-9]+}', self::h(fn(Ctx $c) => Colleagues::adminThread($c, $c->id())))->add($admin);
         $app->get('/me/announcements/{id:[0-9]+}', self::h(fn(Ctx $c) => Announcements::read($c, $c->id())))->add($staff);

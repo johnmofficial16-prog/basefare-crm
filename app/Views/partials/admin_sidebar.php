@@ -37,6 +37,7 @@ $navItems = [
     ['href' => '/admin/error-console',     'icon' => 'bug_report',     'label' => 'Error Console',    'key' => 'error_console', 'roles' => ['admin', 'manager']],
 ];
 if ($__hr = \App\Services\HrLink::navItem()) { $navItems[] = $__hr + ['roles' => ['admin', 'manager', 'supervisor']]; } // Trio HR (only when the link is switched on)
+array_splice($navItems, 1, 0, [\App\Services\ChatService::navItem() + ['roles' => ['admin', 'manager', 'supervisor']]]); // Messages, right after Dashboard
 ?>
 <aside class="fixed left-0 top-0 h-full w-60 bg-white border-r border-gray-100 flex flex-col z-30 shadow-sm">
   <!-- Logo -->
@@ -64,6 +65,7 @@ if ($__hr = \App\Services\HrLink::navItem()) { $navItems[] = $__hr + ['roles' =>
        <?= $isDisabled ? 'onclick="return false;"' : '' ?>>
       <span class="material-symbols-outlined text-[20px]"><?= $item['icon'] ?></span>
       <?= $item['label'] ?>
+      <?php if (!empty($item['badge'])): ?><span class="ml-auto min-w-[22px] h-[22px] px-1.5 rounded-full bg-rose-600 text-white text-[11px] font-bold flex items-center justify-center" aria-label="<?= (int) $item['badge'] ?> unread"><?= (int) $item['badge'] ?></span><?php endif; ?>
       <?php if ($isDisabled): ?>
       <span class="text-[9px] text-gray-300 ml-auto">Soon</span>
       <?php endif; ?>

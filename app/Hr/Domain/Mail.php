@@ -275,7 +275,6 @@ final class Mail
             'threads' => $threads,
             'announcements' => Announcements::forEmployee((int) $e->id),
             'unread' => self::staffUnread((int) $e->id),
-            'colleagues' => empty($c->auth['leaver']) && isset(Colleagues::directory()[(int) $e->id]),
         ];
     }
 
@@ -283,7 +282,7 @@ final class Mail
     {
         $db = self::db();
         $mail = $db->table('hr_threads')->where('employee_id', $employeeId)->whereColumn('staff_read_upto', '<', 'last_message_id')->count();
-        return $mail + Announcements::unreadFor($employeeId) + Colleagues::unread($employeeId);
+        return $mail + Announcements::unreadFor($employeeId);
     }
 
     /** What the compose screen needs: topics, leave types and balances, nights to fix, letters. */

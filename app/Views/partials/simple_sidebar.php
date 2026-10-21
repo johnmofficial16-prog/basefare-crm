@@ -25,6 +25,8 @@ $__simpleNav = [
     ['/simple/reports',   'description',   'Reports',   'simple_reports',   'Reports and records'],
     ['/admin/survey',     'psychology',    'Staff survey', 'staff_survey',  'What the team told us'],
 ];
+array_splice($__simpleNav, 1, 0, [['/messages', 'forum', 'Messages', 'messages', 'Write to anyone on the team']]);
+$__simpleUnread = \App\Services\ChatService::navItem()['badge'];
 if (\App\Services\HrLink::enabled()) { $__simpleNav[] = ['/hr', 'badge', 'Trio HR', 'trio_hr', 'Staff, letters and HR messages (opens in a new tab)']; }
 $__simpleName = $_SESSION['user_name'] ?? '';
 ?>
@@ -48,6 +50,10 @@ $__simpleName = $_SESSION['user_name'] ?? '';
        <?= $__sOn ? 'aria-current="page"' : '' ?>>
       <span class="material-symbols-outlined text-[22px]"><?= $__sIcon ?></span>
       <span class="flex-1"><?= $__sLabel ?></span>
+      <?php if ($__sKey === 'messages' && $__simpleUnread > 0): ?>
+      <span class="min-w-[24px] h-6 px-2 rounded-full text-[12px] font-bold flex items-center justify-center <?= $__sOn ? 'bg-white text-[#163274]' : 'bg-rose-600 text-white' ?>"
+            aria-label="<?= (int) $__simpleUnread ?> unread"><?= (int) $__simpleUnread ?></span>
+      <?php endif; ?>
       <?php if ($__sKey === 'simple_approvals' && $__simplePending > 0): ?>
       <span class="min-w-[24px] h-6 px-2 rounded-full text-[12px] font-bold flex items-center justify-center <?= $__sOn ? 'bg-white text-[#163274]' : 'bg-rose-600 text-white' ?>"
             aria-label="<?= (int) $__simplePending ?> waiting"><?= (int) $__simplePending ?></span>

@@ -8,7 +8,6 @@ import { skeleton, errorView, toast, busy } from '../core/ui.js';
 import * as f from '../core/fmt.js';
 import { go } from '../app.js';
 import { fileChips } from './mail.js';
-import { mailTabs } from './chats.js';
 
 const REQ_PILL = { pending: 'p-warn', approved: 'p-ok', partly_approved: 'p-ok', sent_back: 'p-bad', withdrawn: 'p-neutral' };
 
@@ -26,11 +25,7 @@ export async function list({ main, head }) {
   mount(main, skeleton('list'));
   let d;
   try { d = await api.get('/me/mail'); } catch (err) { mount(main, errorView(err)); return; }
-  let chats = null;
-  if (d.colleagues) { try { chats = await api.get('/me/chats', { background: true }); } catch {} } // only staff with a CRM login
-  const hrUnread = d.threads.filter((t) => t.unread).length + d.announcements.filter((a) => a.unread).length;
   mount(main, html`
-    ${chats ? mailTabs('hr', { hr: hrUnread, colleagues: chats.unread }) : ''}
     <a class="bigbtn" href="#/me/mail/new">${icon('edit')}Write to HR</a>
     ${d.announcements.length ? html`<div class="tile tile--list"><div class="listhead"><b>Announcements</b></div>
       ${d.announcements.map((a) => html`<a class="listrow mrow-p ${a.unread ? 'is-unread' : ''}" href="#/me/mail/a${a.id}">

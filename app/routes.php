@@ -15,6 +15,7 @@ use App\Controllers\AnalyticsController;
 use App\Controllers\ChargebackController;
 use App\Controllers\ReminderController;
 use App\Controllers\CallLogController;
+use App\Controllers\ChatController;
 use App\Controllers\NotificationController;
 use App\Controllers\AdminController;
 use App\Controllers\FareTermsController;
@@ -387,6 +388,22 @@ $app->group('/transactions', function ($group) {
 $app->group('/reminders', function ($group) {
     $group->get('',                      [ReminderController::class, 'index']);
     $group->post('/{id:[0-9]+}/cancel',  [ReminderController::class, 'cancel']);
+})
+->add(new AttendanceGateMiddleware())
+->add(new IpRestrictionMiddleware())
+->add(new AuthMiddleware());
+
+// ==========================================================================
+// Messages — staff write to each other inside the CRM (CRM users only).
+// Admins read every conversation at /messages/all (read-only, each open logged).
+// ==========================================================================
+$app->group('', function ($group) {
+    $group->get('/messages',                         [ChatController::class, 'index']);
+    $group->post('/messages',                        [ChatController::class, 'create']);
+    $group->post('/messages/{id:[0-9]+}/reply',      [ChatController::class, 'reply']);
+    $group->get('/messages/{id:[0-9]+}/poll',        [ChatController::class, 'poll']);
+    $group->get('/messages/all',                     [ChatController::class, 'all']);
+    $group->get('/messages/all/{id:[0-9]+}',         [ChatController::class, 'allThread']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
