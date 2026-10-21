@@ -30,7 +30,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
   <a href="/messages/all" class="text-sm font-semibold text-slate-500 hover:text-primary"><span class="material-symbols-outlined align-text-bottom text-[18px]">arrow_back</span> All conversations</a>
   <div class="mt-2 mb-5 pr-16">
     <h1 class="text-2xl font-headline font-extrabold text-primary tracking-tight"><?= $h($t['subject']) ?></h1>
-    <p class="text-sm text-on-surface-variant mt-0.5">Started <?= $h(date('j M Y', strtotime($t['started']))) ?> · read-only · opened <?= (int) $opens ?> <?= $opens === 1 ? 'time' : 'times' ?> by admins</p>
+    <p class="text-sm text-on-surface-variant mt-0.5"><?php if ($t['broadcast']): ?><b class="text-amber-800">Broadcast</b> from <?= $h($t['sender'] ?? 'an admin') ?> to <?= $h($t['audience']) ?> · <?php endif; ?>Started <?= $h(date('j M Y', strtotime($t['started']))) ?> · read-only · opened <?= (int) $opens ?> <?= $opens === 1 ? 'time' : 'times' ?> by admins</p>
   </div>
   <div class="grid grid-cols-[minmax(0,1fr)_320px] gap-5 items-start">
     <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden">
@@ -47,7 +47,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       </ol>
     </div>
     <div class="bg-white border border-slate-200 rounded-2xl p-5">
-      <h2 class="font-headline font-extrabold text-primary text-[17px] mb-3">In this conversation</h2>
+      <h2 class="font-headline font-extrabold text-primary text-[17px] mb-3"><?= $t['broadcast'] ? 'Sent to ' . count($t['members']) . ' people (sender included)' : 'In this conversation' ?></h2>
       <?php foreach ($t['members'] as $p): ?>
       <div class="flex items-center gap-3 py-2 border-t border-slate-100 first:border-0">
         <span class="msg-av msg-av--sm"><?= $h($p['initials']) ?></span>

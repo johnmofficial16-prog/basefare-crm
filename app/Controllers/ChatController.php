@@ -13,6 +13,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
  *
  *   GET  /messages                 inbox + the open conversation (?c=ID) or a new message (?new=1&to=ID)
  *   POST /messages                 start a conversation (AJAX)
+ *   POST /messages/broadcast       admin: one message to everyone or chosen groups (AJAX)
  *   POST /messages/{id}/reply      reply (AJAX)
  *   GET  /messages/{id}/poll       new messages since ?after=ID (AJAX, the open conversation polls)
  *   GET  /messages/all             admin: every conversation, searchable, read-only
@@ -50,11 +51,15 @@ class ChatController
                 $error = $e->getMessage();
             }
         }
-        $composing = !$open && (!empty($q['new']) || !empty($q['to']));
+        $broadcasting = !$open && !empty($q['broadcast']) && $this->isAdmin();
+        $composing = !$open && !$broadcasting && (!empty($q['new']) || !empty($q['to']));
         return $this->render($response, 'messages/index.php', [
             'threads'    => $this->chat->inbox($uid),
             'open'       => $open,
             'composing'  => $composing,
+            'broadcasting' => $broadcasting,
+            'groups'     => $broadcasting ? ['labels' => ChatService::GROUPS, 'counts' => $this->chat->groupCounts($uid)] : null,
+            'preSubject' => isset($q['subject']) ? mb_substr((string) $q['subject'], 0, 160) : '',
             'preTo'      => isset($q['to']) && ctype_digit((string) $q['to']) ? (int) $q['to'] : null,
             'colleagues' => $this->chat->colleagues($uid),
             'maxTo'      => ChatService::MAX_TO,
@@ -74,6 +79,24 @@ class ChatController
         try {
             $id = $this->chat->compose($this->uid(), (array) $to, $b['subject'] ?? null, $b['body'] ?? null, $this->ip());
             return $this->json($response, ['ok' => true, 'id' => $id]);
+        } catch (ChatError $e) {
+            return $this->json($response, ['ok' => false, 'error' => $e->getMessage(), 'field' => $e->field], $e->status);
+        }
+    }
+
+    public function broadcast(Request $request, Response $response): Response
+    {
+        if (!$this->isAdmin()) {
+            return $this->json($response, ['ok' => false, 'error' => 'Only admins can send a broadcast.'], 403);
+        }
+        $b = (array) $request->getParsedBody();
+        $groups = $b['groups'] ?? [];
+        if (is_string($groups)) {
+            $groups = array_filter(explode(',', $groups));
+        }
+        try {
+            [$id, $n] = $this->chat->broadcast($this->uid(), array_map('strval', (array) $groups), $b['subject'] ?? null, $b['body'] ?? null, $this->ip());
+            return $this->json($response, ['ok' => true, 'id' => $id, 'recipients' => $n]);
         } catch (ChatError $e) {
             return $this->json($response, ['ok' => false, 'error' => $e->getMessage(), 'field' => $e->field], $e->status);
         }

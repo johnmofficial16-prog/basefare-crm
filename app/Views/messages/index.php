@@ -5,6 +5,9 @@
  * @var array      $threads     inbox rows (ChatService::inbox)
  * @var array|null $open        the open conversation (ChatService::thread)
  * @var bool       $composing   show the new-message form
+ * @var bool       $broadcasting show the broadcast form (admins)
+ * @var array|null $groups      broadcast groups: labels + headcounts
+ * @var string     $preSubject
  * @var int|null   $preTo       colleague to pre-select in a new message
  * @var array      $colleagues  the "To" list (everyone else with an active CRM login)
  * @var int        $maxTo
@@ -62,6 +65,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <?php if ($isAdmin): ?>
       <a href="/messages/all" class="px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:text-primary">
         <span class="material-symbols-outlined align-text-bottom text-[18px]">manage_search</span> All conversations</a>
+      <a href="/messages?broadcast=1" class="px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 text-sm font-bold text-amber-800 hover:bg-amber-100">
+        <span class="material-symbols-outlined align-text-bottom text-[18px]">campaign</span> Broadcast</a>
       <?php endif; ?>
       <a href="/messages?new=1" class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold hover:bg-primary-container">
         <span class="material-symbols-outlined align-text-bottom text-[18px]">edit</span> New message</a>
@@ -84,7 +89,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <?php foreach ($threads as $t): ?>
         <a class="msg-item<?= $t['unread'] ? ' is-unread' : '' ?><?= $open && $open['id'] === $t['id'] ? ' is-open' : '' ?>"
            href="/messages?c=<?= $t['id'] ?>" data-search="<?= $h(mb_strtolower(implode(' ', $t['with']) . ' ' . $t['subject'] . ' ' . $t['preview'])) ?>">
-          <span class="msg-av<?= $t['group'] ? ' is-group' : '' ?>"><?= $t['group'] ? '<span class="material-symbols-outlined">group</span>' : $h($t['initials']) ?></span>
+          <span class="msg-av<?= $t['broadcast'] ? ' is-broadcast' : ($t['group'] ? ' is-group' : '') ?>"><?= $t['broadcast'] ? '<span class="material-symbols-outlined">campaign</span>' : ($t['group'] ? '<span class="material-symbols-outlined">group</span>' : $h($t['initials'])) ?></span>
           <span class="msg-item__t">
             <span class="msg-item__top"><b><?= $h(implode(', ', $t['with'])) ?></b><time><?= $h($when($t['last_at'])) ?></time></span>
             <span class="msg-item__s"><?= $h($t['subject']) ?></span>
@@ -104,8 +109,12 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         <?php $others = array_values(array_filter($open['members'], fn($m) => !$m['me'])); ?>
         <header class="msg-head">
           <div>
-            <h2><?= $h($open['subject']) ?></h2>
+            <h2><?php if ($open['broadcast']): ?><span class="msg-tag"><span class="material-symbols-outlined">campaign</span> Broadcast</span> <?php endif; ?><?= $h($open['subject']) ?></h2>
+            <?php if ($open['broadcast']): ?>
+            <p>From <?= $h($open['sender']['name'] ?? 'an admin') ?> to <?= $h($open['audience']) ?> · <?= (int) $open['recipients'] ?> <?= (int) $open['recipients'] === 1 ? 'person' : 'people' ?></p>
+            <?php else: ?>
             <p>With <?= $h(implode(', ', array_map(fn($m) => $m['name'] . ($m['active'] ? '' : ' (no longer active)'), $others))) ?></p>
+            <?php endif; ?>
           </div>
         </header>
         <ol class="msg-thread" id="msg-thread">
@@ -125,6 +134,11 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <button type="submit" class="msg-send" aria-label="Send"><span class="material-symbols-outlined">send</span></button>
           <p class="msg-err" id="msg-reply-err" role="alert"></p>
         </form>
+        <?php elseif ($open['broadcast'] && $open['sender'] && $open['sender']['active']): ?>
+        <div class="msg-closed"><a class="msg-btn" href="/messages?to=<?= (int) $open['sender']['id'] ?>&amp;subject=<?= rawurlencode('Re: ' . $open['subject']) ?>">
+          <span class="material-symbols-outlined">reply</span> Reply to <?= $h($open['sender']['first']) ?> privately</a></div>
+        <?php elseif ($open['broadcast']): ?>
+        <div class="msg-closed"><span class="material-symbols-outlined">campaign</span> A broadcast from an admin.</div>
         <?php else: ?>
         <div class="msg-closed"><span class="material-symbols-outlined">info</span> Nobody else in this conversation still has an active CRM login, so it is closed.</div>
         <?php endif; ?>
@@ -143,12 +157,33 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           </select>
           <p class="msg-err" id="msg-to-err" role="alert"></p>
           <label class="msg-label" for="msg-subject">Subject <span class="msg-opt">(optional)</span></label>
-          <input id="msg-subject" class="msg-input" maxlength="160">
+          <input id="msg-subject" class="msg-input" maxlength="160" value="<?= $h($preSubject) ?>">
           <label class="msg-label" for="msg-body">Message</label>
           <textarea id="msg-body" class="msg-input" rows="7" maxlength="4000" placeholder="Write in English, Hindi or Hinglish"></textarea>
           <p class="msg-err" id="msg-body-err" role="alert"></p>
           <div class="msg-actions"><a href="/messages" class="msg-btn-quiet">Cancel</a>
             <button type="submit" class="msg-btn"><span class="material-symbols-outlined">send</span> Send</button></div>
+        </form>
+      <?php elseif ($broadcasting): ?>
+        <header class="msg-head"><div><h2><span class="material-symbols-outlined align-text-bottom text-amber-700">campaign</span> Broadcast</h2><p>One message to everyone, or to the groups you pick. They can't reply into it; they can reply to you privately.</p></div></header>
+        <form class="msg-compose" id="msg-broadcast" novalidate>
+          <span class="msg-label">To</span>
+          <div class="msg-groups" role="group" aria-label="Who it goes to">
+            <?php $total = array_sum($groups['counts']); ?>
+            <label class="msg-group is-all"><input type="checkbox" name="groups" value="everyone" checked> <b>Everyone</b> <small><?= (int) $total ?> people</small></label>
+            <?php foreach ($groups['labels'] as $key => $label): ?>
+            <label class="msg-group"><input type="checkbox" name="groups" value="<?= $h($key) ?>"<?= $groups['counts'][$key] ? '' : ' disabled' ?>> <?= $h($label) ?> <small><?= (int) $groups['counts'][$key] ?></small></label>
+            <?php endforeach; ?>
+          </div>
+          <p class="msg-err" id="msg-groups-err" role="alert"></p>
+          <label class="msg-label" for="msg-bsubject">Subject</label>
+          <input id="msg-bsubject" class="msg-input" maxlength="160" placeholder="For example: Office closed on Diwali">
+          <p class="msg-err" id="msg-bsubject-err" role="alert"></p>
+          <label class="msg-label" for="msg-bbody">Message</label>
+          <textarea id="msg-bbody" class="msg-input" rows="8" maxlength="4000"></textarea>
+          <p class="msg-err" id="msg-bbody-err" role="alert"></p>
+          <div class="msg-actions"><a href="/messages" class="msg-btn-quiet">Cancel</a>
+            <button type="submit" class="msg-btn msg-btn--amber"><span class="material-symbols-outlined">campaign</span> <span id="msg-bsend">Send to everyone</span></button></div>
         </form>
       <?php else: ?>
         <div class="msg-blank"><span class="material-symbols-outlined">forum</span><b>Pick a conversation</b><p>Or start one with <a href="/messages?new=1">New message</a>.</p></div>

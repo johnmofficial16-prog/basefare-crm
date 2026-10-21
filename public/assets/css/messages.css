@@ -84,3 +84,18 @@ select.msg-input { height: 44px; }
 .msg-table tr:hover td { background: #f8fafc; }
 .msg-table small { display: block; color: #64748b; font-size: 13.5px; max-width: 560px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg-table a { color: #163274; font-weight: 700; }
+
+/* broadcasts */
+.msg-av.is-broadcast { background: #fef3c7; color: #b45309; }
+.msg-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 13px; font-weight: 800; vertical-align: middle; font-family: Inter, sans-serif; }
+.msg-tag .material-symbols-outlined { font-size: 16px; }
+.msg-closed .msg-btn { text-decoration: none; }
+.msg-groups { display: flex; flex-wrap: wrap; gap: 8px; }
+.msg-group { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: 999px; font-size: 15px; font-weight: 600; color: #334155; cursor: pointer; background: #fff; }
+.msg-group small { color: #64748b; font-weight: 600; font-size: 13px; }
+.msg-group:has(input:checked) { border-color: #163274; background: #eef2ff; color: #163274; }
+.msg-group:has(input:disabled) { opacity: .45; cursor: not-allowed; }
+.msg-group input { width: 18px; height: 18px; accent-color: #163274; }
+.msg-group.is-all:has(input:checked) { border-color: #b45309; background: #fffbeb; color: #92400e; }
+.msg-btn--amber { background: #b45309; }
+.msg-btn--amber:hover { background: #92400e; }

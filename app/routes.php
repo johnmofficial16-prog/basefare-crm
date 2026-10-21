@@ -400,6 +400,7 @@ $app->group('/reminders', function ($group) {
 $app->group('', function ($group) {
     $group->get('/messages',                         [ChatController::class, 'index']);
     $group->post('/messages',                        [ChatController::class, 'create']);
+    $group->post('/messages/broadcast',              [ChatController::class, 'broadcast']);
     $group->post('/messages/{id:[0-9]+}/reply',      [ChatController::class, 'reply']);
     $group->get('/messages/{id:[0-9]+}/poll',        [ChatController::class, 'poll']);
     $group->get('/messages/all',                     [ChatController::class, 'all']);

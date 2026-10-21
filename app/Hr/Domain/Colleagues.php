@@ -61,7 +61,9 @@ final class Colleagues
             'items' => $rows->map(fn($t) => [
                 'id' => (int) $t->id, 'subject' => $t->subject, 'preview' => $t->last_preview, 'last_at' => $t->last_at,
                 'messages' => (int) ($counts[$t->id] ?? 0),
-                'members' => array_values(array_map(fn($m) => $m['name'], $members[(int) $t->id] ?? [])),
+                'members' => ($t->kind ?? 'chat') === 'broadcast'
+                    ? ['Broadcast from ' . (($members[(int) $t->id][(int) $t->created_by] ?? null)['name'] ?? 'an admin') . ' to ' . $t->audience]
+                    : array_values(array_map(fn($m) => $m['name'], $members[(int) $t->id] ?? [])),
             ])->all(),
             'total' => (int) $db->table('chat_threads')->count(),
         ];

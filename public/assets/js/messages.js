@@ -95,6 +95,47 @@
     document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
   }
 
+  // ---- a broadcast (admins) ---------------------------------------------------------------
+  const bc = $('#msg-broadcast');
+  if (bc) {
+    const boxes = () => [...bc.querySelectorAll('input[name="groups"]')];
+    const all = bc.querySelector('input[value="everyone"]');
+    const label = () => {
+      const picked = boxes().filter((b) => b.checked && b.value !== 'everyone');
+      $('#msg-bsend').textContent = all.checked || !picked.length ? 'Send to everyone'
+        : 'Send to ' + picked.map((b) => b.parentElement.textContent.replace(/\s*\d+\s*$/, '').trim()).join(', ');
+    };
+    bc.addEventListener('change', (e) => {
+      const b = e.target.closest('input[name="groups"]');
+      if (!b) return;
+      if (b === all && all.checked) boxes().forEach((x) => { if (x !== all) x.checked = false; });
+      if (b !== all && b.checked) all.checked = false;
+      if (!boxes().some((x) => x.checked)) all.checked = true;
+      $('#msg-groups-err').textContent = '';
+      label();
+    });
+    label();
+    bc.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      ['#msg-groups-err', '#msg-bsubject-err', '#msg-bbody-err'].forEach((s) => { $(s).textContent = ''; });
+      const subject = $('#msg-bsubject').value.trim();
+      const body = $('#msg-bbody').value;
+      if (!subject) { $('#msg-bsubject-err').textContent = 'Give it a subject.'; $('#msg-bsubject').focus(); return; }
+      if (!body.trim()) { $('#msg-bbody-err').textContent = 'Write the message.'; $('#msg-bbody').focus(); return; }
+      const groups = boxes().filter((b) => b.checked).map((b) => b.value);
+      const btn = bc.querySelector('button[type="submit"]');
+      if (!confirm(`${$('#msg-bsend').textContent}?\n\nEveryone it goes to gets it in Messages and a bell notice.`)) return;
+      btn.disabled = true;
+      try {
+        const r = await post('/messages/broadcast', { groups, subject, body });
+        if (r.ok) { location.href = `/messages?c=${r.id}`; return; }
+        $(r.field === 'to' ? '#msg-groups-err' : r.field === 'subject' ? '#msg-bsubject-err' : '#msg-bbody-err').textContent = r.error;
+      } catch (ex) { $('#msg-bbody-err').textContent = ex.message; }
+      finally { btn.disabled = false; }
+    });
+    $('#msg-bsubject').focus();
+  }
+
   // ---- a new message ------------------------------------------------------------------
   const compose = $('#msg-compose');
   if (compose) {

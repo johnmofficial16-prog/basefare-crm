@@ -20,6 +20,9 @@ use Illuminate\Database\Capsule\Manager as DB;
 class ChatService
 {
     public const BODY_MAX = 4000;
+    /** Who a broadcast can go to (CRM role => plural label). */
+    public const GROUPS = ['agent' => 'Agents', 'csa' => 'Customer support', 'supervisor' => 'Team leaders', 'manager' => 'Managers', 'admin' => 'Admins'];
+    private const MAX_BROADCASTS_PER_HOUR = 10;
     public const MAX_TO = 10;
     private const MAX_PER_HOUR = 60;
     private const MAX_NEW_PER_HOUR = 20;
@@ -115,11 +118,16 @@ class ChatService
         foreach ($rows as $t) {
             $others = array_values(array_filter($members[(int) $t->id] ?? [], fn($m) => (int) $m->id !== $userId));
             $last = $members[(int) $t->id][(int) $t->last_sender] ?? null;
+            $broadcast = ($t->kind ?? 'chat') === 'broadcast';
+            $by = $members[(int) $t->id][(int) $t->created_by] ?? null;
             $out[] = [
                 'id' => (int) $t->id, 'subject' => $t->subject, 'preview' => $t->last_preview, 'last_at' => $t->last_at,
                 'from_me' => (int) $t->last_sender === $userId, 'last_by' => $last ? self::first($last->name) : null,
-                'with' => array_map(fn($m) => self::first($m->name), $others),
-                'initials' => $others ? self::initials($others[0]->name) : '?', 'group' => count($others) > 1,
+                'with' => $broadcast
+                    ? ['Broadcast' . ((int) $t->created_by === $userId ? ' to ' . $t->audience : ($by ? ' from ' . self::first($by->name) : ''))]
+                    : array_map(fn($m) => self::first($m->name), $others),
+                'initials' => $others ? self::initials($others[0]->name) : '?', 'group' => !$broadcast && count($others) > 1,
+                'broadcast' => $broadcast,
                 'unread' => (int) $t->read_upto < (int) $t->last_message_id,
             ];
         }
@@ -155,11 +163,18 @@ class ChatService
         DB::table('chat_members')->where('thread_id', $id)->where('user_id', $userId)->update(['read_upto' => (int) $t->last_message_id]);
         $members = $this->members([$id])[$id] ?? [];
         $dir = $this->directory();
+        $broadcast = ($t->kind ?? 'chat') === 'broadcast';
+        $by = $members[(int) $t->created_by] ?? null;
         return [
-            'id' => (int) $t->id, 'subject' => $t->subject,
-            'members' => array_values(array_map(fn($m) => ['id' => (int) $m->id, 'name' => $m->name, 'me' => (int) $m->id === $userId,
+            'id' => (int) $t->id, 'subject' => $t->subject, 'broadcast' => $broadcast, 'audience' => $t->audience ?? null,
+            'members' => $broadcast ? [] : array_values(array_map(fn($m) => ['id' => (int) $m->id, 'name' => $m->name, 'me' => (int) $m->id === $userId,
                 'active' => isset($dir[(int) $m->id])], $members)),
-            'can_reply' => (bool) array_filter($members, fn($m) => (int) $m->id !== $userId && isset($dir[(int) $m->id])),
+            'recipients' => $broadcast ? count($members) - 1 : null,
+            'sender' => $by ? ['id' => (int) $by->id, 'name' => $by->name, 'first' => self::first($by->name), 'active' => isset($dir[(int) $by->id])] : null,
+            // In a broadcast only admins write; everyone else replies privately to the sender.
+            'can_reply' => $broadcast
+                ? ($dir[$userId]->role ?? '') === 'admin'
+                : (bool) array_filter($members, fn($m) => (int) $m->id !== $userId && isset($dir[(int) $m->id])),
             'messages' => $this->messages($id, $userId),
         ];
     }
@@ -286,6 +301,9 @@ class ChatService
         if (!isset($dir[$userId])) {
             throw new ChatError('Your CRM login is not active.', 403);
         }
+        if (($t->kind ?? 'chat') === 'broadcast' && ($dir[$userId]->role ?? '') !== 'admin') {
+            throw new ChatError('Only admins can write in a broadcast. Reply to the sender privately instead.', 403);
+        }
         $body = $this->cleanBody($body);
         $this->throttle($userId, false);
         $others = array_filter($this->members([$id])[$id] ?? [], fn($m) => (int) $m->id !== $userId && isset($dir[(int) $m->id]));
@@ -296,6 +314,69 @@ class ChatService
         $msgId = $this->post($id, $userId, $body, $ip, date('Y-m-d H:i:s'));
         $this->notifyOthers($id, $userId, $t->subject, $prev);
         return $msgId;
+    }
+
+    /** Headcount per group, for the broadcast form. */
+    public function groupCounts(int $userId): array
+    {
+        $out = array_fill_keys(array_keys(self::GROUPS), 0);
+        foreach ($this->directory() as $id => $u) {
+            if ($id !== $userId && isset($out[$u->role])) {
+                $out[$u->role]++;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * An admin's message to everyone, or to chosen groups (roles). One
+     * conversation; only admins can write in it. Returns [id, recipients].
+     */
+    public function broadcast(int $userId, array $groups, ?string $subject, ?string $body, string $ip): array
+    {
+        $dir = $this->directory();
+        if (($dir[$userId]->role ?? '') !== 'admin') {
+            throw new ChatError('Only admins can send a broadcast.', 403);
+        }
+        $everyone = in_array('everyone', $groups, true);
+        $groups = $everyone ? array_keys(self::GROUPS) : array_values(array_intersect(array_keys(self::GROUPS), $groups));
+        if (!$groups) {
+            throw new ChatError('Pick who it goes to: everyone, or one or more groups.', 422, 'to');
+        }
+        $subject = trim(mb_substr((string) $subject, 0, 160));
+        if ($subject === '') {
+            throw new ChatError('Give the broadcast a subject, so people know what it is about.', 422, 'subject');
+        }
+        $body = $this->cleanBody($body);
+        $to = [];
+        foreach ($dir as $id => $u) {
+            if ($id !== $userId && in_array($u->role, $groups, true)) {
+                $to[] = $id;
+            }
+        }
+        if (!$to) {
+            throw new ChatError('Nobody is in the groups you picked.', 422, 'to');
+        }
+        $since = date('Y-m-d H:i:s', time() - 3600);
+        if (DB::table('chat_threads')->where('created_by', $userId)->where('kind', 'broadcast')->where('created_at', '>=', $since)->count() >= self::MAX_BROADCASTS_PER_HOUR) {
+            throw new ChatError('That is a lot of broadcasts in an hour. Please wait a little.', 429);
+        }
+        $audience = $everyone ? 'Everyone' : implode(', ', array_map(fn($g) => self::GROUPS[$g], $groups));
+        $now = date('Y-m-d H:i:s');
+        $id = DB::connection()->transaction(function () use ($userId, $to, $subject, $body, $ip, $now, $audience) {
+            $id = (int) DB::table('chat_threads')->insertGetId([
+                'subject' => $subject, 'kind' => 'broadcast', 'audience' => mb_substr($audience, 0, 80), 'created_by' => $userId,
+                'last_at' => $now, 'created_at' => $now, 'updated_at' => $now,
+            ]);
+            $rows = array_map(fn($uid) => ['thread_id' => $id, 'user_id' => $uid, 'read_upto' => 0, 'added_at' => $now], array_merge([$userId], $to));
+            foreach (array_chunk($rows, 200) as $chunk) {
+                DB::table('chat_members')->insert($chunk);
+            }
+            $this->post($id, $userId, $body, $ip, $now);
+            return $id;
+        });
+        $this->notifyOthers($id, $userId, $subject, 0, 'Broadcast from ');
+        return [$id, count($to)];
     }
 
     private function post(int $threadId, int $userId, string $body, string $ip, string $now): int
@@ -311,18 +392,22 @@ class ChatService
     }
 
     /** One bell notice per person per run of unread messages, not one per message. */
-    private function notifyOthers(int $threadId, int $userId, string $subject, int $prevLastId): void
+    private function notifyOthers(int $threadId, int $userId, string $subject, int $prevLastId, string $prefix = 'Message from '): void
     {
         try {
             $from = (string) DB::table('users')->where('id', $userId)->value('name');
+            $rows = [];
             foreach (DB::table('chat_members')->where('thread_id', $threadId)->where('user_id', '!=', $userId)->get() as $m) {
                 if ((int) $m->read_upto >= $prevLastId) {
-                    DB::table('notifications')->insert([
+                    $rows[] = [
                         'user_id' => (int) $m->user_id, 'type' => 'message',
-                        'title' => mb_substr('Message from ' . self::first($from), 0, 200), 'body' => mb_substr($subject, 0, 1000),
+                        'title' => mb_substr($prefix . self::first($from), 0, 200), 'body' => mb_substr($subject, 0, 1000),
                         'link' => '/messages?c=' . $threadId, 'created_at' => date('Y-m-d H:i:s'),
-                    ]);
+                    ];
                 }
+            }
+            foreach (array_chunk($rows, 200) as $chunk) {
+                DB::table('notifications')->insert($chunk);
             }
         } catch (\Throwable $e) {
             error_log('[messages] bell notice failed: ' . $e->getMessage()); // the message itself is saved either way
@@ -349,7 +434,10 @@ class ChatService
             'items' => $rows->map(fn($t) => [
                 'id' => (int) $t->id, 'subject' => $t->subject, 'preview' => $t->last_preview, 'last_at' => $t->last_at,
                 'messages' => (int) ($counts[$t->id] ?? 0),
-                'members' => array_values(array_map(fn($m) => $m->name, $members[(int) $t->id] ?? [])),
+                'broadcast' => ($t->kind ?? 'chat') === 'broadcast',
+                'members' => ($t->kind ?? 'chat') === 'broadcast'
+                    ? ['Broadcast from ' . (($members[(int) $t->id][(int) $t->created_by] ?? null)?->name ?? 'an admin') . ' to ' . $t->audience]
+                    : array_values(array_map(fn($m) => $m->name, $members[(int) $t->id] ?? [])),
             ])->all(),
             'total' => (int) DB::table('chat_threads')->count(),
         ];
@@ -364,6 +452,8 @@ class ChatService
         $members = $this->members([$id])[$id] ?? [];
         return [
             'id' => (int) $t->id, 'subject' => $t->subject, 'started' => $t->created_at,
+            'broadcast' => ($t->kind ?? 'chat') === 'broadcast', 'audience' => $t->audience ?? null,
+            'sender' => ($s = $members[(int) $t->created_by] ?? null) ? $s->name : null,
             'members' => array_values(array_map(fn($m) => ['id' => (int) $m->id, 'name' => $m->name, 'role' => $m->role,
                 'initials' => self::initials($m->name)], $members)),
             'messages' => $this->messages($id, null),
