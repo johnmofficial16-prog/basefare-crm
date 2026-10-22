@@ -20,6 +20,7 @@ $navItems = [
     ['href' => '/transactions',             'icon' => 'payments',       'label' => 'Transactions',   'key' => 'transactions'],
     ['href' => '/reminders',                'icon' => 'notifications_active', 'label' => 'Reminders', 'key' => 'reminders'],
     ['href' => '/etickets',                 'icon' => 'airplane_ticket', 'label' => 'E-Tickets', 'key' => 'etickets'],
+    ['href' => '/vouchers',                 'icon' => 'local_activity',  'label' => 'Vouchers',  'key' => 'vouchers'],
     ['href' => '/emails',                   'icon' => 'forward_to_inbox','label' => 'Customer Emails','key' => 'emails'],
     ['href' => '/invoices',                 'icon' => 'request_quote',  'label' => 'Invoices',      'key' => 'invoices'],
     ['href' => '/admin/fare-terms',         'icon' => 'gavel',          'label' => 'Fare Terms',    'key' => 'fare_terms'],

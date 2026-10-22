@@ -207,7 +207,7 @@ $app->group('/letters', function ($group) {
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN]));
 
-// Travel Vouchers (admin; team leaders make their own and see their team's; only admins delete)
+// Travel Vouchers (admin; managers and team leaders make their own and see their team's; only admins delete)
 $app->group('/vouchers', function ($group) {
     $group->get('', [VoucherController::class, 'index']);
     $group->get('/maker', [VoucherController::class, 'maker']);
@@ -217,7 +217,7 @@ $app->group('/vouchers', function ($group) {
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
-->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_SUPERVISOR]));
+->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR]));
 
 // ==========================================================================
 // Centre Analytics (admin only, behind AttendanceGate)

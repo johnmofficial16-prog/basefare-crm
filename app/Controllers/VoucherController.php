@@ -9,12 +9,13 @@ use App\Models\TravelVoucher;
 
 /**
  * Travel vouchers. Admins: all vouchers. Team leaders (John, 22 Oct): make
- * vouchers, and see the ones they or their agents made. Managers have been
- * read-only since May (100d214) and stay out. Only admins delete.
+ * vouchers, and see the ones they or their agents made. Managers (John, 22 Oct,
+ * reversing May's 100d214 for vouchers only): make vouchers and see their whole
+ * team's (team leaders and everyone under them). Only admins delete.
  */
 class VoucherController
 {
-    private const MAKERS = [User::ROLE_ADMIN, User::ROLE_SUPERVISOR];
+    private const MAKERS = [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR];
 
     /** null = every voucher (admin); otherwise the creators whose vouchers this user may see. */
     private function creatorScope(): ?array
