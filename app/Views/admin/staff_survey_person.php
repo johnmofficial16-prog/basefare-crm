@@ -32,7 +32,7 @@ $riskStyle = [
 [$riskLabel, $riskClass] = $riskStyle[$p['risk']['level']];
 $t = $p['taking'];
 $mins = fn($s) => $s === null ? null : ($s < 60 ? $s . ' sec' : floor($s / 60) . ' min' . ($s % 60 ? ' ' . ($s % 60) . ' sec' : ''));
-$seller = in_array($r['role'], ['agent', 'csa'], true);
+$seller = in_array($r['role'], ['agent', 'csa', 'supervisor'], true);
 $money = fn($v) => $v === null ? '—' : ($v < 0 ? '−' : '') . number_format(abs($v), 0);
 $num = fn($v, $d = 0) => $v === null ? '—' : number_format($v, $d);
 $scaleTone = fn($v) => $v >= 4 ? '#047857' : ($v >= 3 ? '#d97706' : '#dc2626');

@@ -14,6 +14,8 @@ use App\Models\User;
 $txn         = $txn ?? null;
 $isAdmin     = $isAdmin ?? false;
 $userRole    = $userRole ?? 'agent';
+// Card reveal and proof of sale are admin/manager only on the server; team leaders don't get the buttons.
+$canSeeCards = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_MANAGER], true);
 $flashSuccess = $flashSuccess ?? null;
 $flashError   = $flashError ?? null;
 [$statusLabel, $statusClass] = $txn->statusBadge();
@@ -590,7 +592,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             </div>
             <div class="text-right flex items-center gap-2">
               <p class="font-mono font-bold text-sm"><?= $txn->currency ?> <?= number_format($card->amount, 2) ?></p>
-              <?php if ($isAdmin): ?>
+              <?php if ($canSeeCards): ?>
               <button type="button" onclick="toggleCardReveal(<?= $card->id ?>)" id="eye-btn-<?= $card->id ?>"
                 class="p-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition-colors"
                 title="Reveal / hide full card details">
@@ -628,7 +630,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             </div>
             <div class="text-right">
               <p class="font-mono font-bold text-sm"><?= $txn->currency ?> <?= number_format($txn->total_amount, 2) ?></p>
-              <?php if ($isAdmin): ?>
+              <?php if ($canSeeCards): ?>
               <a href="/acceptance/<?= $acc->id ?>" class="text-[10px] text-amber-600 hover:underline">Reveal full card →</a>
               <?php endif; ?>
             </div>
@@ -648,7 +650,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <?php endforeach; ?>
           <p class="text-[10px] text-slate-400 mt-1 italic">
             Full card details are secured in the Acceptance record.
-            <?php if ($isAdmin): ?>
+            <?php if ($canSeeCards): ?>
             <a href="/acceptance/<?= $acc->id ?>" class="text-blue-500 underline">View Acceptance #<?= $acc->id ?></a> to retrieve.
             <?php else: ?>
             Contact an admin to retrieve full card details.
@@ -1003,7 +1005,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           </h2>
         </div>
         <div class="p-6">
-          <?php if ($isAdmin): ?>
+          <?php if ($canSeeCards): ?>
           <div class="flex flex-wrap gap-3">
             <?php foreach ($proofPaths as $idx => $path): ?>
             <a href="/transactions/<?= $txn->id ?>/proof?index=<?= $idx ?>" target="_blank"

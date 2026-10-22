@@ -229,7 +229,7 @@ tailwind.config = {
               <th class="px-5 py-3">Amount</th>
               <th class="px-5 py-3">Status</th>
               <th class="px-5 py-3">Email</th>
-              <?php if (in_array($userRole, ['admin', 'manager'])): ?>
+              <?php if (in_array($userRole, ['admin', 'manager', 'supervisor'])): ?>
               <th class="px-5 py-3">Agent</th>
               <?php endif; ?>
               <th class="px-5 py-3 text-right">Actions</th>
@@ -304,7 +304,7 @@ tailwind.config = {
                 <div class="text-[10px] text-slate-400 mt-0.5"><?= $row->email_attempts ?> attempts</div>
                 <?php endif; ?>
               </td>
-              <?php if (in_array($userRole, ['admin', 'manager'])): ?>
+              <?php if (in_array($userRole, ['admin', 'manager', 'supervisor'])): ?>
               <td class="px-5 py-3.5 text-xs text-slate-500">
                 <?= htmlspecialchars($row->agent->name ?? '—') ?>
               </td>

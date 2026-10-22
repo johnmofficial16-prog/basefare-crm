@@ -36,8 +36,8 @@ $dayOfWeek = date('l', strtotime($tomorrow));
 
 echo "[Shift Gap Alert] Checking for missing shifts on {$tomorrow} ({$dayOfWeek})\n";
 
-// Get all active agents
-$agents = \App\Models\User::where('role', \App\Models\User::ROLE_AGENT)
+// Get all active agents and team leaders (they clock in against a shift too)
+$agents = \App\Models\User::whereIn('role', [\App\Models\User::ROLE_AGENT, \App\Models\User::ROLE_SUPERVISOR])
     ->where('status', \App\Models\User::STATUS_ACTIVE)
     ->whereNull('deleted_at')
     ->get();

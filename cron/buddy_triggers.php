@@ -274,7 +274,7 @@ foreach ($departing as $t) {
 // Dedupe key includes today's date → at most one per agent per day, and it
 // naturally re-arms after a sale (the rule stops matching).
 $agents = Capsule::table('users')
-    ->where('role', 'agent')->where('status', 'active')->whereNull('deleted_at')
+    ->whereIn('role', ['agent', 'supervisor'])->where('status', 'active')->whereNull('deleted_at') // team leaders sell too
     ->pluck('id');
 
 foreach ($agents as $agentId) {
@@ -364,7 +364,7 @@ $wrapAfter = (float) ($_ENV['BUDDY_WRAP_AFTER_HOURS'] ?? 13);
 
 $wrapEligible = Capsule::table('attendance_sessions AS s')
     ->join('users AS u', 'u.id', '=', 's.user_id')
-    ->where('u.role', 'agent')->where('u.status', 'active')->whereNull('u.deleted_at')
+    ->whereIn('u.role', ['agent', 'supervisor'])->where('u.status', 'active')->whereNull('u.deleted_at')
     ->whereNull('s.clock_out')
     ->where('s.clock_in', '<=', date('Y-m-d H:i:s', (int) (time() - $wrapAfter * 3600)))
     ->get(['s.user_id', 's.clock_in']);

@@ -18,7 +18,7 @@ $filters = $filters ?? [];
 $userId  = $_SESSION['user_id'];
 $userRole = $_SESSION['role'] ?? 'agent';
 $isAdmin = ($userRole === 'admin');
-$isManager = ($userRole === 'manager');
+$isManager = in_array($userRole, ['manager', 'supervisor'], true); // managers and team leaders: their team's records, with the Agent column
 // Universal search: agents can search all records (read-only). Only used for display column logic.
 // $crossAgentSearch is computed in the controller and is true only when the term was
 // specific enough to actually widen the scope (see TransactionController::isTargetedLookup),

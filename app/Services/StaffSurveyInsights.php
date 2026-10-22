@@ -306,7 +306,7 @@ final class StaffSurveyInsights
             foreach (['bookings', 'net', 'days', 'late', 'flagged', 'calls'] as $m) {
                 $compare[$m] = $vs($work[$m] ?? null, $avg[$m] ?? null);
             }
-            $seller = in_array($work['role'], [User::ROLE_AGENT, User::ROLE_CSA], true);
+            $seller = in_array($work['role'], [User::ROLE_AGENT, User::ROLE_CSA, User::ROLE_SUPERVISOR], true);
             $strong = $seller && ($compare['net'] === 'above' || $compare['bookings'] === 'above');
             if ($strong && $level !== 'low') {
                 $tag('red', 'Top performer at risk', 'Above-average results in the last ' . self::WINDOW_DAYS . ' days, and the answers show a ' . $level . ' risk of leaving.');

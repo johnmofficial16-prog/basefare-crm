@@ -10,7 +10,7 @@
  * @var ?array  $adminCounts     Attendance board totals (admin/manager/supervisor)
  * @var ?array  $dashboardData   Full business data (admin/manager only)
  * @var ?array  $supervisorData  Team-scoped data (supervisor only)
- * @var ?array  $agentData       Personal KPIs (agent only)
+ * @var ?array  $agentData       Personal KPIs (agents, and team leaders' own sales)
  */
 $userName = $_SESSION['user_name'] ?? 'User';
 $role     = $_SESSION['role']     ?? 'agent';
@@ -610,7 +610,10 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
   <!-- ═══════════════════════════════════════════════════════════════════════ -->
   <!-- AGENT — Personal performance KPIs -->
   <!-- ═══════════════════════════════════════════════════════════════════════ -->
-  <?php if ($isAgent && !empty($ad)): ?>
+  <?php if (($isAgent || $isSupervisor) && !empty($ad)): ?>
+  <?php if ($isSupervisor): ?>
+  <h2 class="font-headline font-extrabold text-slate-900 text-lg mb-3 flex items-center gap-2"><span class="material-symbols-outlined text-primary">person</span> My own numbers</h2>
+  <?php endif; ?>
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
     <div class="kpi-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
       <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">My Txns Today</p>
@@ -650,8 +653,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     </div>
   </div>
 
-  <!-- My Recent Records -->
-  <?php if (!$ad['recent_txns']->isEmpty()): ?>
+  <!-- My Recent Records (team leaders already see theirs in Team Recent Transactions) -->
+  <?php if ($isAgent && !$ad['recent_txns']->isEmpty()): ?>
   <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden mb-8">
     <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
       <div class="flex items-center gap-2"><span class="material-symbols-outlined text-primary text-xl">history</span><h2 class="font-headline font-extrabold text-slate-900">My Recent Transactions</h2></div>

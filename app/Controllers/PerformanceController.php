@@ -180,7 +180,7 @@ class PerformanceController
      */
     private function agentNetTotals(?Carbon $start, ?Carbon $end): array
     {
-        $agentIds = User::where('role', User::ROLE_AGENT)
+        $agentIds = User::whereIn('role', [User::ROLE_AGENT, User::ROLE_SUPERVISOR]) // team leaders sell too
             ->where('status', User::STATUS_ACTIVE)
             ->whereNull('deleted_at')
             ->pluck('id')->all();

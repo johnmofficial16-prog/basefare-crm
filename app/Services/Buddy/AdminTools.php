@@ -144,7 +144,7 @@ class AdminTools
             return [null, ['error' => 'Missing agent parameter.']];
         }
         $q = DB::table('users')->where('status', 'active')->whereNull('deleted_at')
-            ->whereIn('role', ['agent', 'manager', 'csa']);
+            ->whereIn('role', ['agent', 'supervisor', 'manager', 'csa']);
         $user = ctype_digit($ref)
             ? (clone $q)->where('id', (int) $ref)->first(['id', 'name', 'role'])
             : (clone $q)->where('name', $ref)->first(['id', 'name', 'role']);
@@ -187,7 +187,7 @@ class AdminTools
     private static function listTeam(): array
     {
         return ['team' => DB::table('users')->where('status', 'active')->whereNull('deleted_at')
-            ->whereIn('role', ['agent', 'manager', 'csa'])
+            ->whereIn('role', ['agent', 'supervisor', 'manager', 'csa'])
             ->orderBy('role')->orderBy('name')
             ->get(['id', 'name', 'role'])
             ->map(fn($u) => ['id' => (int) $u->id, 'name' => $u->name, 'role' => $u->role])->all()];
@@ -283,7 +283,7 @@ class AdminTools
             case 'dry_spell':
                 $out = [];
                 foreach (self::listTeam()['team'] as $m) {
-                    if ($m['role'] !== 'agent') {
+                    if (!in_array($m['role'], ['agent', 'supervisor'], true)) {
                         continue;
                     }
                     $last = DB::table('transactions')->where('agent_id', $m['id'])->where('status', 'approved')->max('created_at');
