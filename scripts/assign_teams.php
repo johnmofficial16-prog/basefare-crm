@@ -81,9 +81,13 @@ foreach ($argv as $arg) {
 }
 
 $people = [];
-$res = $db->query("SELECT id, name, email, role, reports_to_id FROM users WHERE status = 'active' AND deleted_at IS NULL");
+$everyone = [];   // incl. inactive/suspended, only to explain a name that doesn't match
+$res = $db->query("SELECT id, name, email, role, status, reports_to_id FROM users WHERE deleted_at IS NULL");
 while ($r = $res->fetch_assoc()) {
-    $people[(int) $r['id']] = $r;
+    $everyone[(int) $r['id']] = $r;
+    if ($r['status'] === 'active') {
+        $people[(int) $r['id']] = $r;
+    }
 }
 $norm = fn(string $s): string => mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $s)));
 $words = fn(string $s): array => preg_split('/[^\p{L}\p{N}]+/u', $norm($s), -1, PREG_SPLIT_NO_EMPTY) ?: [];
@@ -91,7 +95,7 @@ $words = fn(string $s): array => preg_split('/[^\p{L}\p{N}]+/u', $norm($s), -1, 
 $claimed = [];
 $problems = [];
 /** One person for a name, among the given roles. */
-$find = function (string $name, array $roles) use (&$people, &$claimed, &$problems, $picks, $norm, $words): ?int {
+$find = function (string $name, array $roles) use (&$people, &$everyone, &$claimed, &$problems, $picks, $norm, $words): ?int {
     $key = $norm($name);
     if (isset($picks[$key])) {
         $id = $picks[$key];
@@ -112,9 +116,29 @@ $find = function (string $name, array $roles) use (&$people, &$claimed, &$proble
         $id = (int) array_key_first($hits);
         return $claimed[$id] = $id;
     }
-    $list = $hits ?: array_filter($pool, fn($p) => str_contains($norm($p['name']), $want[0] ?? '~'));
-    $problems[] = (count($hits) > 1 ? "\"{$name}\" matches more than one person:" : "\"{$name}\" matches nobody (" . implode('/', $roles) . ').' . ($list ? ' Similar names:' : ''))
-        . implode('', array_map(fn($p) => "\n      #{$p['id']}  {$p['name']}  <{$p['email']}>  ({$p['role']})", $list));
+    if ($hits) {
+        $problems[] = "\"{$name}\" matches more than one person:"
+            . implode('', array_map(fn($p) => "\n      #{$p['id']}  {$p['name']}  <{$p['email']}>  ({$p['role']})", $hits));
+        return null;
+    }
+    // Nobody: show near spellings (Shawn / Sean / Shaun), any role, including inactive accounts.
+    $close = function (string $a, string $b): bool {
+        return $a === $b || str_contains($b, $a) || str_contains($a, $b)
+            || (strlen($a) >= 3 && strlen($b) >= 3 && (levenshtein($a, $b) <= 2 || metaphone($a) === metaphone($b)));
+    };
+    $list = array_filter($everyone, function ($p) use ($want, $words, $close) {
+        foreach ($words($p['name']) as $w) {
+            foreach ($want as $x) {
+                if ($close($x, $w)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    });
+    $problems[] = "\"{$name}\" matches no active " . implode(' or ', $roles) . '.'
+        . ($list ? ' Close names in the CRM:' : ' Nobody with a similar name either (check the spelling in Users).')
+        . implode('', array_map(fn($p) => "\n      #{$p['id']}  {$p['name']}  <{$p['email']}>  ({$p['role']}" . ($p['status'] !== 'active' ? ', ' . strtoupper($p['status']) : '') . ')', $list));
     return null;
 };
 
