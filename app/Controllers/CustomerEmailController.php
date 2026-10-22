@@ -47,9 +47,9 @@ class CustomerEmailController
         $page    = max(1, (int) ($params['page'] ?? 1));
         $filters = ['status' => $params['status'] ?? '', 'search' => $params['search'] ?? ''];
 
-        if ($role === User::ROLE_MANAGER) {
-            $result = $this->service->listThreads($page, 25, $filters, null, $this->getManagerTeamIds($userId));
-        } elseif (in_array($role, [User::ROLE_ADMIN, User::ROLE_SUPERVISOR])) {
+        if ($role === User::ROLE_MANAGER || $role === User::ROLE_SUPERVISOR) {
+            $result = $this->service->listThreads($page, 25, $filters, null, $this->teamAndSelf($userId));
+        } elseif ($role === User::ROLE_ADMIN) {
             $result = $this->service->listThreads($page, 25, $filters, null);
         } else {
             $result = $this->service->listThreads($page, 25, $filters, $userId);
@@ -102,11 +102,11 @@ class CustomerEmailController
             ->orderByDesc('created_at')
             ->limit(100);
 
-        // Agents see only their own bookings; managers their team; admins all.
+        // Agents see only their own bookings; managers and team leaders their team's and their own; admins all.
         if ($role === User::ROLE_AGENT) {
             $query->where('agent_id', $userId);
-        } elseif ($role === User::ROLE_MANAGER) {
-            $query->whereIn('agent_id', $this->getManagerTeamIds($userId));
+        } elseif ($role === User::ROLE_MANAGER || $role === User::ROLE_SUPERVISOR) {
+            $query->whereIn('agent_id', $this->teamAndSelf($userId));
         }
 
         $options = $query->get(['id', 'customer_name', 'customer_email', 'pnr', 'type'])
@@ -536,10 +536,9 @@ class CustomerEmailController
 
     private function canAccessThread(CustomerEmailThread $thread, string $role, int $userId): bool
     {
-        if (in_array($role, [User::ROLE_ADMIN, User::ROLE_SUPERVISOR], true)) return true;
-        if ($role === User::ROLE_MANAGER) {
-            return in_array($thread->agent_id, $this->getManagerTeamIds($userId), true)
-                || $thread->agent_id === $userId;
+        if ($role === User::ROLE_ADMIN) return true;
+        if ($role === User::ROLE_MANAGER || $role === User::ROLE_SUPERVISOR) {
+            return in_array((int) $thread->agent_id, $this->teamAndSelf($userId), true);
         }
         return $thread->agent_id === $userId;
     }
@@ -548,11 +547,17 @@ class CustomerEmailController
     {
         $txn = Transaction::find($id);
         if (!$txn) return null;
-        if (in_array($role, [User::ROLE_ADMIN, User::ROLE_SUPERVISOR], true)) return $txn;
-        if ($role === User::ROLE_MANAGER) {
-            return in_array($txn->agent_id, $this->getManagerTeamIds($userId), true) ? $txn : null;
+        if ($role === User::ROLE_ADMIN) return $txn;
+        if ($role === User::ROLE_MANAGER || $role === User::ROLE_SUPERVISOR) {
+            return in_array((int) $txn->agent_id, $this->teamAndSelf($userId), true) ? $txn : null;
         }
         return $txn->agent_id === $userId ? $txn : null;
+    }
+
+    /** A manager's or team leader's team, plus their own records. */
+    private function teamAndSelf(int $userId): array
+    {
+        return array_values(array_unique(array_merge($this->getManagerTeamIds($userId), [$userId])));
     }
 
     private function getManagerTeamIds(int $managerId): array

@@ -98,13 +98,13 @@ tailwind.config = {
               <select class="field-input" id="role" name="role" required onchange="handleRoleChange(this.value)">
                 <option value="agent"      <?= ($old['role'] ?? 'agent') === 'agent'      ? 'selected' : '' ?>>Agent</option>
                 <option value="csa"        <?= ($old['role'] ?? '') === 'csa'             ? 'selected' : '' ?>>Customer Service Agent (CSA)</option>
-                <option value="supervisor" <?= ($old['role'] ?? '') === 'supervisor' ? 'selected' : '' ?>>Supervisor</option>
+                <option value="supervisor" <?= ($old['role'] ?? '') === 'supervisor' ? 'selected' : '' ?>>Team leader</option>
                 <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
                 <option value="manager"    <?= ($old['role'] ?? '') === 'manager' ? 'selected' : '' ?>>Manager</option>
                 <option value="admin"      <?= ($old['role'] ?? '') === 'admin'   ? 'selected' : '' ?>>Admin</option>
                 <?php endif; ?>
               </select>
-              <p class="text-[10px] text-slate-400 mt-1">Agents record txns. CSAs have global view. Supervisors oversee a team. Managers see all team data.</p>
+              <p class="text-[10px] text-slate-400 mt-1">Agents record txns. CSAs have global view. Team leaders sell like agents and look after their own agents. Managers see all team data.</p>
             </div>
             <div>
               <label class="field-label" for="grace_period_mins">Late Login Grace Period (minutes)</label>

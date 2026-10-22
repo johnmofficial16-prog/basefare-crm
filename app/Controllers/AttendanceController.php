@@ -196,8 +196,8 @@ class AttendanceController
         $date    = $body['date'] ?? date('Y-m-d');
         $reason  = trim($body['reason'] ?? '');
 
-        // Manager: verify agent is in their team
-        if ($adminRole === User::ROLE_MANAGER) {
+        // Manager / team leader: verify the agent is in their team
+        if ($adminRole === User::ROLE_MANAGER || $adminRole === User::ROLE_SUPERVISOR) {
             $teamIds = $this->getManagerTeamIds((int)$adminId);
             if (!in_array($agentId, $teamIds)) {
                 return $this->jsonResponse($response, ['success' => false, 'message' => 'Agent not in your team.'], 403);
@@ -222,8 +222,8 @@ class AttendanceController
         $date    = $body['date'] ?? date('Y-m-d');
         $reason  = trim($body['reason'] ?? '');
 
-        // Manager: verify agent is in their team
-        if ($adminRole === User::ROLE_MANAGER) {
+        // Manager / team leader: verify the agent is in their team
+        if ($adminRole === User::ROLE_MANAGER || $adminRole === User::ROLE_SUPERVISOR) {
             $teamIds = $this->getManagerTeamIds((int)$adminId);
             if (!in_array($agentId, $teamIds)) {
                 return $this->jsonResponse($response, ['success' => false, 'message' => 'Agent not in your team.'], 403);
@@ -246,8 +246,8 @@ class AttendanceController
         $agentId   = (int)($body['agent_id'] ?? 0);
         $ip        = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
-        // Manager: verify agent is in their team
-        if ($adminRole === User::ROLE_MANAGER) {
+        // Manager / team leader: verify the agent is in their team
+        if ($adminRole === User::ROLE_MANAGER || $adminRole === User::ROLE_SUPERVISOR) {
             $teamIds = $this->getManagerTeamIds((int)$adminId);
             if (!in_array($agentId, $teamIds)) {
                 return $this->jsonResponse($response, ['success' => false, 'message' => 'Agent not in your team.'], 403);
@@ -285,8 +285,8 @@ class AttendanceController
         $body      = json_decode((string) $request->getBody(), true);
         $agentId   = (int)($body['agent_id'] ?? 0);
 
-        // Manager: verify agent is in their team
-        if ($adminRole === User::ROLE_MANAGER) {
+        // Manager / team leader: verify the agent is in their team
+        if ($adminRole === User::ROLE_MANAGER || $adminRole === User::ROLE_SUPERVISOR) {
             $teamIds = $this->getManagerTeamIds((int)$adminId);
             if (!in_array($agentId, $teamIds)) {
                 return $this->jsonResponse($response, ['success' => false, 'message' => 'Agent not in your team.'], 403);
@@ -308,8 +308,8 @@ class AttendanceController
         $body      = json_decode((string) $request->getBody(), true);
         $agentId   = (int)($body['agent_id'] ?? 0);
 
-        // Manager: verify agent is in their team
-        if ($adminRole === User::ROLE_MANAGER) {
+        // Manager / team leader: verify the agent is in their team
+        if ($adminRole === User::ROLE_MANAGER || $adminRole === User::ROLE_SUPERVISOR) {
             $teamIds = $this->getManagerTeamIds((int)$adminId);
             if (!in_array($agentId, $teamIds)) {
                 return $this->jsonResponse($response, ['success' => false, 'message' => 'Agent not in your team.'], 403);
@@ -342,6 +342,7 @@ class AttendanceController
         $abuseAlerts = \Illuminate\Database\Capsule\Manager::table('activity_log')
             ->where('action', 'break_abuse_detected')
             ->where('created_at', '>=', $today . ' 00:00:00')
+            ->when($agentIds !== null, fn($q) => $q->whereIn('user_id', $agentIds))
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -458,6 +459,9 @@ class AttendanceController
      */
     public function adminMonthly(Request $request, Response $response): Response
     {
+        if ($this->isTeamLeader()) {
+            return $response->withHeader('Location', '/attendance/admin/history')->withStatus(302);
+        }
         $params    = $request->getQueryParams();
         $month     = $params['month'] ?? date('Y-m');
         $agentId   = isset($params['agent_id']) ? (int)$params['agent_id'] : null;
@@ -488,6 +492,9 @@ class AttendanceController
      */
     public function exportMonthlyCsv(Request $request, Response $response): Response
     {
+        if ($this->isTeamLeader()) {
+            return $response->withStatus(403);
+        }
         $params  = $request->getQueryParams();
         $month   = $params['month'] ?? date('Y-m');
 
@@ -547,6 +554,9 @@ class AttendanceController
 
     public function exportCsv(Request $request, Response $response): Response
     {
+        if ($this->isTeamLeader()) {
+            return $response->withStatus(403);
+        }
         $params  = $request->getQueryParams();
         $date    = $params['date'] ?? date('Y-m-d');
         $agentId = isset($params['agent_id']) ? (int)$params['agent_id'] : null;
@@ -626,6 +636,12 @@ class AttendanceController
      * Returns the IDs of agents directly reporting to the given manager.
      * Returns [-1] if the manager has no assigned agents.
      */
+    /** Team leaders see their team's day-by-day attendance, but not the monthly report or the CSV exports (payroll). */
+    private function isTeamLeader(): bool
+    {
+        return ($_SESSION['role'] ?? '') === User::ROLE_SUPERVISOR;
+    }
+
     private function getManagerTeamIds(int $managerId): array
     {
         $manager = User::find($managerId);

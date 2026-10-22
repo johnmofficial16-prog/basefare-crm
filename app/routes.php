@@ -108,7 +108,7 @@ $app->group('/performance', function ($group) {
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR, User::ROLE_AGENT]));
 
-// Shift Scheduling Routes (admin + manager + supervisor, behind AttendanceGate)
+// Shift Scheduling Routes (admin + manager, behind AttendanceGate). Team leaders don't schedule (22 Oct).
 $app->group('/shifts', function ($group) {
     $group->get('/week', [ShiftController::class, 'weekView']);
     $group->post('/week/publish', [ShiftController::class, 'publishWeek']);
@@ -121,7 +121,7 @@ $app->group('/shifts', function ($group) {
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
-->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR]));
+->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_MANAGER]));
 
 // ==========================================================================
 // Admin & User Management (admin only, behind AttendanceGate)
@@ -207,7 +207,7 @@ $app->group('/letters', function ($group) {
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware([User::ROLE_ADMIN]));
 
-// Travel Vouchers (admin only)
+// Travel Vouchers (admin; team leaders make their own and see their team's; only admins delete)
 $app->group('/vouchers', function ($group) {
     $group->get('', [VoucherController::class, 'index']);
     $group->get('/maker', [VoucherController::class, 'maker']);
@@ -217,7 +217,7 @@ $app->group('/vouchers', function ($group) {
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
-->add(new AuthMiddleware([User::ROLE_ADMIN]));
+->add(new AuthMiddleware([User::ROLE_ADMIN, User::ROLE_SUPERVISOR]));
 
 // ==========================================================================
 // Centre Analytics (admin only, behind AttendanceGate)

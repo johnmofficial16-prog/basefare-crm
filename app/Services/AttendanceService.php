@@ -446,6 +446,9 @@ class AttendanceService
         if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])) {
             return ['success' => false, 'message' => 'Unauthorized.'];
         }
+        if ($this->outsideTeam($admin, $agentId)) {
+            return ['success' => false, 'message' => 'That person is not in your team.'];
+        }
 
         // Validate reason is substantive
         if (strlen(trim($reason)) < 5) {
@@ -495,6 +498,9 @@ class AttendanceService
         if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])) {
             return ['success' => false, 'message' => 'Unauthorized.'];
         }
+        if ($this->outsideTeam($admin, $agentId)) {
+            return ['success' => false, 'message' => 'That person is not in your team.'];
+        }
 
         if (strlen(trim($reason)) < 3) {
             return ['success' => false, 'message' => 'Denial reason must be at least 3 characters.'];
@@ -538,11 +544,27 @@ class AttendanceService
      *                        Required — see AttendanceController::adminClockIn, which
      *                        rejects an empty or too-short reason before we get here.
      */
+    /**
+     * Managers and team leaders act only on people in their own team (team
+     * leaders: their agents; managers: their team leaders and everyone under
+     * them). Admins act on anyone. (John, 22 Oct: "only their agents".)
+     */
+    private function outsideTeam(User $actor, int $agentId): bool
+    {
+        if ($actor->role === User::ROLE_ADMIN) {
+            return false;
+        }
+        return !in_array($agentId, array_map('intval', $actor->getTeamAgentIds(true)), true);
+    }
+
     public function adminClockIn(int $adminId, int $agentId, string $ip, string $reason = ''): array
     {
         $admin = User::find($adminId);
-        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])) {
             return ['success' => false, 'message' => 'Unauthorized.'];
+        }
+        if ($this->outsideTeam($admin, $agentId)) {
+            return ['success' => false, 'message' => 'That person is not in your team.'];
         }
 
         $existing = AttendanceSession::active()->forUser($agentId)->first();
@@ -597,8 +619,11 @@ class AttendanceService
     public function adminClockOut(int $adminId, int $agentId): array
     {
         $admin = User::find($adminId);
-        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])) {
             return ['success' => false, 'message' => 'Unauthorized.'];
+        }
+        if ($this->outsideTeam($admin, $agentId)) {
+            return ['success' => false, 'message' => 'That person is not in your team.'];
         }
 
         // Direct DB lookup — bypasses getCurrentState date-scope so stranded sessions are found.
@@ -658,8 +683,11 @@ class AttendanceService
     public function adminForceEndBreak(int $adminId, int $agentId): array
     {
         $admin = User::find($adminId);
-        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if (!$admin || !in_array($admin->role, [User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SUPERVISOR])) {
             return ['success' => false, 'message' => 'Unauthorized.'];
+        }
+        if ($this->outsideTeam($admin, $agentId)) {
+            return ['success' => false, 'message' => 'That person is not in your team.'];
         }
 
         $session = AttendanceSession::active()->forUser($agentId)->latest('id')->first();

@@ -113,7 +113,7 @@ tailwind.config = {
                 onchange="handleRoleChange(this.value)">
                 <option value="agent"      <?= ($old['role'] ?? $user->role) === 'agent'      ? 'selected' : '' ?>>Agent</option>
                 <option value="csa"        <?= ($old['role'] ?? $user->role) === 'csa'        ? 'selected' : '' ?>>Customer Service Agent (CSA)</option>
-                <option value="supervisor" <?= ($old['role'] ?? $user->role) === 'supervisor' ? 'selected' : '' ?>>Supervisor</option>
+                <option value="supervisor" <?= ($old['role'] ?? $user->role) === 'supervisor' ? 'selected' : '' ?>>Team leader</option>
                 <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
                 <option value="manager"    <?= ($old['role'] ?? $user->role) === 'manager'    ? 'selected' : '' ?>>Manager</option>
                 <option value="admin"      <?= ($old['role'] ?? $user->role) === 'admin'      ? 'selected' : '' ?>>Admin</option>

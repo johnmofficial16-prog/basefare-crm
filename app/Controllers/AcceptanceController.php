@@ -55,8 +55,8 @@ class AcceptanceController
         if ($userRole === User::ROLE_ADMIN || $userRole === User::ROLE_CSA) {
             // Admins and CSA see all
             $agentFilter = null;
-        } elseif ($userRole === User::ROLE_MANAGER) {
-            // Managers see only their team's records
+        } elseif ($userRole === User::ROLE_MANAGER || $userRole === User::ROLE_SUPERVISOR) {
+            // Managers and team leaders see their team's records plus their own
             $teamIds = $this->getManagerTeamIds((int)$userId);
             $teamIds = array_unique(array_merge($teamIds, [(int)$userId]));
             $agentFilter = null;
@@ -307,8 +307,8 @@ class AcceptanceController
             return $response->withHeader('Location', '/acceptance')->withStatus(302);
         }
 
-        // Manager: only allow access to own team's records (including records they created themselves)
-        if ($userRole === User::ROLE_MANAGER) {
+        // Manager / team leader: only their team's records (including records they created themselves)
+        if ($userRole === User::ROLE_MANAGER || $userRole === User::ROLE_SUPERVISOR) {
             $teamIds = $this->getManagerTeamIds((int)$userId);
             if (!in_array($acceptance->agent_id, $teamIds) && $acceptance->agent_id !== (int)$userId) {
                 $_SESSION['flash_error'] = 'Access denied.';
@@ -358,10 +358,11 @@ class AcceptanceController
             return $this->jsonResponse($response, ['error' => 'Acceptance not found.'], 404);
         }
 
-        // Agents can only add notes to their own records
+        // Notes follow the same scope as viewing: agents their own records,
+        // managers and team leaders their team's (or their own). Admin/CSA: any.
         $userRole = $_SESSION['role'] ?? 'agent';
 
-        if ($userRole === \App\Models\User::ROLE_AGENT && $acc->agent_id !== $userId) {
+        if (!in_array($userRole, [User::ROLE_ADMIN, User::ROLE_CSA], true) && !$this->canAccessAcceptanceRecord($acc)) {
             return $this->jsonResponse($response, ['error' => 'Access denied.'], 403);
         }
 
@@ -461,8 +462,8 @@ class AcceptanceController
             return $response->withStatus(404);
         }
 
-        // Manager: only allow access to own team's records (including records they created themselves)
-        if ($userRole === User::ROLE_MANAGER) {
+        // Manager / team leader: only their team's records (including records they created themselves)
+        if ($userRole === User::ROLE_MANAGER || $userRole === User::ROLE_SUPERVISOR) {
             $teamIds = $this->getManagerTeamIds((int)$userId);
             if (!in_array($acceptance->agent_id, $teamIds) && $acceptance->agent_id !== (int)$userId) {
                 $response->getBody()->write('<p style="padding:2rem;font-family:sans-serif;">Access denied.</p>');

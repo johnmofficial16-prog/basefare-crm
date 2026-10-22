@@ -27,7 +27,7 @@ $written = $team['written'] ?? null;
 $writtenPct = $written && $written['of'] ? round($written['wrote'] / $written['of'] * 100) : null;
 $when = fn($t) => $t ? date('D j M, g:i a', strtotime($t)) : '';
 $tone = fn($v) => $v === null ? 'text-slate-400' : ($v >= 4 ? 'text-emerald-700' : ($v >= 3 ? 'text-amber-700' : 'text-red-700'));
-$roleLabel = fn($r) => ['agent' => 'Agent', 'csa' => 'CSA', 'supervisor' => 'Supervisor', 'manager' => 'Manager'][$r] ?? ucfirst((string) $r);
+$roleLabel = fn($r) => ['agent' => 'Agent', 'csa' => 'CSA', 'supervisor' => 'Team leader', 'manager' => 'Manager'][$r] ?? ucfirst((string) $r);
 $chip = [
     'red' => 'bg-red-50 text-red-800 ring-red-200', 'amber' => 'bg-amber-50 text-amber-900 ring-amber-200',
     'green' => 'bg-emerald-50 text-emerald-800 ring-emerald-200', 'blue' => 'bg-blue-50 text-blue-800 ring-blue-200',

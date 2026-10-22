@@ -547,7 +547,7 @@ final class StaffSurveyInsights
             $lo = array_key_last($rows);
             if ($rows[$hi][$metric] - $rows[$lo][$metric] >= 0.8) {
                 $label = fn($g) => $dim === 'centre' ? ($centreLabels[$g] ?? $g)
-                    : (['agent' => 'Agents', 'csa' => 'CSAs', 'supervisor' => 'Supervisors', 'manager' => 'Managers'][$g] ?? ucfirst($g));
+                    : (['agent' => 'Agents', 'csa' => 'CSAs', 'supervisor' => 'Team leaders', 'manager' => 'Managers'][$g] ?? ucfirst($g));
                 $add('amber', 'compare_arrows', $label($lo) . ' trails ' . $label($hi) . ' on ' . $what . ' (' . number_format($rows[$lo][$metric], 1) . ' vs ' . number_format($rows[$hi][$metric], 1) . ').');
             }
         };

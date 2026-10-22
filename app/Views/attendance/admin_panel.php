@@ -12,6 +12,7 @@ $today = date('Y-m-d');
 $abuseAlerts = Capsule::table('activity_log')
     ->where('action', 'break_abuse_detected')
     ->where('created_at', '>=', $today . ' 00:00:00')
+    ->when(isset($agentIds) && $agentIds !== null, fn($q) => $q->whereIn('user_id', $agentIds)) // managers / team leaders: their team only
     ->orderBy('created_at', 'desc')
     ->get();
 

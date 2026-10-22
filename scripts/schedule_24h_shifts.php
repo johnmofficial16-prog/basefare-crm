@@ -6,6 +6,7 @@
  *   php scripts/schedule_24h_shifts.php                 # DRY RUN (default)
  *   php scripts/schedule_24h_shifts.php --apply         # write it
  *   php scripts/schedule_24h_shifts.php --apply --days=30
+ *   (default roles: agents and team leaders; --roles=agent,supervisor,manager,csa to change)
  *   php scripts/schedule_24h_shifts.php --rollback      # undo (script rows only)
  *
  * What --apply does (one transaction):
@@ -44,7 +45,7 @@ date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'Asia/Kolkata');
 $apply    = in_array('--apply', $argv, true);
 $rollback = in_array('--rollback', $argv, true);
 $days     = 14;
-$roles    = ['agent'];
+$roles    = ['agent', 'supervisor']; // team leaders take calls and clock in like agents (22 Oct)
 foreach ($argv as $arg) {
     if (preg_match('/^--days=(\d+)$/', $arg, $m)) {
         $days = max(1, min(90, (int) $m[1]));
@@ -54,9 +55,9 @@ foreach ($argv as $arg) {
     // they need the same rows or their clock-ins stay gated to the 30-min
     // default around a shift they don't have.
     if (preg_match('/^--roles=([a-z,]+)$/', $arg, $m)) {
-        $roles = array_values(array_intersect(explode(',', $m[1]), ['agent', 'manager', 'csa']));
+        $roles = array_values(array_intersect(explode(',', $m[1]), ['agent', 'supervisor', 'manager', 'csa']));
         if ($roles === []) {
-            fwrite(STDERR, "No valid roles in --roles (allowed: agent,manager,csa)\n");
+            fwrite(STDERR, "No valid roles in --roles (allowed: agent,supervisor,manager,csa)\n");
             exit(1);
         }
     }

@@ -37,7 +37,7 @@ class ETicketController
     {
         $role     = $_SESSION['role']    ?? 'agent';
         $userId   = (int)($_SESSION['user_id'] ?? 0);
-        $isAdmin  = in_array($role, [User::ROLE_ADMIN, User::ROLE_SUPERVISOR]);
+        $isAdmin  = $role === User::ROLE_ADMIN;
 
         $params  = $request->getQueryParams();
         $page    = max(1, (int)($params['page'] ?? 1));
@@ -49,9 +49,9 @@ class ETicketController
             'date_to'   => $params['date_to']    ?? '',
         ];
 
-        if ($role === User::ROLE_MANAGER) {
-            // Managers see only their team's e-tickets
-            $teamIds = $this->getManagerTeamIds($userId);
+        if ($role === User::ROLE_MANAGER || $role === User::ROLE_SUPERVISOR) {
+            // Managers and team leaders see their team's e-tickets plus their own
+            $teamIds = array_values(array_unique(array_merge($this->getManagerTeamIds($userId), [$userId])));
             $result  = $this->service->list($page, 25, $filters, null, $teamIds);
         } elseif ($isAdmin || $role === User::ROLE_CSA) {
             $result = $this->service->list($page, 25, $filters, null);
@@ -59,7 +59,7 @@ class ETicketController
             $result = $this->service->list($page, 25, $filters, $userId);
         }
 
-        $view = $result + ['filters' => $filters, 'role' => $role, 'isAdmin' => ($isAdmin || $role === User::ROLE_MANAGER)];
+        $view = $result + ['filters' => $filters, 'role' => $role, 'isAdmin' => ($isAdmin || in_array($role, [User::ROLE_MANAGER, User::ROLE_SUPERVISOR], true))];
         return $this->render($response, 'eticket/list.php', $view);
     }
 

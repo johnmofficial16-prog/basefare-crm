@@ -17,7 +17,7 @@
 $activePage = 'staff_survey';
 $h = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 $a = $r['answers'];
-$roleLabel = fn($x) => ['agent' => 'Agent', 'csa' => 'CSA', 'supervisor' => 'Supervisor', 'manager' => 'Manager'][$x] ?? ucfirst((string) $x);
+$roleLabel = fn($x) => ['agent' => 'Agent', 'csa' => 'CSA', 'supervisor' => 'Team leader', 'manager' => 'Manager'][$x] ?? ucfirst((string) $x);
 $chip = [
     'red' => 'bg-red-50 text-red-800 ring-red-200', 'amber' => 'bg-amber-50 text-amber-900 ring-amber-200',
     'green' => 'bg-emerald-50 text-emerald-800 ring-emerald-200', 'blue' => 'bg-blue-50 text-blue-800 ring-blue-200',

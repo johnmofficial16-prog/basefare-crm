@@ -126,10 +126,10 @@ class TransactionController
                 $agentIds = $teamIds;
             }
         } elseif ($isSupervisor) {
-            $actor   = \App\Models\User::find($userId);
-            $teamIds = $actor ? $actor->getTeamAgentIds() : [];
+            // Team leader: their agents' transactions plus their own bookings
+            $teamIds = array_unique(array_merge($this->getManagerTeamIds((int)$userId), [(int)$userId]));
             if (!$isTargetedLookup) {
-                $agentIds = count($teamIds) ? $teamIds : [-1];
+                $agentIds = $teamIds;
             }
         } else {
             $agentFilter = $isTargetedLookup ? null : $userId;
@@ -153,8 +153,7 @@ class TransactionController
         } elseif ($isManager) {
             $statScope = array_unique(array_merge($this->getManagerTeamIds((int)$userId), [(int)$userId]));
         } elseif ($isSupervisor) {
-            $supTeam   = (\App\Models\User::find($userId)?->getTeamAgentIds()) ?: [];
-            $statScope = count($supTeam) ? $supTeam : [-1];
+            $statScope = array_unique(array_merge($this->getManagerTeamIds((int)$userId), [(int)$userId]));
         } else {
             $statScope = [(int)$userId];                        // agent: own only
         }
@@ -340,8 +339,8 @@ class TransactionController
             return $response->withHeader('Location', '/transactions')->withStatus(302);
         }
 
-        // Manager: only allow access to own team's transactions (including ones they created themselves)
-        if ($userRole === User::ROLE_MANAGER) {
+        // Manager / team leader: only their team's transactions (including ones they created themselves)
+        if ($userRole === User::ROLE_MANAGER || $userRole === User::ROLE_SUPERVISOR) {
             $teamIds = $this->getManagerTeamIds((int)$userId);
             if (!in_array($txn->agent_id, $teamIds) && $txn->agent_id !== (int)$userId) {
                 $_SESSION['flash_error'] = 'Access denied.';
@@ -445,7 +444,7 @@ class TransactionController
             $_SESSION['flash_error'] = 'You can only edit your own transactions.';
             return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
         }
-        if ($userRole === User::ROLE_MANAGER
+        if (in_array($userRole, [User::ROLE_MANAGER, User::ROLE_SUPERVISOR], true)
             && !in_array((int)$txn->agent_id, $this->getManagerTeamIds($userId), true)
             && (int)$txn->agent_id !== $userId) {
             $_SESSION['flash_error'] = "You can only edit your team's transactions.";
@@ -485,13 +484,14 @@ class TransactionController
         }
 
         // Scope: agents edit only their own; managers only their team (or own).
-        if ($userRole === User::ROLE_AGENT || $userRole === User::ROLE_MANAGER) {
+        if (in_array($userRole, [User::ROLE_AGENT, User::ROLE_MANAGER, User::ROLE_SUPERVISOR], true)) {
             $myId    = (int)($_SESSION['user_id'] ?? 0);
             $ownerId = (int) (Transaction::where('id', $id)->value('agent_id') ?? 0);
+            $lead    = in_array($userRole, [User::ROLE_MANAGER, User::ROLE_SUPERVISOR], true);
             $allowed = ($ownerId === $myId)
-                || ($userRole === User::ROLE_MANAGER && in_array($ownerId, $this->getManagerTeamIds($myId), true));
+                || ($lead && in_array($ownerId, $this->getManagerTeamIds($myId), true));
             if (!$allowed) {
-                $_SESSION['flash_error'] = $userRole === User::ROLE_MANAGER
+                $_SESSION['flash_error'] = $lead
                     ? "You can only edit your team's transactions."
                     : 'You can only edit your own transactions.';
                 return $response->withHeader('Location', '/transactions/' . $id)->withStatus(302);
@@ -955,7 +955,7 @@ class TransactionController
         if ($userRole === User::ROLE_AGENT && $txn->agent_id !== $userId) {
             return $this->jsonResponse($response, ['error' => 'Access denied.'], 403);
         }
-        if ($userRole === User::ROLE_MANAGER) {
+        if ($userRole === User::ROLE_MANAGER || $userRole === User::ROLE_SUPERVISOR) {
             $teamIds = array_unique(array_merge($this->getManagerTeamIds($userId), [$userId]));
             if (!in_array((int)$txn->agent_id, array_map('intval', $teamIds), true)) {
                 return $this->jsonResponse($response, ['error' => 'Access denied.'], 403);

@@ -92,8 +92,9 @@ class User extends Model
     }
 
     /**
-     * Get all agent IDs that directly report to this user.
-     * For supervisors: returns their team. For managers/admins: returns all direct reports.
+     * Get the IDs of everyone who reports to this user, directly or through
+     * a team leader. For supervisors: their agents. For managers: their team
+     * leaders, those team leaders' agents, and any agents reporting directly.
      * Returns an array of user IDs.
      *
      * @param bool $includeInactive When true, suspended/inactive reports are
@@ -104,13 +105,28 @@ class User extends Model
      */
     public function getTeamAgentIds(bool $includeInactive = false): array
     {
-        $query = $this->directReports()->whereNull('deleted_at');
-
-        if (!$includeInactive) {
-            $query->where('status', self::STATUS_ACTIVE);
+        // Everyone below this user, at any depth: a manager's team includes
+        // the agents of the team leaders who report to them (manager → team
+        // leader → agent), not only their direct reports. (John, 22 Oct.)
+        $seen     = [(int) $this->id => true];
+        $ids      = [];
+        $frontier = [(int) $this->id];
+        for ($depth = 0; $depth < 5 && $frontier; $depth++) {
+            $rows = self::whereIn('reports_to_id', $frontier)->whereNull('deleted_at')->get(['id', 'status']);
+            $frontier = [];
+            foreach ($rows as $r) {
+                $id = (int) $r->id;
+                if (isset($seen[$id])) {
+                    continue;
+                }
+                $seen[$id] = true;
+                $frontier[] = $id;
+                if ($includeInactive || $r->status === self::STATUS_ACTIVE) {
+                    $ids[] = $id;
+                }
+            }
         }
-
-        return $query->pluck('id')->toArray();
+        return $ids;
     }
 
     /**

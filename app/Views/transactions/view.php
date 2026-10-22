@@ -89,7 +89,9 @@ $AIRLINES_R = [
 ];
 
 $canApprove = in_array($userRole, [User::ROLE_ADMIN, User::ROLE_SUPERVISOR])
-              && $txn->status === Transaction::STATUS_PENDING;
+              && $txn->status === Transaction::STATUS_PENDING
+              // a team leader approves their agents' bookings, never their own
+              && ($userRole === User::ROLE_ADMIN || (int) $txn->agent_id !== (int) ($_SESSION['user_id'] ?? 0));
 $canVoid    = ($userRole === User::ROLE_ADMIN)
               && !$txn->isVoided();
 $canRefund  = ($userRole === User::ROLE_ADMIN)

@@ -22,7 +22,7 @@ use Illuminate\Database\Capsule\Manager as DB;
 class CallLogService
 {
     /** Roles expected to log calls (and therefore checked by compliance). */
-    const LOGGER_ROLES = [User::ROLE_AGENT, User::ROLE_CSA];
+    const LOGGER_ROLES = [User::ROLE_AGENT, User::ROLE_SUPERVISOR, User::ROLE_CSA]; // team leaders still take calls (22 Oct)
 
     // ─── Config (system_config, all optional) ─────────────────────────────────
 

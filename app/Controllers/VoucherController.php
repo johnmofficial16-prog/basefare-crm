@@ -7,20 +7,41 @@ use Psr\Http\Message\ResponseInterface as Response;
 use App\Models\User;
 use App\Models\TravelVoucher;
 
+/**
+ * Travel vouchers. Admins: all vouchers. Team leaders (John, 22 Oct): make
+ * vouchers, and see the ones they or their agents made. Managers have been
+ * read-only since May (100d214) and stay out. Only admins delete.
+ */
 class VoucherController
 {
+    private const MAKERS = [User::ROLE_ADMIN, User::ROLE_SUPERVISOR];
+
+    /** null = every voucher (admin); otherwise the creators whose vouchers this user may see. */
+    private function creatorScope(): ?array
+    {
+        if (($_SESSION['role'] ?? '') === User::ROLE_ADMIN) {
+            return null;
+        }
+        $me = (int) ($_SESSION['user_id'] ?? 0);
+        $team = User::find($me)?->getTeamAgentIds(true) ?? [];
+        return array_values(array_unique(array_merge(array_map('intval', $team), [$me])));
+    }
+
     /**
      * Display a list of all saved vouchers
      */
     public function index(Request $request, Response $response): Response
     {
         $role = $_SESSION['role'] ?? '';
-        if (!in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if (!in_array($role, self::MAKERS, true)) {
             return $response->withHeader('Location', '/dashboard')->withStatus(302);
         }
 
         $activePage = 'vouchers';
-        $vouchers = TravelVoucher::with('creator')->orderBy('created_at', 'desc')->get();
+        $scope = $this->creatorScope();
+        $vouchers = TravelVoucher::with('creator')
+            ->when($scope !== null, fn($q) => $q->whereIn('created_by', $scope))
+            ->orderBy('created_at', 'desc')->get();
 
         ob_start();
         require __DIR__ . '/../Views/vouchers/list.php';
@@ -35,7 +56,7 @@ class VoucherController
     public function maker(Request $request, Response $response): Response
     {
         $role = $_SESSION['role'] ?? '';
-        if (!in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if (!in_array($role, self::MAKERS, true)) {
             return $response->withHeader('Location', '/dashboard')->withStatus(302);
         }
 
@@ -53,7 +74,7 @@ class VoucherController
     public function store(Request $request, Response $response): Response
     {
         $role = $_SESSION['role'] ?? '';
-        if (!in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if (!in_array($role, self::MAKERS, true)) {
             $response->getBody()->write(json_encode(['success' => false, 'error' => 'Unauthorized']));
             return $response->withHeader('Content-Type', 'application/json')->withStatus(403);
         }
@@ -98,14 +119,15 @@ class VoucherController
     public function show(Request $request, Response $response, array $args): Response
     {
         $role = $_SESSION['role'] ?? '';
-        if (!in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        if (!in_array($role, self::MAKERS, true)) {
             return $response->withHeader('Location', '/dashboard')->withStatus(302);
         }
 
         $id = $args['id'];
         $voucher = TravelVoucher::find($id);
-        
-        if (!$voucher) {
+        $scope = $this->creatorScope();
+
+        if (!$voucher || ($scope !== null && !in_array((int) $voucher->created_by, $scope, true))) {
             return $response->withHeader('Location', '/vouchers')->withStatus(302);
         }
 
