@@ -15,6 +15,11 @@
  *
  *   php scripts/assign_teams.php --pick="Max=57"
  *
+ * Someone who has no CRM login yet can be left out and added later
+ * (Users, edit them, Reports To = their team leader):
+ *
+ *   php scripts/assign_teams.php --skip="Shawn"
+ *
  * Before changing anything it saves everyone's current role and team leader
  * to storage/logs/assign_teams_undo.json, which --undo uses.
  *
@@ -70,7 +75,15 @@ if (in_array('--undo', $argv, true)) {
 
 // ---- find everyone -----------------------------------------------------------------------
 $picks = [];
+$skips = [];
 foreach ($argv as $arg) {
+    if (preg_match('/^--skip=(.+)$/', $arg, $m)) {
+        foreach (explode(',', $m[1]) as $n) {
+            if (trim($n) !== '') {
+                $skips[mb_strtolower(trim($n))] = trim($n);
+            }
+        }
+    }
     if (preg_match('/^--pick=(.+)$/', $arg, $m)) {
         foreach (explode(',', $m[1]) as $pair) {
             if (preg_match('/^\s*(.+?)\s*=\s*(\d+)\s*$/', $pair, $p)) {
@@ -142,6 +155,10 @@ $find = function (string $name, array $roles) use (&$people, &$everyone, &$claim
     return null;
 };
 
+$teams = [];
+foreach (TEAMS as $leader => $agents) {
+    $teams[$leader] = array_values(array_filter($agents, fn($a) => !isset($skips[mb_strtolower($a)])));
+}
 $managerId = $find(MANAGER, ['manager']);
 $leaders = [];
 foreach (array_keys(TEAMS) as $leader) {
@@ -149,7 +166,7 @@ foreach (array_keys(TEAMS) as $leader) {
 }
 // Two-word names first, so "Max Marilla" is taken before "Max" is looked up.
 $all = [];
-foreach (TEAMS as $leader => $agents) {
+foreach ($teams as $leader => $agents) {
     foreach ($agents as $a) {
         $all[] = [$leader, $a];
     }
@@ -166,6 +183,7 @@ if ($problems) {
         echo "  - {$p}\n";
     }
     echo "\nRun again with the right person's number, for example:\n  php scripts/assign_teams.php --pick=\"Max=57\"\n(several: --pick=\"Max=57,Tia=61\")\n";
+    echo "Or leave someone out for now (add them later in Users): php scripts/assign_teams.php --skip=\"Shawn\"\n";
     exit(1);
 }
 
@@ -173,7 +191,7 @@ if ($problems) {
 $changes = [];   // id => [role, reports_to_id]
 foreach ($leaders as $leader => $lid) {
     $changes[$lid] = ['supervisor', $managerId];
-    foreach (TEAMS[$leader] as $a) {
+    foreach ($teams[$leader] as $a) {
         $changes[$members[$leader][$a]] = ['agent', $lid];
     }
 }
@@ -181,7 +199,7 @@ $undo = [];
 echo "Manager: {$people[$managerId]['name']} (#{$managerId})\n";
 foreach ($leaders as $leader => $lid) {
     echo "\nTeam leader: {$people[$lid]['name']} (#{$lid}), was {$people[$lid]['role']}, now reports to {$people[$managerId]['name']}\n";
-    foreach (TEAMS[$leader] as $a) {
+    foreach ($teams[$leader] as $a) {
         $id = $members[$leader][$a];
         $was = $people[$id]['reports_to_id'] ? ($people[(int) $people[$id]['reports_to_id']]['name'] ?? '#' . $people[$id]['reports_to_id']) : 'nobody';
         echo "  - {$people[$id]['name']} (#{$id}), reported to {$was}\n";
@@ -215,6 +233,9 @@ while ($r = $res->fetch_assoc()) {
     $left[] = $r['name'];
 }
 echo "\nDone: " . count($changes) . " people updated.\n";
+foreach ($skips as $n) {
+    echo "Left out: {$n}. When they have a CRM login, set Reports To = their team leader in Users.\n";
+}
 if ($left) {
     echo "Still reporting straight to {$people[$managerId]['name']} (not in either team): " . implode(', ', $left) . "\n";
 }
