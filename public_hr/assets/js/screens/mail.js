@@ -21,9 +21,9 @@ function hashFor(box, id, extra = {}) {
 
 const size = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
 
-export function fileChips(files) {
+export function fileChips(files, base = 'api/mail/files') {
   if (!files?.length) return '';
-  return html`<div class="att">${files.map((x) => html`<a class="attchip" href="api/mail/files/${x.id}" target="_blank" rel="noopener">${icon(x.mime === 'application/pdf' ? 'file' : 'image', 'i--sm')}<span>${x.name}</span><small>${size(x.size)}</small></a>`)}</div>`;
+  return html`<div class="att">${files.map((x) => html`<a class="attchip" href="${base}/${x.id}" target="_blank" rel="noopener">${icon(x.mime === 'application/pdf' ? 'file' : 'image', 'i--sm')}<span>${x.name}</span><small>${size(x.size)}</small></a>`)}</div>`;
 }
 
 /** Text with line breaks kept (escaped by html``; CSS keeps the breaks). */

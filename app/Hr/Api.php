@@ -471,6 +471,9 @@ final class Api
         // Staff conversations: messages between staff live in the CRM (CRM → Messages); admins read them here, read-only
         $app->get('/chats', self::h(fn(Ctx $c) => Colleagues::adminList($c)))->add($admin);
         $app->get('/chats/{id:[0-9]+}', self::h(fn(Ctx $c) => Colleagues::adminThread($c, $c->id())))->add($admin);
+        $app->get('/chats/files/{id:[0-9]+}', function (Request $req, Response $res, array $args) {
+            return self::fileResponse($res, Colleagues::file(new Ctx($req, $args, $req->getAttribute('auth')), (int) $args['id']));
+        })->add($admin);
         $app->get('/me/announcements/{id:[0-9]+}', self::h(fn(Ctx $c) => Announcements::read($c, $c->id())))->add($staff);
 
         // Notifications (everyone signed in)

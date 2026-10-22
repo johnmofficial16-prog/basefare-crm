@@ -404,6 +404,7 @@ $app->group('', function ($group) {
     $group->post('/messages/broadcast',              [ChatController::class, 'broadcast']);
     $group->post('/messages/{id:[0-9]+}/reply',      [ChatController::class, 'reply']);
     $group->get('/messages/{id:[0-9]+}/poll',        [ChatController::class, 'poll']);
+    $group->get('/messages/file/{id:[0-9]+}',        [ChatController::class, 'file']);
     $group->get('/messages/all',                     [ChatController::class, 'all']);
     $group->get('/messages/all/{id:[0-9]+}',         [ChatController::class, 'allThread']);
 })

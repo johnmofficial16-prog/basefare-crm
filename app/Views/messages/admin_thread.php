@@ -40,7 +40,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <span class="msg-av msg-av--sm"><?= $h($m['initials']) ?></span>
           <div class="msg-bubble">
             <div class="msg-meta"><b><?= $h($m['author']) ?></b><time><?= $h(date('j M, g:i a', strtotime($m['at']))) ?></time></div>
-            <div class="msg-body"><?= $h($m['body']) ?></div>
+            <?php if ($m['body'] !== ''): ?><div class="msg-body"><?= $h($m['body']) ?></div><?php endif; ?>
+            <?php $msgFiles = $m['files']; require __DIR__ . '/files.php'; ?>
           </div>
         </li>
         <?php endforeach; ?>

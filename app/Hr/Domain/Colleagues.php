@@ -69,6 +69,24 @@ final class Colleagues
         ];
     }
 
+    /** A file on a staff message (admins only; each open is audited). */
+    public static function file(Ctx $c, int $id): array
+    {
+        try {
+            $a = Kernel::crm()->table('chat_attachments')->where('id', $id)->first();
+        } catch (\Throwable) {
+            $a = null;
+        }
+        $path = $a ? \App\Services\ChatFiles::safePath((string) $a->stored_path) : null;
+        if (!$path) {
+            throw ApiError::notFound('That file');
+        }
+        Audit::log('chat.file.view', ['entity' => 'chat_attachments', 'entity_id' => $id,
+            'summary' => Fmt::first((string) ($c->auth['display_name'] ?? 'An admin')) . ' opened "' . $a->original_name . '" from a staff conversation',
+            'detail' => ['chat_thread_id' => (int) $a->thread_id]]);
+        return ['bytes' => (string) file_get_contents($path), 'mime' => $a->mime_type, 'name' => $a->original_name];
+    }
+
     public static function adminThread(Ctx $c, int $id): array
     {
         $db = Kernel::crm();
@@ -80,9 +98,17 @@ final class Colleagues
         Audit::log('chat.view', ['entity' => 'chat_threads', 'entity_id' => $id,
             'summary' => Fmt::first((string) ($c->auth['display_name'] ?? 'An admin')) . ' read a staff conversation between ' . implode(', ', array_column($members, 'name'))]);
         $messages = $db->table('chat_messages as m')->join('users as u', 'u.id', '=', 'm.user_id')->where('m.thread_id', $id)
-            ->orderBy('m.id')->limit(1000)->get(['m.id', 'm.body', 'm.created_at', 'u.name'])
-            ->map(fn($m) => ['id' => (int) $m->id, 'mine' => false, 'author' => $m->name, 'first' => Fmt::first($m->name),
-                'initials' => Fmt::initials($m->name), 'body' => $m->body, 'at' => $m->created_at, 'files' => []])->all();
+            ->orderBy('m.id')->limit(1000)->get(['m.id', 'm.body', 'm.created_at', 'u.name']);
+        $files = [];
+        try {
+            foreach ($db->table('chat_attachments')->where('thread_id', $id)->orderBy('id')->get() as $a) {
+                $files[(int) $a->message_id][] = ['id' => (int) $a->id, 'name' => $a->original_name, 'mime' => $a->mime_type, 'size' => (int) $a->size_bytes];
+            }
+        } catch (\Throwable) {
+            // before the CRM's chat_attachments migration: no files yet
+        }
+        $messages = $messages->map(fn($m) => ['id' => (int) $m->id, 'mine' => false, 'author' => $m->name, 'first' => Fmt::first($m->name),
+                'initials' => Fmt::initials($m->name), 'body' => $m->body, 'at' => $m->created_at, 'files' => $files[(int) $m->id] ?? []])->all();
         return [
             'thread' => ['id' => (int) $t->id, 'subject' => $t->subject, 'started' => $t->created_at,
                 'members' => array_values(array_map(fn($m) => ['id' => $m['employee_id'], 'name' => $m['name'], 'initials' => $m['initials'],

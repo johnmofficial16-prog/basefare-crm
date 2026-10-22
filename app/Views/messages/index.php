@@ -11,6 +11,7 @@
  * @var int|null   $preTo       colleague to pre-select in a new message
  * @var array      $colleagues  the "To" list (everyone else with an active CRM login)
  * @var int        $maxTo
+ * @var bool       $filesOn     files can be attached (the chat_attachments migration has run)
  * @var bool       $isAdmin
  * @var string|null $error
  * @var string     $csrf
@@ -31,7 +32,10 @@ uksort($byRole, fn($a, $b) => $rank($a) <=> $rank($b));
 $boot = [
     'csrf' => $csrf, 'open' => $open ? ['id' => $open['id'], 'last' => $open['messages'] ? end($open['messages'])['id'] : 0] : null,
     'colleagues' => $colleagues, 'maxTo' => $maxTo, 'preTo' => $preTo, 'me' => (int) ($_SESSION['user_id'] ?? 0),
+    'files' => ['on' => $filesOn, 'max' => \App\Services\ChatFiles::MAX_FILES, 'maxFile' => \App\Services\ChatFiles::MAX_FILE_BYTES,
+        'maxTotal' => \App\Services\ChatFiles::MAX_TOTAL, 'accept' => \App\Services\ChatFiles::ACCEPT],
 ];
+$filesAccept = \App\Services\ChatFiles::ACCEPT;
 ?>
 <!DOCTYPE html>
 <html class="light" lang="en">
@@ -123,15 +127,22 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <?php if (!$m['mine']): ?><span class="msg-av msg-av--sm"><?= $h($m['initials']) ?></span><?php endif; ?>
             <div class="msg-bubble">
               <div class="msg-meta"><b><?= $m['mine'] ? 'You' : $h($m['author']) ?></b><time><?= $h(date('j M, g:i a', strtotime($m['at']))) ?></time></div>
-              <div class="msg-body"><?= $h($m['body']) ?></div>
+              <?php if ($m['body'] !== ''): ?><div class="msg-body"><?= $h($m['body']) ?></div><?php endif; ?>
+              <?php $msgFiles = $m['files']; require __DIR__ . '/files.php'; ?>
             </div>
           </li>
           <?php endforeach; ?>
         </ol>
         <?php if ($open['can_reply']): ?>
         <form class="msg-reply" id="msg-reply" data-id="<?= $open['id'] ?>" novalidate>
+          <div class="msg-tray" data-tray hidden></div>
+          <div class="msg-tools">
+            <?php if ($filesOn): ?><button type="button" class="msg-tool" data-attach title="Attach files (or drop them here, or paste a screenshot)" aria-label="Attach files"><span class="material-symbols-outlined">attach_file</span></button><?php endif; ?>
+            <button type="button" class="msg-tool" data-emoji title="Emoji" aria-label="Emoji"><span class="material-symbols-outlined">mood</span></button>
+          </div>
           <textarea name="body" id="msg-reply-body" rows="2" placeholder="Write a reply… (Enter to send, Shift+Enter for a new line)" maxlength="4000" aria-label="Reply"></textarea>
           <button type="submit" class="msg-send" aria-label="Send"><span class="material-symbols-outlined">send</span></button>
+          <?php if ($filesOn): ?><input type="file" multiple hidden data-files accept="<?= $h($filesAccept) ?>"><?php endif; ?>
           <p class="msg-err" id="msg-reply-err" role="alert"></p>
         </form>
         <?php elseif ($open['broadcast'] && $open['sender'] && $open['sender']['active']): ?>
@@ -160,6 +171,12 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <input id="msg-subject" class="msg-input" maxlength="160" value="<?= $h($preSubject) ?>">
           <label class="msg-label" for="msg-body">Message</label>
           <textarea id="msg-body" class="msg-input" rows="7" maxlength="4000" placeholder="Write in English, Hindi or Hinglish"></textarea>
+          <div class="msg-tray" data-tray hidden></div>
+          <div class="msg-toolbar">
+            <?php if ($filesOn): ?><button type="button" class="msg-tool-btn" data-attach><span class="material-symbols-outlined">attach_file</span> Attach files</button><?php endif; ?>
+            <button type="button" class="msg-tool-btn" data-emoji><span class="material-symbols-outlined">mood</span> Emoji</button>
+            <?php if ($filesOn): ?><input type="file" multiple hidden data-files accept="<?= $h($filesAccept) ?>"><?php endif; ?>
+          </div>
           <p class="msg-err" id="msg-body-err" role="alert"></p>
           <div class="msg-actions"><a href="/messages" class="msg-btn-quiet">Cancel</a>
             <button type="submit" class="msg-btn"><span class="material-symbols-outlined">send</span> Send</button></div>
@@ -181,6 +198,12 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <p class="msg-err" id="msg-bsubject-err" role="alert"></p>
           <label class="msg-label" for="msg-bbody">Message</label>
           <textarea id="msg-bbody" class="msg-input" rows="8" maxlength="4000"></textarea>
+          <div class="msg-tray" data-tray hidden></div>
+          <div class="msg-toolbar">
+            <?php if ($filesOn): ?><button type="button" class="msg-tool-btn" data-attach><span class="material-symbols-outlined">attach_file</span> Attach files</button><?php endif; ?>
+            <button type="button" class="msg-tool-btn" data-emoji><span class="material-symbols-outlined">mood</span> Emoji</button>
+            <?php if ($filesOn): ?><input type="file" multiple hidden data-files accept="<?= $h($filesAccept) ?>"><?php endif; ?>
+          </div>
           <p class="msg-err" id="msg-bbody-err" role="alert"></p>
           <div class="msg-actions"><a href="/messages" class="msg-btn-quiet">Cancel</a>
             <button type="submit" class="msg-btn msg-btn--amber"><span class="material-symbols-outlined">campaign</span> <span id="msg-bsend">Send to everyone</span></button></div>

@@ -16,7 +16,7 @@ const stamp = (s) => (f.stamp(s) === 'Today' ? f.time(s) : f.day(s));
 const messageList = (msgs, readOnly = false) => html`<ol class="msgs msgs--p" aria-label="Messages">${msgs.map((m) => html`
   <li class="msg ${m.mine ? 'msg--me' : 'msg--them'}">
     <div class="msg__h"><b>${m.mine ? 'You' : readOnly ? m.author : m.first}</b><time>${f.day(m.at)}, ${f.time(m.at)}</time></div>
-    <div class="msg__b">${m.body}</div>${fileChips(m.files)}</li>`)}</ol>`;
+    ${m.body ? html`<div class="msg__b">${m.body}</div>` : ''}${fileChips(m.files, readOnly ? 'api/chats/files' : undefined)}</li>`)}</ol>`;
 
 // ---- admins: every conversation, read-only --------------------------------------------------
 

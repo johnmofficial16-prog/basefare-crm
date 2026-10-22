@@ -21,6 +21,8 @@ storage/logs/*.log
 storage/logs/*.log.*
 storage/payroll/*.pdf
 storage/cache/
+# CRM Messages — files staff attach to messages (never commit)
+storage/chat/
 
 # Database backups (nightly cron + pre-migration snapshots — never commit)
 storage/backups/*

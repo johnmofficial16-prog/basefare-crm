@@ -14,6 +14,7 @@ use Illuminate\Database\Capsule\Manager as DB;
  *  - CRM admins read every conversation, read-only (/messages/all); each open
  *    is written to activity_log. Trio HR's admins see them too.
  *  - Card numbers can't be sent (PCI): a message containing one is refused.
+ *  - Messages can carry files (ChatFiles); a message may be files only.
  *
  * Failures are thrown as ChatError with a plain-English message for the user.
  */
@@ -146,13 +147,14 @@ class ChatService
 
     private function messages(int $threadId, ?int $userId, int $after = 0): array
     {
-        return DB::table('chat_messages as m')->join('users as u', 'u.id', '=', 'm.user_id')
+        $rows = DB::table('chat_messages as m')->join('users as u', 'u.id', '=', 'm.user_id')
             ->where('m.thread_id', $threadId)->where('m.id', '>', $after)->orderBy('m.id')->limit(500)
-            ->get(['m.id', 'm.user_id', 'm.body', 'm.created_at', 'u.name'])
-            ->map(fn($m) => [
+            ->get(['m.id', 'm.user_id', 'm.body', 'm.created_at', 'u.name']);
+        $files = ChatFiles::forMessages($rows->pluck('id')->map(fn($v) => (int) $v)->all());
+        return $rows->map(fn($m) => [
                 'id' => (int) $m->id, 'mine' => $userId !== null && (int) $m->user_id === $userId,
                 'author' => $m->name, 'first' => self::first($m->name), 'initials' => self::initials($m->name),
-                'body' => $m->body, 'at' => $m->created_at,
+                'body' => $m->body, 'at' => $m->created_at, 'files' => $files[(int) $m->id] ?? [],
             ])->all();
     }
 
@@ -192,10 +194,13 @@ class ChatService
 
     // ---- writing --------------------------------------------------------------------------
 
-    private function cleanBody(?string $raw): string
+    private function cleanBody(?string $raw, bool $hasFiles = false): string
     {
         $body = trim(str_replace("\r\n", "\n", (string) $raw));
         if ($body === '') {
+            if ($hasFiles) {
+                return '';
+            }
             throw new ChatError('Please write your message.', 422, 'body');
         }
         if (mb_strlen($body) > self::BODY_MAX) {
@@ -255,7 +260,7 @@ class ChatService
     }
 
     /** Start a conversation. Returns its id. */
-    public function compose(int $userId, array $to, ?string $subject, ?string $body, string $ip): int
+    public function compose(int $userId, array $to, ?string $subject, ?string $body, string $ip, array $files = []): int
     {
         $dir = $this->directory();
         if (!isset($dir[$userId])) {
@@ -273,28 +278,29 @@ class ChatService
                 throw new ChatError('Someone you picked is not on the list any more. Pick again.', 422, 'to');
             }
         }
-        $body = $this->cleanBody($body);
+        $body = $this->cleanBody($body, (bool) $files);
         $this->throttle($userId, true);
         $subject = trim(mb_substr((string) $subject, 0, 160));
         if ($subject === '') {
             $subject = 'Message from ' . self::first($dir[$userId]->name);
         }
+        $staged = ChatFiles::stage($files);
         $now = date('Y-m-d H:i:s');
-        $id = DB::connection()->transaction(function () use ($userId, $to, $subject, $body, $ip, $now) {
+        $id = $this->saving($staged, fn() => DB::connection()->transaction(function () use ($userId, $to, $subject, $body, $ip, $now, $staged) {
             $id = (int) DB::table('chat_threads')->insertGetId([
                 'subject' => $subject, 'created_by' => $userId, 'last_at' => $now, 'created_at' => $now, 'updated_at' => $now,
             ]);
             foreach (array_merge([$userId], $to) as $uid) {
                 DB::table('chat_members')->insert(['thread_id' => $id, 'user_id' => $uid, 'read_upto' => 0, 'added_at' => $now]);
             }
-            $this->post($id, $userId, $body, $ip, $now);
+            $this->post($id, $userId, $body, $ip, $now, $staged);
             return $id;
-        });
+        }));
         $this->notifyOthers($id, $userId, $subject, 0);
         return $id;
     }
 
-    public function reply(int $userId, int $id, ?string $body, string $ip): int
+    public function reply(int $userId, int $id, ?string $body, string $ip, array $files = []): int
     {
         $t = $this->ownThread($userId, $id);
         $dir = $this->directory();
@@ -304,14 +310,16 @@ class ChatService
         if (($t->kind ?? 'chat') === 'broadcast' && ($dir[$userId]->role ?? '') !== 'admin') {
             throw new ChatError('Only admins can write in a broadcast. Reply to the sender privately instead.', 403);
         }
-        $body = $this->cleanBody($body);
+        $body = $this->cleanBody($body, (bool) $files);
         $this->throttle($userId, false);
         $others = array_filter($this->members([$id])[$id] ?? [], fn($m) => (int) $m->id !== $userId && isset($dir[(int) $m->id]));
         if (!$others) {
             throw new ChatError('Nobody else in this conversation still has an active CRM login, so it is closed.', 409);
         }
         $prev = (int) $t->last_message_id;
-        $msgId = $this->post($id, $userId, $body, $ip, date('Y-m-d H:i:s'));
+        $staged = ChatFiles::stage($files);
+        $now = date('Y-m-d H:i:s');
+        $msgId = $this->saving($staged, fn() => DB::connection()->transaction(fn() => $this->post($id, $userId, $body, $ip, $now, $staged)));
         $this->notifyOthers($id, $userId, $t->subject, $prev);
         return $msgId;
     }
@@ -332,7 +340,7 @@ class ChatService
      * An admin's message to everyone, or to chosen groups (roles). One
      * conversation; only admins can write in it. Returns [id, recipients].
      */
-    public function broadcast(int $userId, array $groups, ?string $subject, ?string $body, string $ip): array
+    public function broadcast(int $userId, array $groups, ?string $subject, ?string $body, string $ip, array $files = []): array
     {
         $dir = $this->directory();
         if (($dir[$userId]->role ?? '') !== 'admin') {
@@ -347,7 +355,7 @@ class ChatService
         if ($subject === '') {
             throw new ChatError('Give the broadcast a subject, so people know what it is about.', 422, 'subject');
         }
-        $body = $this->cleanBody($body);
+        $body = $this->cleanBody($body, (bool) $files);
         $to = [];
         foreach ($dir as $id => $u) {
             if ($id !== $userId && in_array($u->role, $groups, true)) {
@@ -362,8 +370,9 @@ class ChatService
             throw new ChatError('That is a lot of broadcasts in an hour. Please wait a little.', 429);
         }
         $audience = $everyone ? 'Everyone' : implode(', ', array_map(fn($g) => self::GROUPS[$g], $groups));
+        $staged = ChatFiles::stage($files);
         $now = date('Y-m-d H:i:s');
-        $id = DB::connection()->transaction(function () use ($userId, $to, $subject, $body, $ip, $now, $audience) {
+        $id = $this->saving($staged, fn() => DB::connection()->transaction(function () use ($userId, $to, $subject, $body, $ip, $now, $audience, $staged) {
             $id = (int) DB::table('chat_threads')->insertGetId([
                 'subject' => $subject, 'kind' => 'broadcast', 'audience' => mb_substr($audience, 0, 80), 'created_by' => $userId,
                 'last_at' => $now, 'created_at' => $now, 'updated_at' => $now,
@@ -372,20 +381,34 @@ class ChatService
             foreach (array_chunk($rows, 200) as $chunk) {
                 DB::table('chat_members')->insert($chunk);
             }
-            $this->post($id, $userId, $body, $ip, $now);
+            $this->post($id, $userId, $body, $ip, $now, $staged);
             return $id;
-        });
+        }));
         $this->notifyOthers($id, $userId, $subject, 0, 'Broadcast from ');
         return [$id, count($to)];
     }
 
-    private function post(int $threadId, int $userId, string $body, string $ip, string $now): int
+    /** Run the save; if it fails, remove the files already moved into storage. */
+    private function saving(array $staged, callable $save): int
+    {
+        try {
+            return $save();
+        } catch (\Throwable $e) {
+            ChatFiles::discard($staged);
+            throw $e;
+        }
+    }
+
+    private function post(int $threadId, int $userId, string $body, string $ip, string $now, array $staged = []): int
     {
         $msgId = (int) DB::table('chat_messages')->insertGetId([
             'thread_id' => $threadId, 'user_id' => $userId, 'body' => $body, 'ip' => $ip ?: null, 'created_at' => $now,
         ]);
+        ChatFiles::attach($msgId, $threadId, $userId, $staged, $now);
+        $preview = $body !== '' ? self::preview($body)
+            : "\u{1F4CE} " . (count($staged) === 1 ? $staged[0]['original_name'] : count($staged) . ' files');
         DB::table('chat_threads')->where('id', $threadId)->update([
-            'last_at' => $now, 'last_preview' => self::preview($body), 'last_message_id' => $msgId, 'last_sender' => $userId, 'updated_at' => $now,
+            'last_at' => $now, 'last_preview' => mb_substr($preview, 0, 160), 'last_message_id' => $msgId, 'last_sender' => $userId, 'updated_at' => $now,
         ]);
         DB::table('chat_members')->where('thread_id', $threadId)->where('user_id', $userId)->update(['read_upto' => $msgId]);
         return $msgId;
@@ -412,6 +435,21 @@ class ChatService
         } catch (\Throwable $e) {
             error_log('[messages] bell notice failed: ' . $e->getMessage()); // the message itself is saved either way
         }
+    }
+
+    /**
+     * A file, for someone in its conversation or an admin.
+     * @return array{0: object, 1: string, 2: bool} [attachment row, absolute path, opened by an admin from outside the conversation]
+     */
+    public function file(int $userId, bool $isAdmin, int $fileId): array
+    {
+        $a = ChatFiles::tableReady() ? DB::table('chat_attachments')->where('id', $fileId)->first() : null;
+        $member = $a && DB::table('chat_members')->where('thread_id', $a->thread_id)->where('user_id', $userId)->exists();
+        $path = $a && ($member || $isAdmin) ? ChatFiles::safePath((string) $a->stored_path) : null;
+        if (!$path) {
+            throw new ChatError('That file was not found.', 404);
+        }
+        return [$a, $path, !$member];
     }
 
     // ---- admins: every conversation, read-only --------------------------------------------
