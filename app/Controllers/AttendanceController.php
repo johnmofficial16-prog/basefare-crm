@@ -129,9 +129,27 @@ class AttendanceController
             'total_break_mins' => $stateInfo['session']?->total_break_mins ?? 0,
             'server_time'      => date('Y-m-d H:i:s'),
             'breaks_remaining' => $breaksRemaining,
+            // The late-login waiting page needs this: a blocked agent and an
+            // approved one are both 'not_clocked_in', so without it the page
+            // announced "approved" ten seconds after any late login. Same
+            // record and date attemptClockIn() checks.
+            'override'         => $this->todaysOverride((int) $userId),
         ];
 
         return $this->jsonResponse($response, $data, 200);
+    }
+
+    /** 'approved' | 'denied' | null — today's late-login decision for this agent. */
+    private function todaysOverride(int $userId): ?string
+    {
+        $types = \App\Models\AttendanceOverride::where('agent_id', $userId)
+            ->where('shift_date', date('Y-m-d'))
+            ->whereIn('override_type', [\App\Models\AttendanceOverride::TYPE_LATE_LOGIN, \App\Models\AttendanceOverride::TYPE_DENIAL])
+            ->pluck('override_type')->all();
+        if (in_array(\App\Models\AttendanceOverride::TYPE_LATE_LOGIN, $types, true)) {
+            return 'approved';
+        }
+        return $types === [] ? null : 'denied';
     }
 
     // =========================================================================

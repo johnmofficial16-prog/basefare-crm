@@ -81,13 +81,16 @@ async function checkOverride() {
       return;
     }
 
-    // Check if an override record now exists for today by trying a lightweight clock-in probe
-    // Only attempt if we receive a signal that agent is no longer blocked (state = not_clocked_in
-    // after having been blocked = override was granted, they can now try)
-    if (data.state === 'not_clocked_in') {
-      // Admin approved the override — redirect to clock-in lobby so agent can click the button
+    // Only an actual approval sends them back to clock in. 'not_clocked_in'
+    // alone is also what a still-blocked agent looks like, and treating it as
+    // approval bounced every late agent back to the clock-in screen.
+    if (data.override === 'approved') {
       document.getElementById('statusText').textContent = '✓ Override approved! Redirecting...';
       setTimeout(() => { window.location.href = '/clock-in'; }, 1000);
+    } else if (data.override === 'denied') {
+      document.getElementById('statusText').textContent = 'Your late login was not approved. Please speak to your team leader or manager.';
+    } else {
+      document.getElementById('statusText').textContent = 'Waiting for approval...';
     }
 
   } catch(e) {
