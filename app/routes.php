@@ -178,6 +178,15 @@ $app->group('/buddy', function ($group) {
     $group->post('/greeting', [\App\Controllers\BuddyController::class, 'agentGreeting']);
     $group->post('/feedback', [\App\Controllers\BuddyController::class, 'feedback']);
     $group->post('/chat',     [\App\Controllers\BuddyController::class, 'agentChat']);
+    // Aisha v2 (23 Oct 2026): the Tonight card, quiet mode/voice, "What Aisha
+    // knows" with forget, the nudge buttons, a fresh chat, usage events.
+    $group->get('/today',            [\App\Controllers\BuddyController::class, 'today']);
+    $group->post('/settings',        [\App\Controllers\BuddyController::class, 'settings']);
+    $group->get('/memory',           [\App\Controllers\BuddyController::class, 'memory']);
+    $group->post('/memory/forget',   [\App\Controllers\BuddyController::class, 'forget']);
+    $group->post('/nudge/{id:[0-9]+}/{action:done|snooze|open}', [\App\Controllers\BuddyController::class, 'nudgeAct']);
+    $group->post('/new',             [\App\Controllers\BuddyController::class, 'newChat']);
+    $group->post('/event',           [\App\Controllers\BuddyController::class, 'event']);
     $group->post('/tts',      [\App\Controllers\BuddyController::class, 'ttsSynthesize']);
     $group->get('/tts/{file}',[\App\Controllers\BuddyController::class, 'ttsAudio']);
 })

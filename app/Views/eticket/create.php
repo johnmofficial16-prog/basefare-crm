@@ -517,6 +517,17 @@ function toggleManualMode(on) {
     ? 'Manual mode — no booking will be linked. Fill every field by hand.'
     : '';
 }
+
+// Aisha's "Create the e-ticket" button links here as ?transaction=ID: pick that
+// booking and load it, so the agent lands on a filled form. Only a booking that
+// is already in this agent's own list can be picked.
+(function () {
+  const id  = new URLSearchParams(location.search).get('transaction');
+  const sel = document.getElementById('txn-selector');
+  if (!id || !/^\d+$/.test(id) || !sel || !sel.querySelector('option[value="' + id + '"]')) return;
+  sel.value = id;
+  loadAutofill();
+})();
 </script>
 
 </body>

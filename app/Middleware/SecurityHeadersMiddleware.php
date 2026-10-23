@@ -35,8 +35,11 @@ class SecurityHeadersMiddleware
             ->withHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
             // Prevent token/PII leakage via Referer header on external links
             ->withHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
-            // Restrict browser features the CRM doesn't need
-            ->withHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+            // Restrict browser features the CRM doesn't need. The microphone is
+            // allowed for the CRM's own pages only: Aisha's talk button needs
+            // it, and `microphone=()` blocked it before the browser could even
+            // ask (found 23 Oct 2026). The browser still asks the person first.
+            ->withHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()')
             // Baseline CSP. All scripts (Tailwind runtime, html2pdf, JsBarcode,
             // Chart.js) are served from /assets/js — no third-party script hosts.
             // 'unsafe-eval' stays: the Tailwind runtime compiler needs it.

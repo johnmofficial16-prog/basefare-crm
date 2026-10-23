@@ -5,29 +5,28 @@
  *   php /home/u501549865/domains/base-fare.com/public_html/crm/cron/buddy_triggers.php
  *
  * SQL decides WHEN the buddy speaks; Gemini only ever decides HOW (later, in
- * chat). This cron writes buddy_nudges rows and mirrors each one into the
- * existing notification bell.
+ * chat). This cron writes buddy_nudges rows; Aisha delivers them herself.
  *
  * Idempotency is structural: buddy_nudges.dedupe_key is UNIQUE and every rule
  * builds a stable key (rule:entity), so re-runs and overlapping crons cannot
  * double-nudge. INSERT IGNORE semantics via the duplicate-key catch.
  *
- * Rules:
- *   sale_praise_t1     approved txn >= t1 (last 24h)         one per txn
- *   sale_praise_t2     approved txn >= t2 (last 24h)         one per txn (suppresses t1)
- *   eticket_lag        approved txn, no e-ticket after 4h    one per txn per escalation round
- *   acceptance_lag     approved acceptance, no txn after 6h  one per acceptance per round
- *   departure_24h      booking departs < 24h                 one per txn
- *   dry_spell          no approved sale in 3 days            one per agent per quiet-streak day
+ * Rules (v2 diet, 23 Oct 2026 — see "LESS IS MORE" below):
+ *   sale_praise_t2     approved txn >= t2 (last 24h)         one per txn
+ *   eticket_lag        approved txn, no e-ticket after 4h    rounds 1–2 (4h, 24h)
+ *   acceptance_lag     approved acceptance, no txn after 6h  round 1 only
+ *   departure_24h      departs < 24h AND no e-ticket yet     one per txn
+ *   dry_spell          no approved sale in 3 days, while     one per agent per 3 quiet days
+ *                      clocked in
  *   first_sale_today   first approved sale of the business   one per agent per business day,
- *                      day, below the praise floor           (praise covers it otherwise)
+ *                      day, below the big-sale line          (praise covers it otherwise)
  *   shift_wrap         open attendance session past the      one per agent per business day
  *                      wind-down threshold (~hour 13)
  *   goal_hit           self-set monthly goal crossed         one per agent per month per metric
  *   goal_pace          >15% behind own goal's pace           max one per agent per week, after the 7th
  *
  * Amounts are US dollars (the CRM trades in USD). Tunables, all via .env with
- * no deploy: BUDDY_PRAISE_T1 (default 500), BUDDY_PRAISE_T2 (1000),
+ * no deploy: BUDDY_PRAISE_T2 (default 2000; T1 retired in v2),
  * BUDDY_WRAP_AFTER_HOURS (13 — the centre's real shift is 6pm→9am, so the
  * wind-down cue lands ~7am; see the rule for why NOT 8).
  *
@@ -40,6 +39,21 @@
  *    ownership with the agent — never a management target.
  *  - Every run ends with an unconditional heartbeat (buddy_triggers_ran) so
  *    the maintenance buddy can tell "nothing to say" from "not running".
+ *
+ * LESS IS MORE (v2, 23 Oct 2026). The usage report showed Aisha sending nine
+ * messages for every one an agent sent, most nudges ignored, and every nudge
+ * ALSO landing in the notification bell. Research on proactive assistants
+ * says the same thing: people stop valuing help that interrupts often. So:
+ *  - no bell copy — the nudge arrives once, from Aisha, with its own button;
+ *  - "departs tomorrow" only when the e-ticket is actually missing (it used to
+ *    fire for every departing booking, ticketed or not);
+ *  - an acceptance is chased once, an e-ticket twice (4h, then 24h) — the 72h
+ *    third round only ever reached people who had already decided;
+ *  - praise for big sales (>= BUDDY_PRAISE_T2) and for the first sale of the
+ *    night; the $500 "nice sale" tier made praise background noise;
+ *  - dry-spell check-ins every third quiet day, and only while clocked in.
+ * The feed also re-checks each nudge at delivery and drops it if the thing is
+ * already done (BuddyService::nudgeResolved).
  */
 
 require __DIR__ . '/../vendor/autoload.php';
@@ -89,8 +103,12 @@ function alreadyNudged(string $dedupeKey): bool
 }
 
 /**
- * Insert a nudge + bell notification. Returns true if it was NEW.
+ * Insert a nudge. Returns true if it was NEW.
  * The UNIQUE dedupe_key makes this safe under overlap and re-runs.
+ *
+ * $bellTitle / $bellBody are the one-line summary of the nudge. They used to
+ * be mirrored into the notification bell; since v2 they are not (the nudge
+ * arrives once, from Aisha) but they stay as the rule's own description.
  */
 function nudge(int $userId, string $type, string $dedupeKey, array $payload, string $bellTitle, string $bellBody, ?int $txnId = null): bool
 {
@@ -112,23 +130,6 @@ function nudge(int $userId, string $type, string $dedupeKey, array $payload, str
         error_log('[buddy_triggers] nudge insert failed: ' . $e->getMessage());
         return false;
     }
-
-    // Mirror into the existing bell (best-effort; nudge row is the source of truth).
-    try {
-        Capsule::table('notifications')->insert([
-            'user_id'        => $userId,
-            'type'           => 'buddy_nudge',
-            'transaction_id' => $txnId,
-            'title'          => $bellTitle,
-            'body'           => $bellBody,
-            'link'           => '/buddy',
-            'read_at'        => null,
-            'created_at'     => date('Y-m-d H:i:s'),
-            'updated_at'     => date('Y-m-d H:i:s'),
-        ]);
-    } catch (\Throwable $e) {
-        error_log('[buddy_triggers] bell mirror failed: ' . $e->getMessage());
-    }
     return true;
 }
 
@@ -140,17 +141,21 @@ function nudge(int $userId, string $type, string $dedupeKey, array $payload, str
 // 18 Aug 2026: the team's average sale was $1,614, so the default t2 of $1,000
 // fires for a BELOW-average sale — i.e. the biggest celebration was the common
 // case. Raise BUDDY_PRAISE_T2 in .env (no deploy) if "big" should mean big.
-$praiseT1 = (float) ($_ENV['BUDDY_PRAISE_T1'] ?? 500);
-$praiseT2 = (float) ($_ENV['BUDDY_PRAISE_T2'] ?? 1000);
+// v2: with the t1 tier retired, the default moved to $2,000 — above that
+// average — so "big sale" means a big sale. BUDDY_PRAISE_T1 is no longer read.
+$praiseT2 = (float) ($_ENV['BUDDY_PRAISE_T2'] ?? 2000);
 
+// v2: only the big tier speaks on its own. A sale between t1 and t2 is
+// celebrated as the first of the night (rule 6b) or not at all — the agent
+// can always ask her, and she knows every one of them.
 $sales = Capsule::table('transactions')
     ->where('status', 'approved')
-    ->where('total_amount', '>=', $praiseT1)
+    ->where('total_amount', '>=', $praiseT2)
     ->where('created_at', '>=', date('Y-m-d H:i:s', time() - 86400))
     ->get(['id', 'agent_id', 'total_amount', 'currency', 'pnr']);
 
 foreach ($sales as $s) {
-    $tier = ((float) $s->total_amount >= $praiseT2) ? 't2' : 't1';
+    $tier = 't2';
     $ref  = $s->pnr ?: ('#' . $s->id);
     $amt  = (float) $s->total_amount;
 
@@ -194,13 +199,20 @@ foreach ($sales as $s) {
     );
 }
 
-// ── 3. E-ticket lag: approved txn, no e-ticket, older than 4h (last 7d) ──────
+// ── 3. E-ticket lag: charged txn, no e-ticket, 4h+ since the charge (last 7d) ─
+// v2: the CRM only lets an agent create an e-ticket once an admin has marked
+// the payment "Charge Successful" (ETicketService's gate). Before that the
+// agent can do nothing about it, so the clock starts at the charge
+// (gateway_actioned_at), not at the sale — v1 nagged about bookings the agent
+// could not ticket yet.
 $lagged = Capsule::table('transactions AS t')
     ->leftJoin('etickets AS e', 'e.transaction_id', '=', 't.id')
     ->where('t.status', 'approved')
+    ->where('t.gateway_status', 'charge_successful')
     ->whereNull('e.id')
-    ->whereBetween('t.created_at', [date('Y-m-d H:i:s', time() - 7 * 86400), date('Y-m-d H:i:s', time() - 4 * 3600)])
-    ->get(['t.id', 't.agent_id', 't.pnr', 't.created_at']);
+    ->whereRaw('COALESCE(t.gateway_actioned_at, t.created_at) BETWEEN ? AND ?',
+        [date('Y-m-d H:i:s', time() - 7 * 86400), date('Y-m-d H:i:s', time() - 4 * 3600)])
+    ->get(['t.id', 't.agent_id', 't.pnr', Capsule::raw('COALESCE(t.gateway_actioned_at, t.created_at) AS created_at')]);
 
 // Escalation arithmetic + dedupe-key contract (unit-tested separately).
 require __DIR__ . '/buddy_triggers_rules.php';
@@ -209,8 +221,8 @@ foreach ($lagged as $t) {
     $ref   = $t->pnr ?: ('#' . $t->id);
     $hrs   = round((time() - strtotime($t->created_at)) / 3600);
     $round = lagRound((float) $hrs, 4);
-    if ($round === 0) {
-        continue;
+    if ($round === 0 || $round > 2) {
+        continue;   // v2: 4h and 24h; the 72h round only reached people who had decided
     }
     $created += (int) nudge(
         (int) $t->agent_id,
@@ -237,8 +249,8 @@ $accLag = Capsule::table('acceptance_requests AS a')
 foreach ($accLag as $a) {
     $hrs   = round((time() - strtotime($a->approved_at)) / 3600);
     $round = lagRound((float) $hrs, 6);
-    if ($round === 0) {
-        continue;
+    if ($round !== 1) {
+        continue;   // v2: chased once — after that it is the agent's call, not a reminder
     }
     $created += (int) nudge(
         (int) $a->agent_id,
@@ -250,12 +262,16 @@ foreach ($accLag as $a) {
     );
 }
 
-// ── 5. Departure < 24h ───────────────────────────────────────────────────────
-$departing = Capsule::table('transactions')
-    ->where('status', 'approved')
-    ->whereNotNull('travel_date')
-    ->whereBetween('travel_date', [date('Y-m-d'), date('Y-m-d', time() + 86400)])
-    ->get(['id', 'agent_id', 'pnr', 'travel_date', 'departure_time']);
+// ── 5. Departure < 24h, still without an e-ticket ───────────────────────────
+// v2: a ticketed booking flying tomorrow needs nothing from the agent; this
+// used to fire for every departure regardless.
+$departing = Capsule::table('transactions AS t')
+    ->leftJoin('etickets AS e', 'e.transaction_id', '=', 't.id')
+    ->where('t.status', 'approved')
+    ->whereNull('e.id')
+    ->whereNotNull('t.travel_date')
+    ->whereBetween('t.travel_date', [date('Y-m-d'), date('Y-m-d', time() + 86400)])
+    ->get(['t.id', 't.agent_id', 't.pnr', 't.travel_date', 't.departure_time', 't.gateway_status']);
 
 foreach ($departing as $t) {
     $ref = $t->pnr ?: ('#' . $t->id);
@@ -263,19 +279,27 @@ foreach ($departing as $t) {
         (int) $t->agent_id,
         'departure_24h',
         "departure_24h:txn:{$t->id}",
-        ['ref' => $ref, 'departs' => trim($t->travel_date . ' ' . ($t->departure_time ?? ''))],
-        '✈️ Departure within 24h',
-        "Booking {$ref} departs " . trim($t->travel_date . ' ' . ($t->departure_time ?? '')) . '. Boarding pass / check-in follow-up time.',
+        // 'charged' decides what she says: make the e-ticket now, or get an
+        // admin to confirm the charge first (the CRM won't allow it before).
+        ['ref' => $ref, 'departs' => trim($t->travel_date . ' ' . ($t->departure_time ?? '')), 'no_eticket' => true,
+         'charged' => $t->gateway_status === 'charge_successful'],
+        '✈️ Departure within 24h, no e-ticket',
+        "Booking {$ref} departs " . trim($t->travel_date . ' ' . ($t->departure_time ?? '')) . ' and has no e-ticket yet.',
         (int) $t->id
     );
 }
 
-// ── 6. Dry spell: active agents with no approved sale in 3 days ──────────────
-// Dedupe key includes today's date → at most one per agent per day, and it
-// naturally re-arms after a sale (the rule stops matching).
-$agents = Capsule::table('users')
-    ->whereIn('role', ['agent', 'supervisor'])->where('status', 'active')->whereNull('deleted_at') // team leaders sell too
-    ->pluck('id');
+// ── 6. Dry spell: agents at work with no approved sale in 3 days ─────────────
+// v2: once every three quiet days (the key carries the 3-day bucket and the
+// last sale it counts from, so a new sale re-arms it), and only for people who
+// are clocked in right now — a check-in nobody is at the desk to read is just
+// a stale message waiting to greet them.
+$agents = Capsule::table('users AS u')
+    ->join('attendance_sessions AS s', 's.user_id', '=', 'u.id')
+    ->whereIn('u.role', ['agent', 'supervisor'])->where('u.status', 'active')->whereNull('u.deleted_at') // team leaders sell too
+    ->where('s.status', 'active')
+    ->distinct()
+    ->pluck('u.id');
 
 foreach ($agents as $agentId) {
     $lastSale = Capsule::table('transactions')
@@ -294,7 +318,7 @@ foreach ($agents as $agentId) {
     $created += (int) nudge(
         (int) $agentId,
         'dry_spell',
-        'dry_spell:user:' . $agentId . ':' . date('Y-m-d'),
+        'dry_spell:user:' . $agentId . ':' . substr((string) $lastSale, 0, 10) . ':b' . (int) floor($quietDays / 3),
         ['days_since_last_sale' => floor($quietDays), 'last_sale_at' => $lastSale],
         '💪 Your buddy checked in',
         'It has been ' . floor($quietDays) . ' days since your last recorded sale — come talk tactics.'
@@ -306,7 +330,7 @@ foreach ($agents as $agentId) {
 // of ~$350 bookings, a perfectly good day could pass with Aisha saying nothing
 // at all. Getting on the board is worth a word regardless of the number.
 //
-// Only fires when that first sale is BELOW the praise floor — above it, the
+// Only fires when that first sale is BELOW the big-sale line — above it, the
 // praise rule already speaks, and two messages about one booking is clutter.
 [$bdStart, $bdEnd] = \App\Services\ShiftService::businessDayBounds();
 $bdKey = substr((string) $bdStart, 0, 10);
@@ -326,7 +350,7 @@ if ($firstPerAgent->isNotEmpty()) {
 
     foreach ($firstPerAgent as $fp) {
         $t = $firstRows[$fp->first_id] ?? null;
-        if ($t === null || (float) $t->total_amount >= $praiseT1) {
+        if ($t === null || (float) $t->total_amount >= $praiseT2) {
             continue;                       // praise rule covers this one
         }
         if (alreadyNudged("first_sale:user:{$t->agent_id}:{$bdKey}")) {
@@ -386,6 +410,7 @@ foreach ($wrapEligible as $w) {
     $openEtix = Capsule::table('transactions AS t')
         ->leftJoin('etickets AS e', 'e.transaction_id', '=', 't.id')
         ->where('t.agent_id', $w->user_id)->where('t.status', 'approved')
+        ->where('t.gateway_status', 'charge_successful')   // ones they can actually ticket
         ->where('t.created_at', '>=', date('Y-m-d H:i:s', time() - 14 * 86400))
         ->whereNull('e.id')->count();
 
@@ -503,7 +528,7 @@ $outcomes = 0;
 try {
     $open = Capsule::table('buddy_nudges')
         ->whereIn('type', ['eticket_lag', 'acceptance_lag', 'dry_spell'])
-        ->whereIn('status', ['delivered', 'seen'])
+        ->whereIn('status', ['delivered', 'seen', 'done'])
         ->whereNull('outcome')
         ->whereNotNull('delivered_at')
         ->orderBy('id')

@@ -44,6 +44,12 @@ class TtsService
         return self::apiKey() !== '';
     }
 
+    /** BUDDY_TTS_ENABLED=false silences Aisha's cloud voice (the widget falls back to browser speech). */
+    public static function enabled(): bool
+    {
+        return ($_ENV['BUDDY_TTS_ENABLED'] ?? getenv('BUDDY_TTS_ENABLED') ?: 'true') !== 'false';
+    }
+
     /**
      * Key resolution: a dedicated GOOGLE_TTS_API_KEY always wins; without one
      * we TRY the existing VERTEX_API_KEY. Rationale ("can't we just use the
@@ -86,7 +92,7 @@ class TtsService
     public static function synthesize(string $text, ?string $voice = null, ?float $rate = null, ?float $pitch = null): ?string
     {
         try {
-            if (!self::isConfigured()) {
+            if (!self::isConfigured() || !self::enabled()) {
                 return null;
             }
             $text = trim(mb_substr($text, 0, self::MAX_CHARS));
@@ -113,6 +119,12 @@ class TtsService
                 return $file;                     // cache hit — free
             }
             if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
+                return null;
+            }
+            // Speech has its own daily allowance (BUDDY_TTS_DAILY_CHARS):
+            // only a cache miss costs money, so only a miss is counted.
+            if (!BuddyBudget::ttsAllowed(mb_strlen($text))) {
+                self::$lastError = "today's speech allowance is used up";
                 return null;
             }
 
@@ -170,6 +182,7 @@ class TtsService
                 return null;
             }
 
+            BuddyBudget::recordTts(mb_strlen($text));
             if (@file_put_contents($path, $audio) !== strlen($audio)) {
                 @unlink($path);
                 return null;

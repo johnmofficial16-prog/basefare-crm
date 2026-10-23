@@ -144,7 +144,9 @@ class AgentTools
 
         $r->register(
             'remember_fact',
-            'Save a short personal fact the agent shared (their preferred name, goals, what motivates them) to the buddy\'s permanent memory for this agent. Use during onboarding and whenever the agent shares something durable.',
+            'Save something the agent wants you to remember (how they like to work, what motivates them, a detail they asked you to keep). '
+            . 'Save it when they ask you to, or when it is clearly a lasting preference. Do NOT save private confidences '
+            . '(health, family problems, feelings about colleagues or managers) unless they ask you to remember them.',
             [
                 'type'       => 'object',
                 'properties' => [
@@ -155,15 +157,139 @@ class AgentTools
             fn(array $a) => self::rememberFact($userId, (string) ($a['fact'] ?? ''))
         );
 
+        // ── Aisha v2 (23 Oct 2026): help beyond their own numbers ──────────
+        $question = [
+            'type'       => 'object',
+            'properties' => ['question' => ['type' => 'string', 'description' => "The agent's question in a few words."]],
+            'required'   => ['question'],
+        ];
+        $r->register(
+            'crm_help',
+            'How to do something in the Base Fare CRM: card authorizations (acceptances), transactions, e-tickets, '
+            . 'refunds and voids, call logs, clock-in, breaks and clock-out, messages, notepad, customer emails, invoices, '
+            . 'vouchers, performance, reminders, Trio HR, passwords and access. ALWAYS call this for any "how do I", '
+            . '"where is" or "who can" question about the CRM, and answer ONLY from what it returns — never guess steps.',
+            $question,
+            fn(array $a) => AishaKnowledge::search(AishaKnowledge::crmGuide(), (string) ($a['question'] ?? ''))
+        );
+        $r->register(
+            'sales_tips',
+            'Practical, honest phone-sales coaching for selling flights to US customers: opening a call, discovery '
+            . 'questions, "I\'ll think about it", "cheaper online", "too expensive", scam worries, angry customers, delays '
+            . 'and cancellations, taking notes from passengers, missing the right words, the phonetic alphabet, closing, '
+            . 'follow-ups, add-ons, US time zones, rapport, staying fresh on nights. Call it for any customer-handling or '
+            . 'selling question and build your answer on what it returns.',
+            $question,
+            fn(array $a) => AishaKnowledge::search(AishaKnowledge::playbook(), (string) ($a['question'] ?? ''))
+        );
+        $r->register(
+            'get_my_day',
+            "The agent's own results for ONE past shift day (6 PM that day to 6 PM the next, like the dashboard): "
+            . 'sales, revenue, net MCO and the bookings. Use for "how did I do yesterday" or "my score on 30 Sep".',
+            [
+                'type'       => 'object',
+                'properties' => ['date' => ['type' => 'string', 'description' => 'YYYY-MM-DD, or "yesterday".']],
+                'required'   => ['date'],
+            ],
+            fn(array $a) => self::dayStats($userId, $role, (string) ($a['date'] ?? ''))
+        );
+        $r->register(
+            'get_my_booking',
+            "Look up ONE of the agent's own bookings by booking reference (PNR) or transaction number: type, status, "
+            . 'amount, travel date, and whether the e-ticket is issued, emailed and acknowledged. Never another agent\'s booking.',
+            [
+                'type'       => 'object',
+                'properties' => ['ref' => ['type' => 'string', 'description' => 'Booking reference / PNR, or a transaction number like #1234.']],
+                'required'   => ['ref'],
+            ],
+            fn(array $a) => self::booking($userId, (string) ($a['ref'] ?? ''))
+        );
+        if (self::rankEnabled() && in_array($role, ['agent', 'supervisor'], true)) {
+            $r->register(
+                'get_my_rank',
+                'Where the agent stands this calendar month among everyone who sells: their rank and how many people, '
+                . 'by net MCO or by number of sales. Gives no names and no other person\'s numbers — never guess them.',
+                [
+                    'type'       => 'object',
+                    'properties' => ['metric' => ['type' => 'string', 'enum' => ['net_mco', 'sales'], 'description' => 'Default net_mco.']],
+                ],
+                fn(array $a) => self::rank($userId, $role, (string) ($a['metric'] ?? 'net_mco'))
+            );
+        }
+        $r->register(
+            'set_reminder',
+            'Set a personal reminder that pops up for the agent at a time ("remind me to call back Mr Shah at 2:30am", '
+            . '"in 45 minutes check the fare"). Times are India time unless they name a US zone (e.g. "9pm Eastern").',
+            [
+                'type'       => 'object',
+                'properties' => [
+                    'when' => ['type' => 'string', 'description' => 'The time in plain English: "in 30 minutes", "in 2 hours", "at 2:30 am", '
+                        . '"tomorrow at 9 pm", "9 pm eastern", "25 oct 3 pm", or an exact India time "2026-10-24 02:30". '
+                        . 'Translate Hindi/Hinglish first ("10 minute baad" → "in 10 minutes"). Never a numeric date like 10/24.'],
+                    'what' => ['type' => 'string', 'description' => 'What to remind them about, short. No phone numbers or card details.'],
+                ],
+                'required'   => ['when', 'what'],
+            ],
+            fn(array $a) => self::setReminder($userId, (string) ($a['when'] ?? ''), (string) ($a['what'] ?? ''))
+        );
+        $r->register(
+            'get_my_reminders',
+            "The agent's upcoming personal reminders, soonest first, with ids.",
+            [],
+            fn() => self::reminders($userId)
+        );
+        $r->register(
+            'cancel_reminder',
+            'Cancel one of the agent\'s reminders by id (from get_my_reminders).',
+            [
+                'type'       => 'object',
+                'properties' => ['id' => ['type' => 'integer']],
+                'required'   => ['id'],
+            ],
+            fn(array $a) => self::cancelReminder($userId, (int) ($a['id'] ?? 0))
+        );
+        $r->register(
+            'get_my_memory',
+            'Everything Aisha remembers about the agent: their preferred name, their own goal, and the saved facts with ids. '
+            . 'Use for "what do you know about me".',
+            [],
+            fn() => self::memory($userId)
+        );
+        $r->register(
+            'forget_memory',
+            'Forget something Aisha remembered about the agent — by fact id from get_my_memory, or by a few words of it. '
+            . 'Always do it when they ask; it is their information.',
+            [
+                'type'       => 'object',
+                'properties' => [
+                    'fact_id' => ['type' => 'integer'],
+                    'words'   => ['type' => 'string', 'description' => 'A few words from the fact to forget.'],
+                ],
+            ],
+            fn(array $a) => self::forget($userId, (int) ($a['fact_id'] ?? 0), (string) ($a['words'] ?? ''))
+        );
+        if ($role === 'supervisor') {
+            $r->register(
+                'get_my_team',
+                'Team leaders only: the agents in THEIR OWN team — who is clocked in now, sales and net MCO this shift and '
+                . 'this month, and e-tickets waiting, per agent. Use for "how is my team doing" or "who needs help".',
+                [],
+                fn() => self::team($userId, $role)
+            );
+        }
+
         return $r;
     }
 
     /** Facts injected into the persona each turn (onboarding memory). */
     public static function facts(int $userId): array
     {
-        return DB::table('buddy_agent_facts')
+        // The 20 MOST RECENT facts (shown oldest first). It used to take the
+        // oldest 20, so everything she learned after the twentieth fact never
+        // reached her prompt again.
+        return array_reverse(DB::table('buddy_agent_facts')
             ->where('user_id', $userId)->where('active', 1)
-            ->orderBy('id')->limit(20)->pluck('fact')->all();
+            ->orderByDesc('id')->limit(20)->pluck('fact')->all());
     }
 
     /**
@@ -364,16 +490,21 @@ class AgentTools
             ->whereNull('e.id')
             ->orderBy('t.created_at')
             ->limit(10)
-            ->get(['t.id', 't.pnr', 't.created_at'])
+            ->get(['t.id', 't.pnr', 't.created_at', 't.gateway_status'])
             ->map(fn($t) => [
                 'booking'       => $t->pnr ?: ('#' . $t->id),
                 'sold_at'       => $t->created_at,
                 'waiting_hours' => round((time() - strtotime($t->created_at)) / 3600, 1),
+                // The e-ticket form only accepts bookings an admin has marked
+                // "Charge Successful" — say which ones they can do right now.
+                'charged'       => $t->gateway_status === 'charge_successful',
             ])->all();
 
         return [
             'acceptances_awaiting_transaction' => $accs,
             'transactions_awaiting_eticket'    => $txns,
+            'eticket_rule' => 'An e-ticket can only be created once an admin has marked the payment "Charge Successful". '
+                . 'charged=false bookings are waiting on an admin, not on the agent.',
         ];
     }
 
@@ -406,9 +537,13 @@ class AgentTools
      */
     private static function nudges(int $userId): array
     {
+        // Reminders have their own tools (a future one is not "flagged"), and
+        // nudges dropped because the job was already done are history, not news.
         $rows = DB::table('buddy_nudges')
             ->where('user_id', $userId)
             ->where('created_at', '>=', date('Y-m-d H:i:s', time() - 48 * 3600))
+            ->where('type', '!=', 'reminder')
+            ->whereNotIn('status', ['expired', 'done'])
             ->orderByDesc('id')
             ->limit(10)
             ->get(['id', 'type', 'payload_json', 'status', 'created_at'])
@@ -417,6 +552,8 @@ class AgentTools
                 'type'    => $n->type,
                 'payload' => json_decode((string) $n->payload_json, true) ?: [],
                 'unread'  => in_array($n->status, ['pending', 'delivered'], true),
+                // true = already in the chat; false = she hasn't raised it yet
+                'in_chat' => in_array($n->status, ['delivered', 'seen'], true),
                 'at'      => $n->created_at,
             ])->all();
 
@@ -819,5 +956,541 @@ class AgentTools
             'created_at' => date('Y-m-d H:i:s'),
         ]);
         return ['saved' => true, 'fact' => $fact];
+    }
+
+    // =========================================================================
+    // AISHA v2 HANDLERS (23 Oct 2026)
+    // =========================================================================
+
+    /** Rank is on unless BUDDY_RANK_ENABLED=false. */
+    private static function rankEnabled(): bool
+    {
+        return ($_ENV['BUDDY_RANK_ENABLED'] ?? getenv('BUDDY_RANK_ENABLED') ?: 'true') !== 'false';
+    }
+
+    /** A date the agent said → the shift date (Y-m-d), or null. */
+    public static function parseDay(string $s): ?string
+    {
+        $s = mb_strtolower(trim($s));
+        [$start] = ShiftService::businessDayBounds();
+        $today = substr((string) $start, 0, 10);
+        if ($s === '' || $s === 'today' || $s === 'aaj') {
+            return $today;
+        }
+        if (in_array($s, ['yesterday', 'kal', 'last night'], true)) {
+            return date('Y-m-d', strtotime($today . ' -1 day'));
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $s)) {
+            return $s;
+        }
+        $ts = strtotime($s);
+        if ($ts === false) {
+            return null;
+        }
+        $d = date('Y-m-d', $ts);
+        // "30 Sep" asked in January means last year's September.
+        return $d > $today ? date('Y-m-d', strtotime($d . ' -1 year')) : $d;
+    }
+
+    private static function dayStats(int $userId, string $role, string $date): array
+    {
+        $d = self::parseDay($date);
+        if ($d === null) {
+            return ['error' => 'Give a date like 2026-09-30, 30 Sep, or "yesterday".'];
+        }
+        $h    = ShiftService::businessDayStartHour();
+        $from = date('Y-m-d H:i:s', strtotime($d) + $h * 3600);
+        $to   = date('Y-m-d H:i:s', strtotime($from) + 86399);
+        if (strtotime($from) > time()) {
+            return ['error' => 'That shift has not started yet.'];
+        }
+        $q = DB::table('transactions')
+            ->where('agent_id', $userId)->where('status', 'approved')
+            ->whereBetween('created_at', [$from, $to]);
+        $q = PerformanceHold::apply($q, 'created_at', $role);
+        $rows = $q->orderBy('created_at')->limit(40)
+            ->get(['id', 'pnr', 'type', 'total_amount', 'profit_mco', 'refund_mco_impact', 'created_at']);
+
+        $out = [
+            'shift'    => date('D j M Y', strtotime($d)) . ', 6 PM to 6 PM next day',
+            'sales'    => count($rows),
+            'revenue'  => round((float) $rows->sum('total_amount'), 2),
+            'net_mco'  => round((float) $rows->sum(fn($t) => (float) $t->profit_mco - (float) $t->refund_mco_impact), 2),
+            'bookings' => $rows->take(15)->map(fn($t) => [
+                'ref' => $t->pnr ?: ('#' . $t->id), 'type' => $t->type,
+                'amount' => round((float) $t->total_amount, 2), 'at' => $t->created_at,
+            ])->values()->all(),
+        ];
+        $notice = PerformanceHold::notice($role);
+        if ($notice !== null) {
+            $out['hold_notice'] = $notice;
+        }
+        return $out;
+    }
+
+    private static function booking(int $userId, string $ref): array
+    {
+        $ref = strtoupper(trim(ltrim(trim($ref), '#')));
+        if ($ref === '' || mb_strlen($ref) > 20) {
+            return ['error' => 'Give the booking reference (PNR) or the transaction number.'];
+        }
+        $t = DB::table('transactions')
+            ->where('agent_id', $userId)
+            ->where(function ($w) use ($ref) {
+                $w->where('pnr', $ref);
+                if (ctype_digit($ref)) {
+                    $w->orWhere('id', (int) $ref);
+                }
+            })
+            ->orderByDesc('id')
+            ->first(['id', 'pnr', 'type', 'status', 'refund_status', 'total_amount', 'currency', 'created_at',
+                     'travel_date', 'departure_time', 'return_date', 'acceptance_id']);
+        if ($t === null) {
+            if (ctype_digit($ref)) {
+                $a = DB::table('acceptance_requests')->where('agent_id', $userId)->where('id', (int) $ref)
+                    ->first(['id', 'type', 'status', 'created_at', 'approved_at', 'expires_at', 'transaction_id']);
+                if ($a !== null) {
+                    return ['found' => 'acceptance', 'acceptance' => '#' . $a->id, 'type' => $a->type, 'status' => $a->status,
+                            'created_at' => $a->created_at, 'approved_at' => $a->approved_at, 'expires_at' => $a->expires_at,
+                            'has_transaction' => $a->transaction_id !== null];
+                }
+            }
+            return ['found' => false, 'note' => 'No booking with that reference among YOUR bookings. Check the reference, or it may belong to someone else.'];
+        }
+        $e = DB::table('etickets')->where('transaction_id', $t->id)->orderByDesc('id')
+            ->first(['id', 'status', 'email_status', 'last_emailed_at', 'acknowledged_at']);
+        return [
+            'found'       => 'transaction',
+            'ref'         => $t->pnr ?: ('#' . $t->id),
+            'transaction' => '#' . $t->id,
+            'type'        => $t->type,
+            'status'      => $t->status,
+            'refund'      => $t->refund_status ?: 'none',
+            'amount'      => round((float) $t->total_amount, 2),
+            'currency'    => $t->currency,
+            'sold_at'     => $t->created_at,
+            'travel_date' => trim(($t->travel_date ?? '') . ' ' . ($t->departure_time ?? '')),
+            'return_date' => $t->return_date,
+            'eticket'     => $e === null ? ['issued' => false]
+                : ['issued' => true, 'status' => $e->status, 'email' => $e->email_status,
+                   'emailed_at' => $e->last_emailed_at, 'acknowledged' => $e->acknowledged_at !== null],
+        ];
+    }
+
+    private static function rank(int $userId, string $role, string $metric): array
+    {
+        $metric = $metric === 'sales' ? 'sales' : 'net_mco';
+        $sellers = DB::table('users')->whereIn('role', ['agent', 'supervisor'])
+            ->where('status', 'active')->whereNull('deleted_at')->pluck('id')->map(fn($v) => (int) $v)->all();
+        if (!in_array($userId, $sellers, true)) {
+            return ['error' => 'Ranking is only for people who sell.'];
+        }
+        $q = DB::table('transactions')->whereIn('agent_id', $sellers)->where('status', 'approved')
+            ->whereBetween('created_at', [date('Y-m-01 00:00:00'), date('Y-m-d H:i:s')]);
+        $q = PerformanceHold::apply($q, 'created_at', $role);
+        $rows = $q->groupBy('agent_id')
+            ->selectRaw('agent_id, COUNT(*) AS n, COALESCE(SUM(profit_mco - refund_mco_impact),0) AS net')
+            ->get()->keyBy('agent_id');
+        $score = [];
+        foreach ($sellers as $id) {
+            $r = $rows[$id] ?? null;
+            $score[$id] = $r === null ? 0.0 : (float) ($metric === 'sales' ? $r->n : $r->net);
+        }
+        $mine = $score[$userId];
+        $ahead = count(array_filter($score, fn($v) => $v > $mine));
+        $out = [
+            'month'     => date('F Y'),
+            'metric'    => $metric === 'sales' ? 'number of sales' : 'net MCO',
+            'your_rank' => $ahead + 1,
+            'out_of'    => count($score),
+            'note'      => 'Rank only. Never name, compare with or guess the numbers of any colleague.',
+        ];
+        $notice = PerformanceHold::notice($role);
+        if ($notice !== null) {
+            $out['hold_notice'] = $notice;
+        }
+        return $out;
+    }
+
+    /** US time-zone words → zone. Anything else is India time. */
+    private const US_ZONES = [
+        'America/New_York'    => '/\b(eastern|est|edt|et|new york|ny)\b/',
+        'America/Chicago'     => '/\b(central|cst|cdt|ct|chicago|texas)\b/',
+        'America/Denver'      => '/\b(mountain|mst|mdt|denver)\b/',
+        'America/Los_Angeles' => '/\b(pacific|pst|pdt|pt|los angeles|california|la)\b/',
+    ];
+
+    /**
+     * A time the agent said → unix timestamp, or null when it is not clear.
+     * India time unless a US zone is named ("9pm eastern").
+     *
+     * Understands, and refuses to guess beyond:
+     *   relative   in 30 minutes · after 1 hour 15 min · 5 mins later · half an hour ·
+     *              10 minute baad · 2 ghante mein · in 2 days
+     *   clock      at 2:30 · 2:30 am · 9pm · at 9 · 10 baje (+ morning/subah, evening/shaam,
+     *              night/raat to pick am/pm)
+     *   day        tomorrow / kal · day after tomorrow / parso · in 2 days at 3pm ·
+     *              25 oct 3pm · on friday at 9pm
+     *   exact      2026-10-24 02:30
+     * A bare clock time is the next time it comes round. Numeric dates (10/24)
+     * are refused: Americans and Indians write them in opposite orders.
+     *
+     * The night shift moves "tomorrow": until 6 AM it is still last night, so
+     * "tomorrow 9pm" said at 1 AM means tonight's 9 PM, not the one after.
+     * (Reviewed 23 Oct 2026: the first version read "after 10 minutes" as
+     * 10 AM and "in 2 days at 3pm" as two days at the current minute.)
+     */
+    public static function parseWhen(string $when, ?int $now = null): ?int
+    {
+        $now = $now ?? time();
+        $s = preg_replace('/\s+/', ' ', mb_strtolower(trim($when)));
+        if ($s === '') {
+            return null;
+        }
+
+        $zone = 'Asia/Kolkata';
+        foreach (self::US_ZONES as $tz => $re) {
+            if (preg_match($re, $s)) {
+                $zone = $tz;
+                $s = trim(preg_replace('/\s+/', ' ', preg_replace($re, ' ', $s)));
+                break;
+            }
+        }
+        $tz = new \DateTimeZone($zone);
+        $local = (new \DateTime('@' . $now))->setTimezone($tz);
+
+        // Exact — what the tool asks the model to send when it can.
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})[ t](\d{1,2}):(\d{2})$/', $s, $m)) {
+            $d = (clone $local)->setDate((int) $m[1], (int) $m[2], (int) $m[3])->setTime((int) $m[4], (int) $m[5]);
+            return ((int) $m[4] < 24 && (int) $m[5] < 60) ? $d->getTimestamp() : null;
+        }
+        if (preg_match('/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/', $s)) {
+            return null;
+        }
+
+        // Durations: minutes/hours move the clock, days/weeks move the date.
+        // Three shapes, each anchored on whole words: a loose "a"+"m" read the
+        // "am" of "2:30 am" — and the end of "subah" — as a duration.
+        $secs = 0.0;
+        $days = 0.0;
+        $found = [];
+        preg_match_all('/\b(\d+(?:\.\d+)?)\s*(minutes?|mins?|hours?|hrs?|ghant[ae]?|days?|din|weeks?|hafte?)\b/', $s, $a, PREG_SET_ORDER);
+        preg_match_all('/\b(\d+(?:\.\d+)?)(m|h)\b/', $s, $b, PREG_SET_ORDER);                      // 30m, 2h
+        preg_match_all('/\b(half an?|aadha|an?)\s+(minutes?|hours?|ghanta|days?|weeks?)\b/', $s, $c, PREG_SET_ORDER);
+        foreach (array_merge($a, $b, $c) as $m) {
+            $n = is_numeric($m[1]) ? (float) $m[1]
+                : (str_starts_with($m[1], 'half') || $m[1] === 'aadha' ? 0.5 : 1.0);
+            $u = $m[2];
+            if (preg_match('/^(m|mins?|minutes?)$/', $u)) {
+                $secs += $n * 60;
+            } elseif (preg_match('/^(h|hrs?|hours?|ghant[ae]?)$/', $u)) {
+                $secs += $n * 3600;
+            } elseif (preg_match('/^(days?|din)$/', $u)) {
+                $days += $n;
+            } else {
+                $days += 7 * $n;
+            }
+        }
+        if (preg_match('/\bnext week\b/', $s)) {
+            $days += 7;
+        }
+
+        $clock = self::clockOf($s);
+        if ($clock === null) {
+            if ($secs <= 0 && $days <= 0) {
+                return null;
+            }
+            return $now + (int) round($secs + $days * 86400);
+        }
+        if ($secs > 0) {
+            return null;   // "in 30 minutes at 3pm" — which one?
+        }
+
+        // Which day. Fixed when they named one; otherwise the next time the clock comes round.
+        $day = (clone $local)->setTime(0, 0);
+        $fixed = false;
+        $weekday = null;
+        $named = self::dateOf($s, $local);
+        if ($named !== null) {
+            $day = $named;
+            $fixed = true;
+        } else {
+            $shift = 0;
+            if (preg_match('/\b(day after tomorrow|parso)\b/', $s)) {
+                $shift = 2;
+            } elseif (preg_match('/\b(tomorrow|tmrw|tmr|kal)\b/', $s)) {
+                $shift = 1;
+            }
+            if ($shift > 0 && (int) $local->format('G') < 6) {
+                $shift--;   // before 6 AM it is still last night
+            }
+            if (preg_match('/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/', $s, $w)) {
+                $weekday = (int) date('w', strtotime($w[1]));
+                $shift = ($weekday - (int) $local->format('w') + 7) % 7;
+            }
+            $shift += (int) round($days);
+            if ($shift > 0) {
+                $day->modify('+' . $shift . ' days');
+                $fixed = true;
+            } elseif ($weekday !== null) {
+                $fixed = true;   // that weekday is today
+            }
+        }
+
+        [$hour, $min, $ap] = $clock;
+        if ($hour > 23 || $min > 59 || ($ap !== '' && ($hour < 1 || $hour > 12))) {
+            return null;
+        }
+        if ($ap === '') {
+            if (preg_match('/\b(morning|subah|savere)\b/', $s)) {
+                $ap = 'am';
+            } elseif (preg_match('/\b(afternoon|evening|dopahar|dopehar|shaam|sham)\b/', $s)) {
+                $ap = 'pm';
+            } elseif (preg_match('/\b(night|tonight|raat)\b/', $s) && $hour >= 1 && $hour <= 12) {
+                $ap = $hour <= 5 ? 'am' : 'pm';
+            }
+        }
+        if ($ap === 'am') {
+            $hours = [$hour % 12];
+        } elseif ($ap === 'pm') {
+            $hours = [$hour % 12 + 12];
+        } elseif ($hour >= 13 || $hour === 0) {
+            $hours = [$hour];
+        } else {
+            $hours = [$hour % 12, $hour % 12 + 12];   // "at 2:30" — whichever comes first
+        }
+
+        $best = null;
+        foreach ([0, 1] as $extra) {
+            foreach ($hours as $hh) {
+                $d = (clone $day)->setTime($hh, $min);
+                if ($extra > 0) {
+                    $d->modify($weekday !== null ? '+7 days' : '+1 day');
+                }
+                $t = $d->getTimestamp();
+                if ($t > $now && ($best === null || $t < $best)) {
+                    $best = $t;
+                }
+            }
+            if ($best !== null || ($fixed && $weekday === null)) {
+                break;   // a named day that has passed stays passed — the caller says so
+            }
+        }
+        return $best ?? ($fixed ? (clone $day)->setTime($hours[0], $min)->getTimestamp() : null);
+    }
+
+    /** [hour, minute, 'am'|'pm'|''] of the clock time in a phrase, or null. */
+    private static function clockOf(string $s): ?array
+    {
+        $ap = fn(?string $v) => $v === null || $v === '' ? '' : str_replace('.', '', $v);
+        if (preg_match('/\b(\d{1,2}):(\d{2})\s*(am|pm|a\.m\.|p\.m\.)?/', $s, $m)) {
+            return [(int) $m[1], (int) $m[2], $ap($m[3] ?? '')];
+        }
+        if (preg_match('/\b(\d{1,2})\.(\d{2})\s*(am|pm|a\.m\.|p\.m\.)/', $s, $m)) {
+            return [(int) $m[1], (int) $m[2], $ap($m[3])];
+        }
+        if (preg_match('/\b(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)/', $s, $m)) {
+            return [(int) $m[1], 0, $ap($m[2])];
+        }
+        if (preg_match("/\\b(\\d{1,2})\\s*(baje|o'?clock)\\b/", $s, $m)) {
+            return [(int) $m[1], 0, ''];
+        }
+        if (preg_match('/(?:^|\s)(?:at|@|by)\s*(\d{1,2})(?![\d:.])/', $s, $m)) {
+            return [(int) $m[1], 0, ''];
+        }
+        if (preg_match('/^\d{1,2}$/', $s)) {
+            return [(int) $s, 0, ''];
+        }
+        return null;
+    }
+
+    /** "25 oct" / "oct 25th" → that date at midnight in the phrase's zone (this year, or next if passed). */
+    private static function dateOf(string $s, \DateTime $local): ?\DateTime
+    {
+        $mon = '(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*';
+        if (preg_match('/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?' . $mon . '\b/', $s, $m)) {
+            [$d, $mo] = [(int) $m[1], $m[2]];
+        } elseif (preg_match('/\b' . $mon . '\s+(\d{1,2})(?:st|nd|rd|th)?\b/', $s, $m)) {
+            [$d, $mo] = [(int) $m[2], $m[1]];
+        } else {
+            return null;
+        }
+        $n = (int) date('n', strtotime('1 ' . substr($mo, 0, 3) . ' 2000'));
+        $y = (int) $local->format('Y');
+        if ($d < 1 || $d > 31 || !checkdate($n, $d, $y)) {
+            return null;
+        }
+        $day = (clone $local)->setDate($y, $n, $d)->setTime(0, 0);
+        if ($day->getTimestamp() < $local->getTimestamp() - 86400) {
+            $day->modify('+1 year');
+        }
+        return $day;
+    }
+
+    private static function setReminder(int $userId, string $when, string $what): array
+    {
+        [$what] = BuddyPromptBuilder::scrub(trim($what));
+        $what = mb_substr($what, 0, 200);
+        if ($what === '') {
+            return ['error' => 'What should I remind you about?'];
+        }
+        $ts = self::parseWhen($when);
+        if ($ts === null) {
+            return ['error' => 'I could not read that time. Try "in 30 minutes", "at 2:30 am", "9pm eastern" or "2026-10-24 02:30".'];
+        }
+        if ($ts < time() + 30) {
+            return ['error' => 'That time has already passed — pick a time in the future.'];
+        }
+        if ($ts > time() + 7 * 86400) {
+            return ['error' => 'I can only keep reminders for the next 7 days.'];
+        }
+        $open = DB::table('buddy_nudges')->where('user_id', $userId)->where('type', 'reminder')
+            ->where('status', 'pending')->count();
+        if ($open >= 10) {
+            return ['error' => 'You already have 10 reminders waiting. Cancel one first (get_my_reminders, cancel_reminder).'];
+        }
+        $due = date('Y-m-d H:i:s', $ts);
+        $key = substr('reminder:' . $userId . ':' . $ts . ':' . substr(md5($what), 0, 10), 0, 120);
+        try {
+            $id = DB::table('buddy_nudges')->insertGetId([
+                'user_id'      => $userId,
+                'type'         => 'reminder',
+                'payload_json' => json_encode(['text' => $what, 'due' => $due], JSON_UNESCAPED_UNICODE),
+                'status'       => 'pending',
+                'due_at'       => $due,
+                'dedupe_key'   => $key,
+                'created_at'   => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            // The same reminder for the same minute exists already: asked twice,
+            // or asked again after cancelling it. Either way it must fire.
+            $id = DB::table('buddy_nudges')->where('dedupe_key', $key)->where('user_id', $userId)->value('id');
+            if ($id === null) {
+                throw $e;
+            }
+            DB::table('buddy_nudges')->where('id', $id)->update([
+                'status' => 'pending', 'due_at' => $due, 'delivered_at' => null, 'acted_at' => null,
+                'payload_json' => json_encode(['text' => $what, 'due' => $due], JSON_UNESCAPED_UNICODE),
+            ]);
+        }
+        $et = new \DateTime('@' . $ts);
+        $et->setTimezone(new \DateTimeZone('America/New_York'));
+        return ['set' => true, 'id' => (int) $id, 'what' => $what,
+                'when_india' => date('D j M, g:i A', $ts) . ' IST',
+                'when_us_eastern' => $et->format('g:i A T')];
+    }
+
+    private static function reminders(int $userId): array
+    {
+        $rows = DB::table('buddy_nudges')->where('user_id', $userId)->where('type', 'reminder')
+            ->where('status', 'pending')->orderBy('due_at')->limit(10)->get(['id', 'payload_json', 'due_at']);
+        return ['reminders' => $rows->map(fn($r) => [
+            'id'   => (int) $r->id,
+            'what' => (json_decode((string) $r->payload_json, true) ?: [])['text'] ?? '',
+            'when' => date('D j M, g:i A', strtotime((string) $r->due_at)) . ' IST',
+        ])->all()];
+    }
+
+    private static function cancelReminder(int $userId, int $id): array
+    {
+        // ('done' arrives with the aisha_v2 migration, as do reminders themselves.)
+        $n = DB::table('buddy_nudges')->where('id', $id)->where('user_id', $userId)
+            ->where('type', 'reminder')->where('status', 'pending')
+            ->update(['status' => 'done', 'acted_at' => date('Y-m-d H:i:s')]);
+        return $n === 1 ? ['cancelled' => true] : ['error' => 'No waiting reminder with that id.'];
+    }
+
+    private static function memory(int $userId): array
+    {
+        $s = DB::table('buddy_settings')->where('user_id', $userId)->first(['display_name', 'extra_json']);
+        $extra = json_decode((string) ($s->extra_json ?? ''), true) ?: [];
+        $facts = DB::table('buddy_agent_facts')->where('user_id', $userId)->where('active', 1)
+            ->orderByDesc('id')->limit(30)->get(['id', 'fact', 'created_at']);
+        return [
+            'preferred_name' => $s->display_name ?? null,
+            'own_goal'       => $extra['goal'] ?? null,
+            'facts'          => $facts->map(fn($f) => ['id' => (int) $f->id, 'fact' => $f->fact,
+                                                       'saved' => substr((string) $f->created_at, 0, 10)])->all(),
+        ];
+    }
+
+    /** Also used by the "What Aisha knows" screen. */
+    public static function forget(int $userId, int $factId, string $words = ''): array
+    {
+        if ($factId > 0) {
+            $n = DB::table('buddy_agent_facts')->where('id', $factId)->where('user_id', $userId)->where('active', 1)
+                ->update(['active' => 0, 'updated_at' => date('Y-m-d H:i:s')]);
+            return $n === 1 ? ['forgotten' => true] : ['error' => 'No saved fact with that id.'];
+        }
+        $words = trim($words);
+        if ($words === '') {
+            return ['error' => 'Say which fact to forget (its id, or a few words of it).'];
+        }
+        $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $words) . '%';
+        $hits = DB::table('buddy_agent_facts')->where('user_id', $userId)->where('active', 1)
+            ->where('fact', 'like', $like)->get(['id', 'fact']);
+        if ($hits->count() === 0) {
+            return ['error' => 'Nothing saved matches that. Use get_my_memory to see what is saved.'];
+        }
+        DB::table('buddy_agent_facts')->whereIn('id', $hits->pluck('id')->all())
+            ->update(['active' => 0, 'updated_at' => date('Y-m-d H:i:s')]);
+        return ['forgotten' => true, 'count' => $hits->count(), 'facts' => $hits->pluck('fact')->all()];
+    }
+
+    private static function team(int $userId, string $role): array
+    {
+        $leader = \App\Models\User::find($userId);
+        $ids = $leader ? $leader->getTeamAgentIds() : [];
+        if ($ids === []) {
+            return ['team' => [], 'note' => 'No agents report to you in the CRM yet.'];
+        }
+        [$from, $to] = ShiftService::businessDayBounds();
+        $people = DB::table('users')->whereIn('id', $ids)->orderBy('name')->get(['id', 'name']);
+        $today = DB::table('transactions')->whereIn('agent_id', $ids)->where('status', 'approved')
+            ->whereBetween('created_at', [$from, $to])->groupBy('agent_id')
+            ->selectRaw('agent_id, COUNT(*) AS n, COALESCE(SUM(profit_mco - refund_mco_impact),0) AS net')->get()->keyBy('agent_id');
+        $mq = DB::table('transactions')->whereIn('agent_id', $ids)->where('status', 'approved')
+            ->whereBetween('created_at', [date('Y-m-01 00:00:00'), date('Y-m-d H:i:s')]);
+        $mq = PerformanceHold::apply($mq, 'created_at', $role);
+        $month = $mq->groupBy('agent_id')
+            ->selectRaw('agent_id, COUNT(*) AS n, COALESCE(SUM(profit_mco - refund_mco_impact),0) AS net')->get()->keyBy('agent_id');
+        // Split the way the e-ticket form splits them: an agent can only ticket
+        // a booking an admin has marked "Charge Successful"; the rest are
+        // waiting on that charge, not on the agent.
+        $etix = DB::table('transactions AS t')->leftJoin('etickets AS e', 'e.transaction_id', '=', 't.id')
+            ->whereIn('t.agent_id', $ids)->where('t.status', 'approved')
+            ->where('t.created_at', '>=', date('Y-m-d H:i:s', time() - 14 * 86400))->whereNull('e.id')
+            ->groupBy('t.agent_id')
+            ->selectRaw("t.agent_id,
+                SUM(CASE WHEN t.gateway_status = 'charge_successful' THEN 1 ELSE 0 END) AS ready,
+                SUM(CASE WHEN t.gateway_status = 'charge_successful' THEN 0 ELSE 1 END) AS awaiting")
+            ->get()->keyBy('agent_id');
+        $inNow = DB::table('attendance_sessions')->whereIn('user_id', $ids)->where('status', 'active')
+            ->pluck('user_id')->map(fn($v) => (int) $v)->all();
+
+        $out = [
+            'shift' => (string) $from . ' to ' . (string) $to,
+            'team'  => [],
+            'note'  => 'etickets_to_make = charged bookings the agent can ticket now; awaiting_charge = approved bookings '
+                     . 'an admin has not marked "Charge Successful" yet (no e-ticket is possible until then).',
+        ];
+        foreach ($people as $p) {
+            $id = (int) $p->id;
+            $out['team'][] = [
+                'name'              => $p->name,
+                'clocked_in_now'    => in_array($id, $inNow, true),
+                'today_sales'       => (int) ($today[$id]->n ?? 0),
+                'today_net_mco'     => round((float) ($today[$id]->net ?? 0), 2),
+                'month_sales'       => (int) ($month[$id]->n ?? 0),
+                'month_net_mco'     => round((float) ($month[$id]->net ?? 0), 2),
+                'etickets_to_make'  => (int) ($etix[$id]->ready ?? 0),
+                'awaiting_charge'   => (int) ($etix[$id]->awaiting ?? 0),
+            ];
+        }
+        $notice = PerformanceHold::notice($role);
+        if ($notice !== null) {
+            $out['hold_notice'] = $notice;
+        }
+        return $out;
     }
 }

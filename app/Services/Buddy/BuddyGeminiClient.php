@@ -23,6 +23,15 @@ namespace App\Services\Buddy;
  * Testable offline: the HTTP POST is behind an injectable $transport
  * (fn(array $payload): array{code:int, body:string}), so unit tests drive the
  * whole loop with a fake Gemini.
+ *
+ * Aisha v2 (23 Oct 2026):
+ *  - BUDGET: before any call, BuddyBudget says whether today's AI money is
+ *    gone; if so the call is skipped and the caller answers in basic mode.
+ *    Every hop's tokens are recorded against the shift day.
+ *  - BUSY RETRIES: the key is on Vertex express mode, where gemini-2.5-flash
+ *    is limited to 10 requests a minute for the whole company. A 429 (or a
+ *    500/503 blip) is retried twice with a short backoff before giving up, so
+ *    a busy minute costs a second or two instead of a failed answer.
  */
 class BuddyGeminiClient
 {
@@ -33,6 +42,8 @@ class BuddyGeminiClient
     // died at 41.7s). Wide enough for a thinking hop, still bounded.
     private const TIMEOUT_SECONDS   = 75;
     private const MAX_HOPS          = 4;   // tool rounds before we force a text answer
+    /** Waits before each retry of a busy (429/5xx) answer, in milliseconds. */
+    private const RETRY_BACKOFF_MS  = [900, 2400];
 
     private string $apiKey;
     private string $model;
@@ -60,6 +71,11 @@ class BuddyGeminiClient
         return $this->apiKey !== '';
     }
 
+    public function model(): string
+    {
+        return $this->model;
+    }
+
     /**
      * Run a chat turn with tools.
      *
@@ -73,7 +89,11 @@ class BuddyGeminiClient
     public function chat(string $systemInstruction, array $contents, BuddyToolRegistry $registry): array
     {
         if (!$this->isConfigured()) {
-            return ['success' => false, 'error' => 'AI is not configured (missing VERTEX_API_KEY).', 'hops' => 0, 'tool_calls' => [], 'tokens_in' => 0, 'tokens_out' => 0];
+            return ['success' => false, 'error' => 'AI is not configured (missing VERTEX_API_KEY).', 'hops' => 0, 'tool_calls' => [], 'tokens_in' => 0, 'tokens_out' => 0, 'model' => $this->model];
+        }
+        if (BuddyBudget::exhausted()) {
+            return ['success' => false, 'error' => "Today's AI budget is used up.", 'budget' => true,
+                    'hops' => 0, 'tool_calls' => [], 'tokens_in' => 0, 'tokens_out' => 0, 'model' => $this->model];
         }
 
         $toolCalls = [];
@@ -110,7 +130,7 @@ class BuddyGeminiClient
                 $payload['tools'] = [['functionDeclarations' => $declarations]];
             }
 
-            $resp = ($this->transport)($payload);
+            $resp = $this->send($payload);
 
             if (($resp['code'] ?? 0) !== 200) {
                 $apiMsg  = '';
@@ -134,10 +154,12 @@ class BuddyGeminiClient
                     // Verbatim Google message for operators/probes — the
                     // generic line above stays what users might ever see.
                     'api_error'  => 'HTTP ' . ($resp['code'] ?? '?') . ': ' . mb_substr((string) $apiMsg, 0, 300),
+                    'busy'    => in_array((int) ($resp['code'] ?? 0), [429, 500, 503], true),
                     'hops'    => $hop,
                     'tool_calls' => $toolCalls,
                     'tokens_in'  => $tokensIn,
                     'tokens_out' => $tokensOut,
+                    'model'      => $this->model,
                 ];
             }
 
@@ -147,11 +169,14 @@ class BuddyGeminiClient
             // Token accounting (P3 cost visibility): Express responses carry
             // usageMetadata; sum it per hop so buddy_messages records what the
             // turn really billed, not just the final hop.
-            $tokensIn  += (int) ($decoded['usageMetadata']['promptTokenCount'] ?? 0);
-            $tokensOut += (int) ($decoded['usageMetadata']['candidatesTokenCount'] ?? 0);
-            // 3.x models bill internal reasoning as output — count it, or the
-            // cost tile understates real spend by the exact amount that hurts.
-            $tokensOut += (int) ($decoded['usageMetadata']['thoughtsTokenCount'] ?? 0);
+            $hopIn  = (int) ($decoded['usageMetadata']['promptTokenCount'] ?? 0);
+            $hopOut = (int) ($decoded['usageMetadata']['candidatesTokenCount'] ?? 0)
+                    // 3.x models bill internal reasoning as output — count it, or the
+                    // cost tile understates real spend by the exact amount that hurts.
+                    + (int) ($decoded['usageMetadata']['thoughtsTokenCount'] ?? 0);
+            $tokensIn  += $hopIn;
+            $tokensOut += $hopOut;
+            BuddyBudget::record($this->model, $hopIn, $hopOut);
 
             $functionCalls = [];
             $textOut       = '';
@@ -174,9 +199,9 @@ class BuddyGeminiClient
                 if (trim($textOut) === '') {
                     $finish = $decoded['candidates'][0]['finishReason'] ?? 'UNKNOWN';
                     error_log("[BuddyGemini] empty reply (finishReason={$finish})");
-                    return ['success' => false, 'error' => 'The AI returned an empty response.', 'hops' => $hop, 'tool_calls' => $toolCalls, 'tokens_in' => $tokensIn, 'tokens_out' => $tokensOut];
+                    return ['success' => false, 'error' => 'The AI returned an empty response.', 'hops' => $hop, 'tool_calls' => $toolCalls, 'tokens_in' => $tokensIn, 'tokens_out' => $tokensOut, 'model' => $this->model];
                 }
-                return ['success' => true, 'text' => trim($textOut), 'hops' => $hop, 'tool_calls' => $toolCalls, 'tokens_in' => $tokensIn, 'tokens_out' => $tokensOut];
+                return ['success' => true, 'text' => trim($textOut), 'hops' => $hop, 'tool_calls' => $toolCalls, 'tokens_in' => $tokensIn, 'tokens_out' => $tokensOut, 'model' => $this->model];
             }
 
             // Echo the model turn (with its functionCall parts) into history,
@@ -248,7 +273,27 @@ class BuddyGeminiClient
             'tool_calls' => $toolCalls,
             'tokens_in'  => $tokensIn,
             'tokens_out' => $tokensOut,
+            'model'      => $this->model,
         ];
+    }
+
+    /**
+     * One request, retried while Google says it is busy. 429 is the express
+     * key's 10-a-minute ceiling; 500/503 are transient. A real failure (400
+     * schema, 403 billing) is returned at once — retrying those only adds
+     * seconds to the same error.
+     */
+    private function send(array $payload): array
+    {
+        $resp = ($this->transport)($payload);
+        foreach (self::RETRY_BACKOFF_MS as $waitMs) {
+            if (!in_array((int) ($resp['code'] ?? 0), [429, 500, 503], true)) {
+                break;
+            }
+            usleep(($waitMs + random_int(0, 400)) * 1000);
+            $resp = ($this->transport)($payload);
+        }
+        return $resp;
     }
 
     // =========================================================================

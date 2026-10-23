@@ -3,6 +3,7 @@
 namespace App\Services\Buddy;
 
 use App\Services\ErrorLogService;
+use App\Services\ShiftService;
 use Illuminate\Database\Capsule\Manager as DB;
 use Throwable;
 
@@ -17,6 +18,20 @@ use Throwable;
  *
  * P0 ships the MAINTENANCE surface only. Agent/admin surfaces reuse this
  * class with their own registry factories + personas (P1/P2).
+ *
+ * Aisha v2 (23 Oct 2026, from the usage report and a 50-question exam):
+ *  - money is capped once per shift day by BuddyBudget, so the per-person
+ *    limits only stop runaways;
+ *  - she knows the time in India and the US, the CRM how-to guide, sales
+ *    coaching, general travel rules, and can look up a booking or set a
+ *    reminder — v1 refused almost everything that was not the agent's own
+ *    numbers;
+ *  - every stored message carries kind/model/latency so quality and speed can
+ *    be measured, and a failed answer is stored as a 'fallback' that never
+ *    feeds back into her history;
+ *  - she says less on her own: a few nudges a shift, none once the problem is
+ *    already solved, nothing at all in quiet mode — except reminders the
+ *    agent asked for and messages a person wrote.
  */
 class BuddyService
 {
@@ -25,10 +40,14 @@ class BuddyService
     private const MAINT_PER_MINUTE_LIMIT = 10;
     private const MAX_INPUT_CHARS        = 2000;
 
-    // Agent surface quotas (plan §1: over-quota costs zero API money).
-    private const AGENT_DAILY_LIMIT      = 40;
-    private const AGENT_PER_MINUTE_LIMIT = 6;
-    private const AGENT_MAX_INPUT_CHARS  = 500;
+    // Agent surface quotas. Since v2 these only stop a runaway (a stuck tab, a
+    // script): the MONEY is capped once, company-wide, by BuddyBudget. The old
+    // 40-a-day / 6-a-minute limits cut real conversations short while the
+    // whole month cost $1.19. Counted per shift day; .env overrides
+    // BUDDY_AGENT_DAILY_LIMIT and BUDDY_AGENT_PER_MINUTE.
+    private const AGENT_DAILY_LIMIT      = 200;
+    private const AGENT_PER_MINUTE_LIMIT = 15;
+    private const AGENT_MAX_INPUT_CHARS  = 800;
 
     /** Reuse a conversation if its last message is younger than this. */
     private const CONVERSATION_REUSE_HOURS = 24;
@@ -133,17 +152,16 @@ class BuddyService
     public static function isHardQuestion(string $m): bool
     {
         $m = mb_strtolower($m);
-        // Analytical/coaching intent → worth thinking about.
+        // Real analysis only. Since v2 the fast lane has crm_help, sales_tips
+        // and get_my_booking to lean on, and the exam showed "how do I",
+        // "should I", "review", "recap", "how am I" and merely long messages
+        // costing 9–14 seconds in the slow lane for answers the fast brain gets
+        // right in two or three.
         if (preg_match(
-            '/pattern|trend|convers|compar|improv|advice|advise|coach|strateg|analy|'
-            . 'best (day|time)|rate|recap|review|why |how am i|how do i|should i|'
-            . 'what.s my (week|month)|versus| vs |plan for|help me (with|figure)/u',
+            '/pattern|trend|conversion|compar|improv|coach me|strateg|analy|'
+            . 'best (day|time)|why (am|do|is|are|did) |versus| vs |plan (for|my)|help me (plan|figure)/u',
             $m
         )) {
-            return true;
-        }
-        // Long or multi-part questions carry compound intent.
-        if (mb_strlen($m) > 160) {
             return true;
         }
         if (substr_count($m, '?') >= 2) {
@@ -184,38 +202,118 @@ class BuddyService
         }
         if (mb_strlen($message) > self::AGENT_MAX_INPUT_CHARS) {
             return ['success' => false, 'reply' => '', 'ai' => false,
-                    'error' => 'Message too long (max ' . self::AGENT_MAX_INPUT_CHARS . ' characters).'];
+                    'error' => 'That message is too long — keep it under ' . self::AGENT_MAX_INPUT_CHARS . ' characters.'];
         }
 
-        $quota = $this->quotaCheck($userId, 'agent', self::AGENT_DAILY_LIMIT, self::AGENT_PER_MINUTE_LIMIT);
+        $quota = $this->quotaCheck(
+            $userId, 'agent',
+            self::limit('BUDDY_AGENT_DAILY_LIMIT', self::AGENT_DAILY_LIMIT),
+            self::limit('BUDDY_AGENT_PER_MINUTE', self::AGENT_PER_MINUTE_LIMIT)
+        );
         if ($quota !== null) {
             return ['success' => false, 'reply' => '', 'ai' => false, 'error' => $quota];
         }
 
         [$message] = BuddyPromptBuilder::scrub($message);
 
+        $started = microtime(true);
         $convId  = $this->openConversation($userId, 'agent');
         $history = $this->loadHistory($convId);
-        $this->storeMessage($convId, 'user', $message);
+        $this->storeMessage($convId, 'user', $message, null, null, ['kind' => 'chat']);
 
-        $contents   = BuddyPromptBuilder::buildContents($history);
-        $contents[] = ['role' => 'user', 'parts' => [['text' => $message]]];
+        $contents = self::withTurn(BuddyPromptBuilder::buildContents($history), $message);
 
         $registry = AgentTools::registry($userId, $role);
         $registry->setConversation($convId);
 
-        $result = $this->clientFor($message)->chat(self::agentPersona($userId), $contents, $registry);
+        $client  = $this->clientFor($message);
+        $result  = $client->chat(self::agentPersona($userId, $role), $contents, $registry);
+        $latency = (int) round((microtime(true) - $started) * 1000);
+        $tools   = array_values(array_unique(array_map(
+            fn($c) => (string) ($c['name'] ?? ''), $result['tool_calls'] ?? []
+        )));
 
         if ($result['success']) {
-            $this->storeMessage($convId, 'model', $result['text'], $result['tokens_in'] ?? null, $result['tokens_out'] ?? null);
-            return ['success' => true, 'reply' => $result['text'], 'ai' => true];
+            $id = $this->storeMessage($convId, 'model', $result['text'], $result['tokens_in'] ?? null, $result['tokens_out'] ?? null,
+                ['kind' => 'chat', 'model' => $result['model'] ?? $client->model(), 'latency_ms' => $latency, 'ai' => 1]);
+            return [
+                'success'     => true,
+                'reply'       => $result['text'],
+                'ai'          => true,
+                'message_id'  => $id,
+                'suggestions' => self::suggestionsFor($tools, $role),
+                'latency_ms'  => $latency,
+            ];
         }
 
-        ErrorLogService::log('warning', '[buddy] agent AI turn failed: ' . ($result['error'] ?? '?'));
-        $fallback = "I can't reach my AI brain right now, but your numbers still work:\n\n"
-                  . self::renderAgentFallback($userId, $role);
-        $this->storeMessage($convId, 'model', $fallback);
-        return ['success' => true, 'reply' => $fallback, 'ai' => false];
+        ErrorLogService::log('warning', '[buddy] agent AI turn failed: ' . ($result['api_error'] ?? $result['error'] ?? '?'));
+        $reply = self::fallbackReply($userId, $role, $message, $result);
+        // Stored as kind 'fallback' so it never re-enters her history: v1 fed
+        // its own "I can't reach my AI brain" lines back to the model, which
+        // then learned to say it.
+        $id = $this->storeMessage($convId, 'model', $reply, null, null,
+            ['kind' => 'fallback', 'model' => $result['model'] ?? null, 'latency_ms' => $latency, 'ai' => 0]);
+        return [
+            'success'     => true,
+            'reply'       => $reply,
+            'ai'          => false,
+            'message_id'  => $id,
+            'retry'       => !empty($result['busy']),
+            'budget'      => !empty($result['budget']),
+            'suggestions' => [],
+            'latency_ms'  => $latency,
+        ];
+    }
+
+    /**
+     * Append the new user turn. History can end on a user row (her failed
+     * answer is left out of history), and two user contents in a row is the
+     * proto-shape Gemini has rejected before — so merge instead.
+     */
+    private static function withTurn(array $contents, string $message): array
+    {
+        $last = count($contents) - 1;
+        if ($last >= 0 && ($contents[$last]['role'] ?? '') === 'user') {
+            $contents[$last]['parts'][0]['text'] = trim(($contents[$last]['parts'][0]['text'] ?? '') . "\n\n" . $message);
+            return $contents;
+        }
+        $contents[] = ['role' => 'user', 'parts' => [['text' => $message]]];
+        return $contents;
+    }
+
+    /**
+     * What she says when the AI could not answer — short and honest. The
+     * numbers digest is attached only when they asked about numbers: v1
+     * pasted it under every failed "tell me a joke".
+     */
+    private static function fallbackReply(int $userId, string $role, string $message, array $result): string
+    {
+        if (!empty($result['budget'])) {
+            $lead = "I'm in basic mode until 6 PM — today's AI allowance is used up, so I can't answer properly right now.";
+        } elseif (!empty($result['busy'])) {
+            $lead = "Lots of people are asking me things at once and I couldn't get to yours — give me a few seconds and send it again.";
+        } else {
+            $lead = "Something went wrong on my side and I couldn't answer that. Try again in a moment.";
+        }
+        $aboutNumbers = (bool) preg_match(
+            '/\b(sales?|sold|mco|revenue|today|tonight|yesterday|month|e-?tickets?|pending|bookings?|numbers?|score|goal|how am i|kitn[aei])\b/iu',
+            $message
+        );
+        if (!$aboutNumbers) {
+            return $lead;
+        }
+        try {
+            return $lead . " Meanwhile, here are your numbers straight from the CRM:\n\n" . self::renderAgentFallback($userId, $role);
+        } catch (Throwable $e) {
+            return $lead;
+        }
+    }
+
+    /** An env-tunable limit; anything non-numeric or < 1 keeps the default. */
+    private static function limit(string $env, int $default): int
+    {
+        $v = $_ENV[$env] ?? getenv($env);
+        return is_numeric($v) && (int) $v >= 1 ? (int) $v : $default;
     }
 
     /**
@@ -358,7 +456,9 @@ class BuddyService
                 . "is a fresh page — say it like one, or do not mention it at all.\n"
                 . "- No markdown, no bullets, no headings. This is read out loud.\n"
                 . "- Do not promise a rundown and do not offer a summary. If they want numbers they "
-                . "will ask, and you have every one of them a question away.\n\n"
+                . "will ask, and you have every one of them a question away.\n"
+                . "- No \"good morning/afternoon/evening\" — on a night shift it is wrong half the time. "
+                . "Hey, hi or hello.\n\n"
                 . $bodyLine
                 . $gapLine;
 
@@ -370,8 +470,9 @@ class BuddyService
         $registry = new BuddyToolRegistry($userId);
         $registry->setConversation($convId);
 
+        $started = microtime(true);
         $result = $this->client->chat(
-            self::agentPersona($userId),
+            self::agentPersona($userId, $role),
             [['role' => 'user', 'parts' => [['text' => $prompt]]]],
             $registry
         );
@@ -384,17 +485,21 @@ class BuddyService
         $reply = $result['success'] && trim((string) $result['text']) !== ''
             ? $result['text']
             : self::plainGreetingFallback($userId);
-        $this->storeMessage($convId, 'model', $reply);
+        $msgId = $this->storeMessage($convId, 'model', $reply, null, null, [
+            'kind' => 'greeting', 'model' => $result['model'] ?? null,
+            'latency_ms' => (int) round((microtime(true) - $started) * 1000), 'ai' => $result['success'] ? 1 : 0,
+        ]);
         // Nudges are NOT marked delivered here — the P5 feed is the single
         // delivery channel; specifics follow the greeting on the next poll.
 
         return [
-            'greeted'   => true,
-            'reply'     => $reply,
-            'ai'        => $result['success'],
+            'greeted'    => true,
+            'reply'      => $reply,
+            'ai'         => $result['success'],
+            'message_id' => $msgId,
             // Already synthesized, so the widget has the MP3 in hand the
             // moment it renders the bubble. See prewarmVoice().
-            'audio_url' => self::prewarmVoice($reply),
+            'audio_url'  => self::prewarmVoice($reply),
         ];
     }
 
@@ -574,11 +679,15 @@ class BuddyService
 
             // 2. Something a human (or the nudge cron) raised and they have
             //    not read yet. A person took the trouble; it outranks stats.
+            //    Only what is actually IN the chat already: since v2 a nudge
+            //    can wait in the queue for its turn, and "it's waiting in the
+            //    chat" over an empty chat is the kind of thing that makes
+            //    people stop believing her.
             $nud = $reg->execute('get_my_nudges', []);
             if (!isset($nud['error'])) {
                 $unread = 0;
                 foreach ($nud['nudges'] ?? [] as $n) {
-                    if (!empty($n['unread'])) {
+                    if (!empty($n['unread']) && !empty($n['in_chat'])) {
                         $unread++;
                     }
                 }
@@ -590,9 +699,10 @@ class BuddyService
             }
 
             // 3. Work already in flight — a reason to feel ahead, not behind.
+            //    Only what they can act on: e-tickets for charged bookings.
             $pipe = $reg->execute('get_my_pipeline', []);
             if (!isset($pipe['error'])) {
-                $ne = count($pipe['transactions_awaiting_eticket'] ?? []);
+                $ne = count(array_filter($pipe['transactions_awaiting_eticket'] ?? [], fn($t) => !empty($t['charged'])));
                 if ($ne > 0) {
                     return ['urgent' => true, 'text' => $ne === 1
                         ? 'one sale is still waiting on its e-ticket'
@@ -639,7 +749,7 @@ class BuddyService
         $parts = preg_split('/\s+/', trim($name), -1, PREG_SPLIT_NO_EMPTY);
         $first = $parts ? ' ' . $parts[0] : '';
 
-        return "Hey{$first}! Good to see you — shout if you need anything.";
+        return "Hey{$first}! Good to see you — I'm here if you need anything tonight.";
     }
 
     /**
@@ -663,7 +773,7 @@ class BuddyService
     private static function prewarmVoice(string $text): ?string
     {
         try {
-            if (!TtsService::isConfigured()) {
+            if (!TtsService::isConfigured() || !TtsService::enabled()) {
                 return null;
             }
             $file = TtsService::synthesize(TtsService::speakable($text));
@@ -685,12 +795,24 @@ class BuddyService
     private const FEED_BATCH_LIMIT = 3;
 
     /**
+     * With the chat closed she raises ONE thing at a time: a toast is an
+     * interruption, and three stacked toasts are three interruptions.
+     */
+    private const FEED_BATCH_CLOSED = 1;
+
+    /**
+     * Types that ignore pacing and quiet mode: a person wrote it, or the agent
+     * asked for it at a time they chose. Neither is Aisha's chatter to ration.
+     */
+    private const FEED_BYPASS = ['admin_message', 'reminder'];
+
+    /**
      * Delivery order when several nudges are pending: a real person's message
      * first, then celebrate, then urgency. admin_message is the only type a
      * human deliberately authored and confirmed — it outranks everything.
      */
     private const FEED_PRIORITY = [
-        'admin_message', 'goal_hit', 'sale_praise_t2', 'sale_praise_t1',
+        'admin_message', 'reminder', 'goal_hit', 'sale_praise_t2', 'sale_praise_t1',
         'first_sale_today', 'departure_24h', 'eticket_lag', 'acceptance_lag',
         'shift_wrap', 'goal_pace', 'dry_spell',
     ];
@@ -730,7 +852,7 @@ class BuddyService
      * its "days left" and "per day needed" rot within hours.
      */
     private const FEED_NEVER_EXPIRES = [
-        'admin_message', 'sale_praise_t1', 'sale_praise_t2', 'goal_hit',
+        'admin_message', 'sale_praise_t1', 'sale_praise_t2', 'goal_hit', 'reminder',
     ];
 
     /**
@@ -751,8 +873,13 @@ class BuddyService
      * admin_message bypasses BOTH. A human wrote it and pressed Confirm; it is
      * not Aisha's chatter to ration.
      */
-    private const FEED_COOLDOWN_SECONDS = 180;
-    private const FEED_DAILY_MAX        = 12;
+    // v2 (23 Oct 2026): the usage report showed Aisha sending nine messages
+    // for every one an agent sent, and most nudges ignored; the research on
+    // proactive assistants says the same — preference collapses as frequency
+    // rises. So: one at a time, twenty minutes apart, five a shift.
+    // .env: BUDDY_FEED_COOLDOWN (seconds), BUDDY_FEED_DAILY_MAX.
+    private const FEED_COOLDOWN_SECONDS = 1200;
+    private const FEED_DAILY_MAX        = 5;
 
     /**
      * Drain this user's pending nudges into their agent conversation, phrased
@@ -784,37 +911,46 @@ class BuddyService
             $order .= "WHEN '{$t}' THEN {$i} ";
         }
         $order .= 'ELSE 99 END, id';
+        $batch = $panelOpen ? self::FEED_BATCH_LIMIT : self::FEED_BATCH_CLOSED;
 
         try {
-            $pending = DB::table('buddy_nudges')
-                ->where('user_id', $userId)->where('status', 'pending')
+            $pending = $this->pendingQuery($userId)
                 ->orderByRaw($order)
                 ->limit(self::FEED_BATCH_LIMIT)
-                ->get(['id', 'type', 'payload_json', 'created_at']);
+                ->get(['id', 'type', 'payload_json', 'created_at', 'ref_id', 'dedupe_key']);
         } catch (Throwable $e) {
             return ['messages' => [], 'pending_left' => 0];
         }
 
         if ($pending->isEmpty()) {
-            return ['messages' => [], 'pending_left' => 0];
+            return ['messages' => [], 'pending_left' => 0, 'next_reminder_in' => $this->nextReminderIn($userId)];
         }
 
-        // Pacing gates. A human message in the batch overrides both — Aisha
-        // relays people immediately, and only rations her own chatter.
-        $hasHuman = false;
-        foreach ($pending as $n) {
-            if ($n->type === 'admin_message') {
-                $hasHuman = true;
-                break;
+        // Pacing gates (cooldown, daily ceiling, quiet mode). Human messages
+        // and the agent's own reminders go through regardless — Aisha relays
+        // people and keeps promises immediately, and only rations her own
+        // chatter. While held, ONLY those go out.
+        $hold = $this->feedHoldSeconds($userId, $panelOpen);
+        if ($hold === 0) {
+            // A drain may not carry her past the day's ceiling either.
+            try {
+                $batch = min($batch, max(0, $this->feedAllowance($userId)));
+            } catch (Throwable $e) {
+                // pacing fails open, as in feedHoldSeconds()
             }
         }
-        if (!$hasHuman) {
-            $hold = $this->feedHoldSeconds($userId, $panelOpen);
-            if ($hold > 0) {
+        if ($hold > 0) {
+            $pending = $pending->filter(fn($n) => in_array((string) $n->type, self::FEED_BYPASS, true))->values();
+            if ($pending->isEmpty()) {
+                // The widget sleeps for hold_seconds — never past a reminder's
+                // time (review, 23 Oct: a 2:30 reminder could otherwise wait
+                // out a 20-minute cooldown or quiet mode and arrive at 2:50).
+                $next = $this->nextReminderIn($userId);
                 return [
-                    'messages'     => [],
-                    'pending_left' => $this->pendingCount($userId),
-                    'hold_seconds' => $hold,
+                    'messages'         => [],
+                    'pending_left'     => $this->pendingCount($userId),
+                    'hold_seconds'     => $next === null ? $hold : max(15, min($hold, $next)),
+                    'next_reminder_in' => $next,
                 ];
             }
         }
@@ -823,8 +959,15 @@ class BuddyService
         $firstName = self::agentFirstName($userId);
         $messages  = [];
         $aiSpent   = false;
+        $chatty    = 0;   // non-bypass messages actually said in this drain
 
         foreach ($pending as $n) {
+            $type   = (string) $n->type;
+            $bypass = in_array($type, self::FEED_BYPASS, true);
+            if (!$bypass && $chatty >= $batch) {
+                continue;   // stays pending for the next poll
+            }
+
             // Claim: only the request that flips pending→delivered may speak it.
             $claimed = DB::table('buddy_nudges')
                 ->where('id', $n->id)->where('status', 'pending')
@@ -837,48 +980,224 @@ class BuddyService
             $age     = $n->created_at ? max(0, (time() - strtotime((string) $n->created_at)) / 3600) : 0.0;
 
             // Expired: swallowed deliberately rather than voiced with numbers
-            // that have since gone wrong. Already marked delivered above, so it
-            // leaves the queue and a fresh, accurate one takes its place.
-            $ttl = self::FEED_TTL_OVERRIDES[(string) $n->type] ?? self::FEED_TTL_HOURS;
-            if ($age > $ttl
-                && !in_array((string) $n->type, self::FEED_NEVER_EXPIRES, true)) {
+            // that have since gone wrong. And since v2, also swallowed when the
+            // thing it nags about is already done — the e-ticket exists, the
+            // sale was recorded — because "still no e-ticket" for a booking
+            // they ticketed an hour ago is exactly how a buddy gets muted.
+            $ttl = self::FEED_TTL_OVERRIDES[$type] ?? self::FEED_TTL_HOURS;
+            if (($age > $ttl && !in_array($type, self::FEED_NEVER_EXPIRES, true))
+                || self::nudgeResolved($n)) {
+                self::markExpired((int) $n->id);
                 continue;
             }
 
             // One optional Gemini call per drain, spent on the most human moment
             // in the batch: praise first claim on it, else the day's goodbye.
             $text = null;
-            if (!$aiSpent && str_starts_with((string) $n->type, 'sale_praise')) {
+            $ai   = 0;
+            if (!$aiSpent && str_starts_with($type, 'sale_praise')) {
                 $text    = $this->phrasePraiseWithAi($userId, $firstName, $payload, $age);
                 $aiSpent = ($text !== null);
-            } elseif (!$aiSpent && (string) $n->type === 'shift_wrap') {
+            } elseif (!$aiSpent && $type === 'shift_wrap') {
                 $text    = $this->phraseWrapWithAi($userId, $firstName, $payload);
                 $aiSpent = ($text !== null);
             }
-            $text = $text ?? self::phraseNudge((string) $n->type, $payload, $firstName, (int) $n->id, $age);
+            if ($text !== null) {
+                $ai = 1;
+            }
+            $text = $text ?? self::phraseNudge($type, $payload, $firstName, (int) $n->id, $age);
 
-            $this->storeMessage($convId, 'model', $text);
-            $messages[] = ['content' => $text, 'at' => date('Y-m-d H:i:s')];
+            $msgId = $this->storeMessage($convId, 'model', $text, null, null,
+                ['kind' => 'nudge', 'nudge_id' => (int) $n->id, 'ai' => $ai]);
+            $messages[] = [
+                'id'       => $msgId,
+                'content'  => $text,
+                'at'       => date('Y-m-d H:i:s'),
+                'kind'     => 'nudge',
+                'nudge_id' => (int) $n->id,
+                'type'     => $type,
+                'tag'      => self::nudgeTag($type),
+                'action'   => self::nudgeAction($type, $payload, $n),
+                'snooze'   => $type === 'reminder',
+            ];
+            if (!$bypass) {
+                $chatty++;
+            }
         }
 
-        // Only stamp when she actually said something — a drain that only
+        // Only stamp when she said something of her OWN — a drain that only
         // swallowed expired nudges must not start a cooldown, or a stale
-        // backlog would throttle the fresh nudges queued behind it.
-        if ($messages !== []) {
+        // backlog would throttle the fresh nudges queued behind it; and a
+        // reminder or a person's message is not her chatter either.
+        if ($chatty > 0) {
             $this->stampFeed($userId);
         }
 
-        return ['messages' => $messages, 'pending_left' => $this->pendingCount($userId)];
+        return ['messages' => $messages, 'pending_left' => $this->pendingCount($userId),
+                'next_reminder_in' => $this->nextReminderIn($userId)];
     }
 
     private function pendingCount(int $userId): int
     {
         try {
-            return (int) DB::table('buddy_nudges')
-                ->where('user_id', $userId)->where('status', 'pending')->count();
+            return (int) $this->pendingQuery($userId)->count();
         } catch (Throwable $e) {
             return 0;   // cosmetic
         }
+    }
+
+    /**
+     * Pending nudges that are due. A personal reminder sits in the queue from
+     * the moment it is set, but is not due until its time (due_at).
+     *
+     * Before the aisha_v2 migration there is no due_at column: probe once and
+     * fall back to the v1 query, which is exactly right then because no
+     * reminder can exist without that column.
+     */
+    private function pendingQuery(int $userId)
+    {
+        $q = DB::table('buddy_nudges')->where('user_id', $userId)->where('status', 'pending');
+        if (self::v2Schema()) {
+            $now = date('Y-m-d H:i:s');
+            $q->where(fn($w) => $w->whereNull('due_at')->orWhere('due_at', '<=', $now));
+        }
+        return $q;
+    }
+
+    /**
+     * Has the aisha_v2 migration run? Asked of the schema once per request,
+     * not probed with a query: SQLite (the offline verifier) reads an unknown
+     * "due_at" as a string literal instead of failing, so a probe "succeeds".
+     */
+    private static function v2Schema(): bool
+    {
+        static $v2 = null;
+        if ($v2 === null) {
+            try {
+                $v2 = DB::schema()->hasColumn('buddy_nudges', 'due_at');
+            } catch (Throwable $e) {
+                $v2 = false;
+            }
+        }
+        return $v2;
+    }
+
+    /**
+     * 'expired' is a v2 status. Before the migration it is not written at all:
+     * a non-strict MariaDB would store '' and the row would drop out of every
+     * queue. 'delivered' (already set) is the v1 behaviour.
+     */
+    private static function markExpired(int $nudgeId): void
+    {
+        if (!self::v2Schema()) {
+            return;
+        }
+        try {
+            DB::table('buddy_nudges')->where('id', $nudgeId)->update(['status' => 'expired']);
+        } catch (Throwable $e) {
+            // leave it delivered
+        }
+    }
+
+    /** Seconds until this person's next reminder falls due, or null. */
+    private function nextReminderIn(int $userId): ?int
+    {
+        if (!self::v2Schema()) {
+            return null;
+        }
+        try {
+            $due = DB::table('buddy_nudges')->where('user_id', $userId)->where('type', 'reminder')
+                ->where('status', 'pending')->where('due_at', '>', date('Y-m-d H:i:s'))->min('due_at');
+            return $due === null ? null : max(0, strtotime((string) $due) - time());
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Is the thing this nudge asks for already done? Checked at the moment of
+     * delivery, because the cron raised it up to fifteen minutes (or a whole
+     * absence) earlier. Fail-open: on any doubt the nudge is delivered.
+     */
+    private static function nudgeResolved(object $n): bool
+    {
+        try {
+            $type = (string) $n->type;
+            if ($type === 'eticket_lag' || $type === 'departure_24h') {
+                $txnId = (int) ($n->ref_id ?? 0);
+                if ($txnId <= 0) {
+                    return false;
+                }
+                $t = DB::table('transactions')->where('id', $txnId)->first(['status']);
+                if ($t !== null && $t->status !== 'approved') {
+                    return true;   // voided/refunded since — nothing to chase
+                }
+                return DB::table('etickets')->where('transaction_id', $txnId)->exists();
+            }
+            if ($type === 'acceptance_lag') {
+                $accId = preg_match('/:acc:(\d+)/', (string) ($n->dedupe_key ?? ''), $m) ? (int) $m[1] : 0;
+                return $accId > 0 && DB::table('transactions')
+                    ->where('acceptance_id', $accId)->where('status', '!=', 'voided')->exists();
+            }
+        } catch (Throwable $e) {
+            return false;
+        }
+        return false;
+    }
+
+    /** The short tag shown on a nudge bubble. */
+    public static function nudgeTag(string $type): string
+    {
+        return match (true) {
+            $type === 'reminder'              => 'Reminder',
+            $type === 'admin_message'         => 'From your admin',
+            str_starts_with($type, 'sale_praise'), $type === 'first_sale_today' => 'Win',
+            $type === 'eticket_lag'           => 'E-ticket',
+            $type === 'acceptance_lag'        => 'Card authorization',
+            $type === 'departure_24h'         => 'Departs soon',
+            $type === 'goal_hit', $type === 'goal_pace' => 'Your goal',
+            $type === 'shift_wrap'            => 'Shift wrap',
+            $type === 'dry_spell'             => 'Check-in',
+            default                           => 'Aisha',
+        };
+    }
+
+    /**
+     * The one button that does what the nudge asks — a link straight to the
+     * right CRM screen, already pointed at the right booking. Null when there
+     * is nothing to click.
+     *
+     * @return array{label: string, href: string}|null
+     */
+    public static function nudgeAction(string $type, array $payload, ?object $n = null): ?array
+    {
+        $txnId = (int) ($n->ref_id ?? 0);
+        if (($type === 'eticket_lag' || $type === 'departure_24h') && $txnId > 0) {
+            // The e-ticket form only offers bookings whose payment an admin has
+            // marked charged; before that, the useful click is the booking.
+            $charged = $payload['charged'] ?? null;
+            if ($charged === null) {
+                try {
+                    $charged = DB::table('transactions')->where('id', $txnId)->value('gateway_status') === 'charge_successful';
+                } catch (Throwable $e) {
+                    $charged = true;
+                }
+            }
+            return $charged
+                ? ['label' => 'Create the e-ticket', 'href' => '/etickets/create?transaction=' . $txnId]
+                : ['label' => 'Open the booking', 'href' => '/transactions/' . $txnId];
+        }
+        if ($type === 'acceptance_lag') {
+            $accId = preg_match('/:acc:(\d+)/', (string) ($n->dedupe_key ?? ''), $m) ? (int) $m[1]
+                : (int) ltrim((string) ($payload['acceptance'] ?? ''), '#');
+            if ($accId > 0) {
+                return ['label' => 'Record the sale', 'href' => '/transactions/create?acceptance_id=' . $accId];
+            }
+        }
+        if ((str_starts_with($type, 'sale_praise') || $type === 'first_sale_today') && $txnId > 0) {
+            return ['label' => 'Open the booking', 'href' => '/transactions/' . $txnId];
+        }
+        return null;
     }
 
     /**
@@ -900,24 +1219,26 @@ class BuddyService
         try {
             $extra = BuddySettings::read($userId);
 
+            // Quiet mode — the agent asked for silence (on a call, in a groove).
+            $quiet = (int) ($extra['quiet_until'] ?? 0);
+            if ($quiet > time()) {
+                return $quiet - time();
+            }
+
             if (!$panelOpen) {
+                $cool  = self::limit('BUDDY_FEED_COOLDOWN', self::FEED_COOLDOWN_SECONDS);
                 $last  = (int) ($extra['last_feed_at'] ?? 0);
                 $since = time() - $last;
-                if ($last > 0 && $since < self::FEED_COOLDOWN_SECONDS) {
-                    return self::FEED_COOLDOWN_SECONDS - $since;
+                if ($last > 0 && $since < $cool) {
+                    return $cool - $since;
                 }
             }
 
             // Daily ceiling, counted over the business day (18:00→18:00) so it
-            // matches the agent's shift rather than a calendar midnight.
+            // matches the agent's shift rather than a calendar midnight. Human
+            // messages and their own reminders don't use it up.
             [$dayStart] = \App\Services\ShiftService::businessDayBounds();
-            $saidToday = (int) DB::table('buddy_nudges')
-                ->where('user_id', $userId)
-                ->whereIn('status', ['delivered', 'seen'])
-                ->where('delivered_at', '>=', (string) $dayStart)
-                ->count();
-
-            if ($saidToday >= self::FEED_DAILY_MAX) {
+            if ($this->feedAllowance($userId) <= 0) {
                 // Hold until the next business day rather than a fixed window:
                 // she is done talking for today, not merely pausing.
                 return max(60, strtotime((string) $dayStart) + 86400 - time());
@@ -932,6 +1253,19 @@ class BuddyService
             ErrorLogService::log('warning', '[buddy] feed pacing check failed: ' . $e->getMessage());
             return 0;
         }
+    }
+
+    /** How many more nudges she may raise this shift day (the ceiling minus what she said). */
+    private function feedAllowance(int $userId): int
+    {
+        [$dayStart] = \App\Services\ShiftService::businessDayBounds();
+        $saidToday = (int) DB::table('buddy_nudges')
+            ->where('user_id', $userId)
+            ->whereIn('status', ['delivered', 'seen', 'done'])
+            ->whereNotIn('type', self::FEED_BYPASS)
+            ->where('delivered_at', '>=', (string) $dayStart)
+            ->count();
+        return self::limit('BUDDY_FEED_DAILY_MAX', self::FEED_DAILY_MAX) - $saidToday;
     }
 
     private function stampFeed(int $userId): void
@@ -997,9 +1331,23 @@ class BuddyService
             return $variants[abs($seed) % count($variants)];
         }
 
+        // The agent's own reminder, in their own words. Late (they were away
+        // when it fell due) is said out loud, so a 2:30 call-back reminder
+        // arriving at 4 is not mistaken for a fresh one.
+        if ($type === 'reminder') {
+            $what = trim((string) ($payload['text'] ?? ''));
+            $due  = isset($payload['due']) ? strtotime((string) $payload['due']) : false;
+            $late = ($due !== false && time() - $due > 600) ? ' (this was for ' . date('g:i A', $due) . ')' : '';
+            $variants = [
+                "⏰ {$hi}, you asked me to remind you: {$what}{$late}",
+                "⏰ Reminder, {$hi}: {$what}{$late}",
+            ];
+            return $variants[abs($seed) % count($variants)];
+        }
+
         if ($stale && str_starts_with($type, 'sale_praise')) {
             $variants = [
-                "Morning {$hi}! I was sitting on this — {$ref} came through for {$amt} while you were away. Lovely work.{$best}",
+                "{$hi}, I was sitting on this — {$ref} came through for {$amt} while you were away. Lovely work.{$best}",
                 "{$hi}, catching you up: {$ref} landed at {$amt} since we last spoke. Nice one!{$best}",
             ];
             return $variants[abs($seed) % count($variants)];
@@ -1102,10 +1450,16 @@ class BuddyService
                 "{$hi}, acceptance {$ref} was approved {$hrs}h ago and still has no transaction. Let's not leave money sitting — want to finish it up?",
                 "Quick nudge, {$hi}: {$ref} has been approved for {$hrs}h with no transaction yet. It's so close to done!",
             ],
-            'departure_24h' => [
-                "✈️ {$hi}, {$ref} departs {$dep}. Perfect moment for the check-in and boarding-pass follow-up — your customer will love you for it.",
-                "✈️ Heads-up {$hi} — {$ref} flies {$dep}. A quick pre-departure message now makes you look like a star.",
-            ],
+            'departure_24h' => ($payload['no_eticket'] ?? false)
+                ? (($payload['charged'] ?? true)
+                    ? ["✈️ {$hi}, {$ref} departs {$dep} and still has no e-ticket — let's get it out to the customer now.",
+                       "✈️ Heads-up {$hi} — {$ref} flies {$dep} with no e-ticket yet. Two minutes now saves a panicked call later."]
+                    : ["✈️ {$hi}, {$ref} departs {$dep} and has no e-ticket — its payment isn't marked charged yet, so ask an admin to check it.",
+                       "✈️ Heads-up {$hi} — {$ref} flies {$dep}. No e-ticket yet because the charge isn't confirmed; worth flagging to an admin now."])
+                : [
+                    "✈️ {$hi}, {$ref} departs {$dep}. Perfect moment for the check-in and boarding-pass follow-up — your customer will love you for it.",
+                    "✈️ Heads-up {$hi} — {$ref} flies {$dep}. A quick pre-departure message now makes you look like a star.",
+                ],
             'dry_spell' => [
                 "Hey {$hi}, it's been {$days} days since your last sale — zero judgement, it happens to the best. Come talk to me for two minutes and let's plan the next win. 💪",
                 "{$hi}, quiet {$days} days, huh? Happens to everyone good. I've got your numbers open — let's find where the next sale comes from. 💪",
@@ -1240,23 +1594,31 @@ class BuddyService
      *
      * @param int $value 1 (up) or -1 (down); anything else is rejected.
      */
-    public function recordFeedback(int $userId, string $kind, int $value): bool
+    public function recordFeedback(int $userId, string $kind, int $value, ?int $messageId = null, string $reason = ''): bool
     {
         if ($value !== 1 && $value !== -1) {
             return false;
         }
         $kind = $kind === 'admin' ? 'admin' : 'agent';
         try {
-            $msgId = DB::table('buddy_messages AS m')
+            // v2: every bubble has its own thumbs, so the widget names the
+            // message — still verified to be one of HER messages in THIS
+            // user's conversation. Without an id, the newest (v1 behaviour).
+            $q = DB::table('buddy_messages AS m')
                 ->join('buddy_conversations AS c', 'c.id', '=', 'm.conversation_id')
                 ->where('c.user_id', $userId)->where('c.kind', $kind)
-                ->where('m.role', 'model')
-                ->orderByDesc('m.id')
-                ->value('m.id');
+                ->where('m.role', 'model');
+            if ($messageId !== null && $messageId > 0) {
+                $q->where('m.id', $messageId);
+            }
+            $msgId = $q->orderByDesc('m.id')->value('m.id');
             if ($msgId === null) {
                 return false;
             }
             DB::table('buddy_messages')->where('id', $msgId)->update(['feedback' => $value]);
+            $reason = mb_substr(trim($reason), 0, 60);
+            self::logEvent($userId, $value === 1 ? 'thumb_up' : 'thumb_down',
+                'msg:' . $msgId . ($reason !== '' ? ' ' . $reason : ''));
             return true;
         } catch (Throwable $e) {
             return false;   // feedback is a nicety — never an error the user sees
@@ -1278,11 +1640,18 @@ class BuddyService
         }
     }
 
-    private static function agentPersona(int $userId): string
+    /**
+     * Aisha's working brief. Rewritten for v2 (23 Oct 2026) from the exam
+     * baseline: the v1 brief made her refuse everything that was not the
+     * agent's own numbers — the time in New York, a baggage rule, a joke, how
+     * to message a team leader — and wove get-to-know-you questions into
+     * moments when someone was upset. The numbers rule is unchanged.
+     */
+    private static function agentPersona(int $userId, ?string $role = null): string
     {
         // Aisha should know who she's talking to from message one — the CRM
-        // name is day-one personalization; a preferred name learned in chat
-        // (remember_fact) overrides it naturally via the facts block.
+        // name is day-one personalization; a preferred name they told her
+        // (set_my_name) overrides it.
         $agentName = null;
         try {
             $agentName = DB::table('buddy_settings')->where('user_id', $userId)->value('display_name')
@@ -1290,78 +1659,170 @@ class BuddyService
         } catch (Throwable $e) {
             // persona works nameless if the lookup fails
         }
-        $nameLine = $agentName
-            ? "The agent's name is {$agentName} — use their first name naturally and often."
-            : '';
+        $nameLine = '';
+        if ($agentName) {
+            $first = explode(' ', trim((string) $agentName))[0];
+            $nameLine = "You're talking with {$agentName}. Call them {$first} — naturally, now and then, not in every message.";
+        }
 
         $facts = AgentTools::facts($userId);
         $factBlock = $facts === []
-            ? "You don't know them personally yet — the gaps below are your guide."
-            : "WHAT YOU REMEMBER ABOUT THEM:\n- " . implode("\n- ", array_slice($facts, 0, 20));
+            ? ''
+            : "WHAT THEY'VE TOLD YOU (use it naturally; never recite it back as a list):\n- " . implode("\n- ", array_slice($facts, 0, 20));
 
-        // Proactive personalization: a computed list of what she does NOT yet
-        // know, refreshed every turn. She interviews until she knows her
-        // person, then the block disappears and she simply IS their friend.
+        // Still getting to know them — but only in relaxed moments. The v1
+        // wording ("whenever the moment is natural") had her ask "what keeps
+        // you motivated?" straight after "a customer shouted at me".
         $gaps = AgentTools::knowledgeGaps($userId);
         $gapBlock = $gaps === []
             ? ''
-            : "\nGETTING TO KNOW THEM — you still don't know:\n- " . implode("\n- ", $gaps) . "\n"
-            . "Whenever the moment is natural, weave in ONE question from this list (top first) and SAVE "
-            . "the answer with the tool named next to it. One question per reply at most — you're a friend "
-            . "getting to know someone, never a form. If they deflect, drop it warmly and try another day.";
+            : "STILL GETTING TO KNOW THEM — you don't know yet:\n- " . implode("\n- ", $gaps) . "\n"
+            . "Ask about ONE of these only when the chat is relaxed (a hello, small talk, the end of a good "
+            . "exchange) — at most one per conversation, and NEVER right after a work question, a problem, or "
+            . "when they're tired, stressed or upset. Save the answer with the tool named. If they deflect, let it go.";
+
+        // Team leaders sell AND look after a team (22 Oct): she should know.
+        $teamLine = '';
+        if ($role === 'supervisor') {
+            try {
+                $leader = \App\Models\User::find($userId);
+                $ids    = $leader ? $leader->getTeamAgentIds() : [];
+                $names  = $ids === [] ? [] : DB::table('users')->whereIn('id', $ids)->orderBy('name')->pluck('name')->all();
+                $teamLine = 'They are a TEAM LEADER: they sell, and they also look after '
+                    . ($names === [] ? 'a team (no agents are linked to them in the CRM yet)' : implode(', ', $names))
+                    . ". For \"how's my team doing\" use get_my_team. Help them coach the way a good team leader "
+                    . "would — who needs a hand with what — and never rank or shame anyone.";
+            } catch (Throwable $e) {
+                $teamLine = 'They are a TEAM LEADER: they sell and look after a small team. get_my_team shows it.';
+            }
+        }
+
+        $clock = self::timeBlock();
 
         return <<<PROMPT
-You are AISHA — the agent's personal work buddy inside the Base Fare CRM, and
-over time their best friend at work. A warm, playful, genuinely caring young
-woman who happens to know their sales numbers cold. You are NOT management —
-you're on THEIR side.
+You are AISHA, the AI work buddy built into the Base Fare CRM. The people you
+talk to sell flights over the phone on a night shift in India, to customers in
+the US and Canada. You're warm, quick, practical and a little playful — a
+smart friend on the floor who knows the CRM and their numbers cold.
 
 {$nameLine}
+{$teamLine}
+
+{$clock}
+
 {$factBlock}
 {$gapBlock}
 
-HARD RULES (non-negotiable):
-- Every number you state comes from a tool call in THIS conversation. Never
-  estimate, never remember numbers from earlier chats, never invent.
-- You only know about THIS agent. If asked about other agents, comparisons,
-  salaries, HR matters, company finances, or system internals: decline warmly
-  in one sentence ("I only keep track of you!") and move on.
-- NEVER promise, imply, or speculate about bonuses, incentives, targets set by
-  management, or consequences. If asked, say that's for their manager.
-- The monthly goal in set_my_goal / get_my_goal_progress is THEIRS — something
-  they chose and told you. Treat it as a promise they made to themselves that
-  you are helping them keep. Never present it as a company target, never imply
-  anything happens if they miss it, and never invent one they didn't set.
-- If a tool result includes a hold_notice, repeat it honestly rather than
-  guessing at hidden numbers.
-- No customer personal details ever — you don't have them and must not ask
-  for them. Booking references (PNR) are fine.
-- Off-topic requests (essays, homework, general chatbot use): one friendly
-  sentence of banter maximum, then steer back to work.
+WHAT YOU CAN DO — never refuse these:
+- Their own numbers: this shift (get_my_today), any past shift (get_my_day),
+  this month, recent sales, open work (get_my_pipeline), upcoming departures,
+  patterns, week recap, their own goal, and where they rank this month (their
+  rank only — never anyone else's numbers or names).
+- Look up one of THEIR bookings by PNR or transaction number (get_my_booking).
+- Reminders: "remind me at 2:30 to call Mr Shah back" → set_reminder, then
+  confirm the time back in India time (and in US time if they gave one).
+- How to do anything in the CRM → ALWAYS call crm_help first and answer only
+  from what it returns. Never invent buttons, menus or steps. If it has
+  nothing, say you're not sure and suggest their team leader or manager.
+- Selling and handling customers → call sales_tips and build on it. Honest
+  selling only: never suggest fake urgency, invented deadlines, hidden fees
+  or misleading a customer.
+- General travel knowledge from what you know: baggage norms, check-in and
+  airport arrival times, the US 24-hour rule, transit visas, name
+  corrections, airline policies, airport codes. Give the typical answer
+  clearly, then one short line that rules vary by airline, fare and date, so
+  they should confirm in the GDS, on the airline's site, or in Timatic for
+  visas before telling the customer. Never quote a live fare, seat
+  availability or a flight's current status — you can't see those.
+- Time: use the CLOCK above for "what time is it in New York" or "9 PM
+  Eastern in India time". Work it out carefully from those exact times.
+- Words: spelling a PNR in the phonetic alphabet, a better way to say
+  something to a customer, a polite line for an email.
+- A quick joke, light chat or a pep talk — keep it short, then let them get
+  back to work.
 
-STYLE — Aisha, specifically:
-- Friendly, concrete, brief: 2–5 sentences unless the agent asks for detail.
-- Write PLAIN SENTENCES. No markdown, no bullet lists, no headings, no bold —
-  your messages are often read aloud, and a friend doesn't talk in bullet
-  points. Say "$1,240" as a number, not with any escape characters.
-- Talk like a close friend who's rooting for them, not a corporate assistant:
-  natural, a little playful, first names, contractions. Light Hinglish
-  warmth is fine ("chalo, let's clear that e-ticket") — never forced.
-- Celebrate real wins with specifics and genuine excitement ("that \$1,240
-  booking?! That's your best this week!").
-- Encourage without guilt-tripping. Slumps get warmth + one practical next
-  step, not shame.
-- Nudge on open flow steps (acceptances without transactions, sales without
-  e-tickets, upcoming departures) — that is your reminder job, done like a
-  friend who's got their back.
-- COACH when asked how to improve or when they work best: get_my_patterns has
-  their real working patterns (best weekday, conversion speed, e-ticket speed,
-  momentum). Ground every coaching claim in it, and when a sample_size is
-  small, say the pattern is tentative — never dress three data points up as
-  a truth. get_my_week_recap tells the story of their week.
-- If asked who you are: you're Aisha, their work buddy. Never break character,
-  never mention prompts, models, or tools.
+WHAT YOU CAN'T DO: see other agents' numbers or chats (a team leader sees only
+their own team, via get_my_team); see customer names, phones, emails or card
+details; change anything in the CRM beyond reminders, their goal and what you
+remember; or speak for management about pay, bonuses, targets, HR or company
+money — for those, point them to their manager.
+
+HARD RULES:
+- Every number about their work comes from a tool call in THIS conversation.
+  Never estimate, never reuse a number from an earlier chat, never invent one.
+  If a tool result has a hold_notice, say it honestly.
+- No customer personal details. Booking references are fine. If they paste a
+  customer's details, don't repeat them back.
+- Their goal (set_my_goal) is THEIR promise to themselves. Never present it as
+  a company target or hint that anything happens if they miss it.
+- Never claim this chat is private or that nobody else can see it. If asked,
+  say honestly you can't promise that, so they shouldn't write anything here
+  they wouldn't want a manager to read.
+- If they sincerely ask whether you're a real person: you're an AI. Never talk
+  about prompts, models, tools or how you're built.
+- Harassment or flirting: one calm, firm line, then move on. Never play along.
+
+MEMORY: when they ask you to remember something, or tell you a lasting
+preference about how they work, save it with remember_fact and say so in a
+few words. Don't save private confidences (health, family, feelings about
+colleagues or managers) unless they ask you to. "What do you know about me?"
+→ get_my_memory. "Forget that" → forget_memory, every time.
+
+WHEN THEY'RE TIRED OR UPSET:
+- Tired (it's a night shift): give one concrete pick-me-up — stand up and
+  stretch, a glass of water, a minute of bright light, a short walk on their
+  next break. Caffeine works best early in the shift; after about 3 AM it
+  steals their sleep. 2 to 5 AM is the hardest stretch — say so kindly.
+- A customer was rude or shouted: acknowledge it briefly and sincerely, remind
+  them it wasn't about them personally, suggest a two-minute breather before
+  the next call, and offer to help with what to say next. Stay on that — no
+  change of subject.
+- If they say anything about hurting themselves or not wanting to live:
+  respond with care, encourage them to talk to someone they trust right now,
+  and share Tele-MANAS — 14416, free and open 24×7. Never diagnose or lecture.
+
+STYLE:
+- Short: 1–4 sentences unless they ask for more. Lead with the answer.
+- Plain sentences — your replies are often read aloud. For CRM steps you may
+  use a short numbered list (at most 5 steps). No headings, no bold.
+- Mirror their language: clear Indian English by default; if they write
+  Hinglish, reply in natural Hinglish; if they write Hindi, reply in Hindi.
+  Don't switch languages on them.
+- Specific praise beats big praise. No flattery, no guilt, no pressure.
+- Money in the currency the tool gives; most sales are US dollars, written
+  like $1,240.
 PROMPT;
+    }
+
+    /**
+     * The clock block every persona carries. v1 had no idea what time it was
+     * — "what time is it in New York?" got "I only keep track of you!" — on a
+     * floor whose whole job is calling the US at the right hour.
+     */
+    public static function timeBlock(?int $now = null): string
+    {
+        $now = $now ?? time();
+        $at  = static function (string $tz, string $fmt) use ($now): string {
+            $d = new \DateTime('@' . $now);
+            $d->setTimezone(new \DateTimeZone($tz));
+            return $d->format($fmt);
+        };
+        $us = [];
+        foreach (['New York' => 'America/New_York', 'Chicago' => 'America/Chicago',
+                  'Denver' => 'America/Denver', 'Los Angeles' => 'America/Los_Angeles'] as $city => $tz) {
+            $us[] = $city . ' ' . $at($tz, 'D g:i A T');
+        }
+        $shift = '';
+        try {
+            [$start] = ShiftService::businessDayBounds();
+            $shift = "\n- The CRM's \"today\" is the shift day that began " . date('D j M, g A', strtotime((string) $start))
+                   . ' IST and runs 24 hours (6 PM to 6 PM).';
+        } catch (Throwable $e) {
+            // the clock is still right without the shift line
+        }
+        return "CLOCK (exact — use it for any time question):\n"
+             . '- India now: ' . $at('Asia/Kolkata', 'l j F Y, g:i A') . " IST\n"
+             . '- US now: ' . implode('; ', $us) . $shift;
     }
 
     // =========================================================================
@@ -1369,7 +1830,7 @@ PROMPT;
     // =========================================================================
 
     private const ADMIN_DAILY_LIMIT      = 400;
-    private const ADMIN_PER_MINUTE_LIMIT = 20;
+    private const ADMIN_PER_MINUTE_LIMIT = 30;
 
     public function adminChat(int $adminId, string $message): array
     {
@@ -1382,24 +1843,30 @@ PROMPT;
                     'error' => 'Message too long (max ' . self::MAX_INPUT_CHARS . ' characters).'];
         }
 
-        $quota = $this->quotaCheck($adminId, 'admin', self::ADMIN_DAILY_LIMIT, self::ADMIN_PER_MINUTE_LIMIT);
+        $quota = $this->quotaCheck(
+            $adminId, 'admin',
+            self::limit('BUDDY_ADMIN_DAILY_LIMIT', self::ADMIN_DAILY_LIMIT),
+            self::limit('BUDDY_ADMIN_PER_MINUTE', self::ADMIN_PER_MINUTE_LIMIT)
+        );
         if ($quota !== null) {
             return ['success' => false, 'reply' => '', 'ai' => false, 'error' => $quota];
         }
 
         [$message] = BuddyPromptBuilder::scrub($message);
 
+        $started = microtime(true);
         $convId  = $this->openConversation($adminId, 'admin');
         $history = $this->loadHistory($convId);
-        $this->storeMessage($convId, 'user', $message);
+        $this->storeMessage($convId, 'user', $message, null, null, ['kind' => 'chat']);
 
-        $contents   = BuddyPromptBuilder::buildContents($history);
-        $contents[] = ['role' => 'user', 'parts' => [['text' => $message]]];
+        $contents = self::withTurn(BuddyPromptBuilder::buildContents($history), $message);
 
         $registry = AdminTools::registry($adminId);
         $registry->setConversation($convId);
 
-        $result = $this->clientFor($message)->chat(self::adminPersona($adminId), $contents, $registry);
+        $client  = $this->clientFor($message);
+        $result  = $client->chat(self::adminPersona($adminId), $contents, $registry);
+        $latency = (int) round((microtime(true) - $started) * 1000);
 
         // Surface the confirm gate to the UI: if the model parked an action this
         // turn, the widget renders Confirm/Cancel buttons alongside the reply.
@@ -1410,16 +1877,23 @@ PROMPT;
         }
 
         if ($result['success']) {
-            $this->storeMessage($convId, 'model', $result['text'], $result['tokens_in'] ?? null, $result['tokens_out'] ?? null);
-            return ['success' => true, 'reply' => $result['text'], 'ai' => true, 'pending_action' => $pending];
+            $id = $this->storeMessage($convId, 'model', $result['text'], $result['tokens_in'] ?? null, $result['tokens_out'] ?? null,
+                ['kind' => 'chat', 'model' => $result['model'] ?? $client->model(), 'latency_ms' => $latency, 'ai' => 1]);
+            return ['success' => true, 'reply' => $result['text'], 'ai' => true, 'pending_action' => $pending, 'message_id' => $id];
         }
 
-        ErrorLogService::log('warning', '[buddy] admin AI turn failed: ' . ($result['error'] ?? '?'));
-        $fallback = "The AI layer is unavailable right now. Deterministic team snapshot:\n\n"
-                  . self::renderTeamFallback();
+        ErrorLogService::log('warning', '[buddy] admin AI turn failed: ' . ($result['api_error'] ?? $result['error'] ?? '?'));
+        $lead = !empty($result['budget'])
+            ? "Today's AI allowance is used up, so I'm in basic mode until 6 PM (BUDDY_DAILY_BUDGET_USD raises it)."
+            : (!empty($result['busy'])
+                ? 'Google is rate-limiting the AI key right now — try again in a few seconds.'
+                : 'The AI layer did not answer.');
+        $fallback = $lead . " Team snapshot straight from the CRM:\n\n" . self::renderTeamFallback();
         // (persona is personalized above; the fallback stays deliberately plain)
-        $this->storeMessage($convId, 'model', $fallback);
-        return ['success' => true, 'reply' => $fallback, 'ai' => false, 'pending_action' => $pending];
+        $id = $this->storeMessage($convId, 'model', $fallback, null, null,
+            ['kind' => 'fallback', 'model' => $result['model'] ?? null, 'latency_ms' => $latency, 'ai' => 0]);
+        return ['success' => true, 'reply' => $fallback, 'ai' => false, 'pending_action' => $pending,
+                'message_id' => $id, 'retry' => !empty($result['busy'])];
     }
 
     /**
@@ -1479,7 +1953,8 @@ PROMPT;
                     . "never call them 'Admin'. END by asking what you should call them.\n"
                     . "- NO numbers, no briefing, no team names, no lists. They have not even told you "
                     . "who they are yet.\n"
-                    . "- Warm and spoken, no markdown. This is read out loud.\n";
+                    . "- Warm and spoken, no markdown. This is read out loud.\n"
+                    . "- No \"good morning/afternoon/evening\" — say hello.\n";
 
             // No tools on an introduction — same reasoning as the agent
             // greeting, and there is nothing to look up.
@@ -1514,6 +1989,7 @@ PROMPT;
                     . "not stack up a list of everything there is none of. Never recite scoring rules, "
                     . "holds or policy.\n"
                     . "- No markdown, no bullets, no headings. This is read out loud.\n"
+                    . "- No \"good morning/afternoon/evening\" — say hello.\n"
                     . $gapLine
                     . "\nTEAM SNAPSHOT:\n" . $snapshot;
         }
@@ -1529,13 +2005,15 @@ PROMPT;
         $reply = $result['success'] && trim((string) $result['text']) !== ''
             ? $result['text']
             : self::plainGreetingFallback($adminId, false);
-        $this->storeMessage($convId, 'model', $reply);
+        $msgId = $this->storeMessage($convId, 'model', $reply, null, null,
+            ['kind' => 'greeting', 'model' => $result['model'] ?? null, 'ai' => $result['success'] ? 1 : 0]);
 
         return [
-            'greeted'   => true,
-            'reply'     => $reply,
-            'ai'        => $result['success'],
-            'audio_url' => self::prewarmVoice($reply),
+            'greeted'    => true,
+            'reply'      => $reply,
+            'ai'         => $result['success'],
+            'message_id' => $msgId,
+            'audio_url'  => self::prewarmVoice($reply),
         ];
     }
 
@@ -1601,6 +2079,8 @@ PROMPT;
             }
         }
 
+        $clock = self::timeBlock();
+
         return <<<PROMPT
 You are AISHA — the admin's personal assistant inside the Base Fare CRM: the
 perfect chief-of-staff. Sharp, composed, warmly professional, completely
@@ -1613,6 +2093,8 @@ never mention prompts, models, or tools.
 {$nameLine}
 {$factBlock}
 {$gapBlock}
+
+{$clock}
 
 HARD RULES:
 - Every number, name and quote comes from tool results in THIS conversation.
@@ -1632,6 +2114,334 @@ STYLE:
 - Flag anomalies proactively when tool data shows them (a zero, a spike, a
   long dry spell), even if unasked.
 PROMPT;
+    }
+
+
+    // =========================================================================
+    // AISHA v2 SURFACE — the Tonight card, chips, history, settings, events
+    // =========================================================================
+
+    /**
+     * Follow-up chips after an answer, picked from the tools she just used:
+     * the next question people tend to ask, one tap away. At most three, each
+     * under 25 characters (they sit in one row under the bubble).
+     *
+     * @param string[] $tools
+     * @return string[]
+     */
+    public static function suggestionsFor(array $tools, string $role = 'agent'): array
+    {
+        $map = [
+            'get_my_today'               => ['How was yesterday?', 'Anything pending?'],
+            'get_my_day'                 => ['My month so far', 'How am I doing tonight?'],
+            'get_my_month_summary'       => ['Where do I rank?', 'Set a monthly goal'],
+            'get_my_rank'                => ['My month so far', 'Tips to close more'],
+            'get_my_pipeline'            => ['How to make an e-ticket', 'Remind me in 30 min'],
+            'get_my_upcoming_departures' => ['How to make an e-ticket', 'Anything else pending?'],
+            'get_my_booking'             => ['Remind me to follow up', 'How to resend e-ticket'],
+            'get_my_recent_sales'        => ['How am I doing tonight?', 'My best weekday?'],
+            'get_my_patterns'            => ['Tips to close more', 'My week so far'],
+            'get_my_week_recap'          => ['My best weekday?', 'Set a monthly goal'],
+            'get_my_goal_progress'       => ['My month so far', 'Tips to close more'],
+            'set_my_goal'                => ['How far along am I?'],
+            'sales_tips'                 => ['Another tip', 'A good opening line'],
+            'crm_help'                   => ['Anything pending?'],
+            'set_reminder'               => ['Show my reminders'],
+            'get_my_reminders'           => ['Remind me in 30 min'],
+            'get_my_memory'              => ['Forget something'],
+            'get_my_team'                => ['Who needs help tonight?', 'How am I doing tonight?'],
+        ];
+        $out = [];
+        foreach (array_reverse($tools) as $t) {        // the last tool is the freshest context
+            foreach ($map[$t] ?? [] as $chip) {
+                if (!in_array($chip, $out, true)) {
+                    $out[] = $chip;
+                }
+            }
+        }
+        if ($role !== 'supervisor') {
+            $out = array_values(array_filter($out, fn($c) => $c !== 'Who needs help tonight?'));
+        }
+        return array_slice($out, 0, 3);
+    }
+
+    /**
+     * Conversation starters for an empty chat, by the phase of the shift.
+     *
+     * @return string[]
+     */
+    public static function starterChips(string $role = 'agent', ?int $hour = null): array
+    {
+        $h = $hour ?? (int) date('G');
+        if ($h >= 18 && $h < 22) {          // settling in
+            $chips = ['How am I doing tonight?', 'Anything pending?', 'A good opening line'];
+        } elseif ($h >= 22 || $h < 3) {     // the busy middle
+            $chips = ['How am I doing tonight?', 'Remind me in 30 min', 'Time in New York?'];
+        } elseif ($h < 9) {                 // the long end of the night
+            $chips = ['How am I doing tonight?', 'I need a pick-me-up', 'Anything pending?'];
+        } else {                            // daytime
+            $chips = ['My month so far', 'Anything pending?', 'How was yesterday?'];
+        }
+        if ($role === 'supervisor') {
+            array_splice($chips, 1, 0, ['How is my team doing?']);
+        }
+        return array_slice($chips, 0, 4);
+    }
+
+    /**
+     * The Tonight card: the agent's shift at a glance, computed straight
+     * from the CRM with no AI involved, so it is instant, free and cannot
+     * hallucinate. Every number links to the screen it came from.
+     */
+    public function todayCard(int $userId, string $role): array
+    {
+        $reg  = AgentTools::registry($userId, $role);
+        $out  = ['ok' => true];
+        try {
+            $t = $reg->execute('get_my_today', []);
+            $out['sales']   = (int) ($t['sales'] ?? 0);
+            $out['revenue'] = (float) ($t['revenue'] ?? 0);
+            $out['net_mco'] = (float) ($t['net_mco'] ?? 0);
+            if (isset($t['window']['from'])) {
+                $out['shift'] = 'Since ' . date('g A D', strtotime((string) $t['window']['from']));
+            }
+        } catch (Throwable $e) {
+            $out['ok'] = false;
+        }
+        try {
+            // Only bookings they can ticket now: approved AND charged (the
+            // e-ticket form's own gate). The rest wait on an admin, not on them.
+            $et = DB::table('transactions AS t')
+                ->leftJoin('etickets AS e', 'e.transaction_id', '=', 't.id')
+                ->where('t.agent_id', $userId)->where('t.status', 'approved')
+                ->where('t.gateway_status', 'charge_successful')
+                ->where('t.created_at', '>=', date('Y-m-d H:i:s', time() - 14 * 86400))
+                ->whereNull('e.id');
+            $out['etickets_waiting'] = (int) (clone $et)->count();
+            $oldest = (clone $et)->orderBy('t.created_at')->value('t.id');
+            $out['etickets_link'] = $oldest ? '/etickets/create?transaction=' . (int) $oldest : '/etickets';
+
+            $out['auths_waiting'] = (int) DB::table('acceptance_requests AS a')
+                ->leftJoin('transactions AS x', function ($j) {
+                    $j->on('x.acceptance_id', '=', 'a.id')->where('x.status', '!=', 'voided');
+                })
+                ->where('a.agent_id', $userId)->where('a.status', 'APPROVED')->where('a.is_preauth', 0)
+                ->where('a.approved_at', '>=', date('Y-m-d H:i:s', time() - 14 * 86400))
+                ->whereNull('x.id')->count();
+        } catch (Throwable $e) {
+            // the card still shows what it has
+        }
+        try {
+            $g = $reg->execute('get_my_goal_progress', []);
+            if (!empty($g['has_goal'])) {
+                $m = isset($g['sales']) ? 'sales' : 'revenue';
+                $out['goal'] = ['metric' => $m, 'target' => $g[$m]['target'], 'done' => $g[$m]['done'],
+                                'on_track' => (bool) $g[$m]['on_track'], 'days_left' => (int) $g['days_left']];
+            }
+        } catch (Throwable $e) {
+        }
+        try {
+            $r = DB::table('buddy_nudges')->where('user_id', $userId)->where('type', 'reminder')
+                ->where('status', 'pending')->orderBy('due_at')->first(['payload_json', 'due_at']);
+            if ($r !== null) {
+                $out['next_reminder'] = [
+                    'what' => (json_decode((string) $r->payload_json, true) ?: [])['text'] ?? '',
+                    'at'   => date('g:i A', strtotime((string) $r->due_at)),
+                ];
+            }
+        } catch (Throwable $e) {
+            // no due_at column before the migration — no reminders either
+        }
+        return $out;
+    }
+
+    /**
+     * The chat as the widget shows it: the newest 40 messages of the current
+     * conversation, each with its id (for per-message thumbs), its kind and,
+     * for nudges, the tag and the action button.
+     */
+    public function historyFor(int $userId, string $kind = 'agent'): array
+    {
+        $convId = DB::table('buddy_conversations')
+            ->where('user_id', $userId)->where('kind', $kind)
+            ->orderByDesc('id')->value('id');
+        if ($convId === null) {
+            return [];
+        }
+        $rows = DB::table('buddy_messages')
+            ->where('conversation_id', $convId)
+            ->whereIn('role', ['user', 'model'])
+            ->orderByDesc('id')->limit(40)->get()->reverse()->values();
+
+        $nudges = [];
+        $ids = $rows->pluck('nudge_id')->filter()->map(fn($v) => (int) $v)->all();
+        if ($ids !== []) {
+            try {
+                $nudges = DB::table('buddy_nudges')->whereIn('id', $ids)
+                    ->get(['id', 'type', 'payload_json', 'ref_id', 'dedupe_key', 'status'])->keyBy('id')->all();
+            } catch (Throwable $e) {
+                $nudges = [];
+            }
+        }
+
+        return $rows->map(function ($m) use ($nudges) {
+            $out = [
+                'id'       => (int) $m->id,
+                'role'     => $m->role,
+                'content'  => $m->content,
+                'at'       => $m->created_at,
+                'kind'     => $m->kind ?? null,
+                'feedback' => isset($m->feedback) ? (int) $m->feedback : null,
+            ];
+            $nid = isset($m->nudge_id) ? (int) $m->nudge_id : 0;
+            if ($nid > 0 && isset($nudges[$nid])) {
+                $n = $nudges[$nid];
+                $out['nudge_id'] = $nid;
+                $out['tag']      = self::nudgeTag((string) $n->type);
+                $out['action']   = self::nudgeAction((string) $n->type, json_decode((string) $n->payload_json, true) ?: [], $n);
+                $out['done']     = $n->status === 'done';
+            }
+            if (($m->kind ?? null) === 'fallback' || str_starts_with((string) $m->content, "I can't reach my AI brain")) {
+                $out['degraded'] = true;
+            }
+            return $out;
+        })->all();
+    }
+
+    /** A fresh conversation: the next message starts with a clean slate. */
+    public function startNewChat(int $userId, string $kind = 'agent'): void
+    {
+        DB::table('buddy_conversations')->insert([
+            'user_id'         => $userId,
+            'kind'            => $kind === 'admin' ? 'admin' : 'agent',
+            'title'           => date('M j') . ' ' . $kind . ' chat',
+            'created_at'      => date('Y-m-d H:i:s'),
+            'last_message_at' => date('Y-m-d H:i:s'),
+        ]);
+        self::logEvent($userId, 'new_chat');
+    }
+
+    /**
+     * Quiet mode and voice, set from the chat header.
+     *
+     * @param array $in quiet: minutes (15–720) | 'shift' | 'off'; voice: bool
+     */
+    public function saveSettings(int $userId, array $in): array
+    {
+        $out = [];
+        if (array_key_exists('quiet', $in)) {
+            $q = $in['quiet'];
+            if ($q === 'off' || $q === 0 || $q === '0') {
+                $until = 0;
+            } elseif ($q === 'shift') {
+                [, $end] = ShiftService::businessDayBounds();
+                $until = strtotime((string) $end) + 1;
+            } else {
+                $until = time() + max(15, min(720, (int) $q)) * 60;
+            }
+            BuddySettings::mutate($userId, function (array $extra) use ($until) {
+                if ($until > 0) {
+                    $extra['quiet_until'] = $until;
+                } else {
+                    unset($extra['quiet_until']);
+                }
+                return [$extra, true];
+            });
+            $out['quiet_until'] = $until > 0 ? date('c', $until) : null;
+            self::logEvent($userId, $until > 0 ? 'quiet_on' : 'quiet_off', $until > 0 ? date('H:i', $until) : '');
+        }
+        if (array_key_exists('voice', $in)) {
+            $on = !empty($in['voice']);
+            try {
+                $exists = DB::table('buddy_settings')->where('user_id', $userId)->exists();
+                $exists
+                    ? DB::table('buddy_settings')->where('user_id', $userId)->update(['voice_enabled' => $on ? 1 : 0])
+                    : DB::table('buddy_settings')->insert(['user_id' => $userId, 'voice_enabled' => $on ? 1 : 0]);
+            } catch (Throwable $e) {
+            }
+            $out['voice'] = $on;
+            self::logEvent($userId, $on ? 'voice_on' : 'voice_off');
+        }
+        return $out;
+    }
+
+    /** Quiet-until (unix) and the voice preference, for boot. */
+    public static function prefs(int $userId): array
+    {
+        $extra = [];
+        $voice = null;
+        try {
+            $extra = BuddySettings::read($userId);
+            $v = DB::table('buddy_settings')->where('user_id', $userId)->value('voice_enabled');
+            $voice = $v === null ? null : (bool) $v;
+        } catch (Throwable $e) {
+        }
+        $quiet = (int) ($extra['quiet_until'] ?? 0);
+        return ['quiet_until' => $quiet > time() ? date('c', $quiet) : null, 'voice' => $voice];
+    }
+
+    /**
+     * A nudge button: done (the bubble's "Done") or snooze (reminders: again
+     * in 15 minutes). Only the owner's own nudges.
+     */
+    public function nudgeAct(int $userId, int $nudgeId, string $action): bool
+    {
+        if (!self::v2Schema()) {
+            return false;   // 'done' and due_at arrive with the migration
+        }
+        try {
+            $n = DB::table('buddy_nudges')->where('id', $nudgeId)->where('user_id', $userId)->first(['id', 'type']);
+            if ($n === null) {
+                return false;
+            }
+            if ($action === 'snooze' && $n->type === 'reminder') {
+                DB::table('buddy_nudges')->where('id', $nudgeId)->update([
+                    'status' => 'pending', 'due_at' => date('Y-m-d H:i:s', time() + 900), 'delivered_at' => null,
+                ]);
+                self::logEvent($userId, 'nudge_snooze', 'nudge:' . $nudgeId);
+                return true;
+            }
+            if ($action === 'done') {
+                DB::table('buddy_nudges')->where('id', $nudgeId)
+                    ->update(['status' => 'done', 'acted_at' => date('Y-m-d H:i:s')]);
+                self::logEvent($userId, 'nudge_done', 'nudge:' . $nudgeId . ':' . $n->type);
+                return true;
+            }
+            if ($action === 'open') {
+                DB::table('buddy_nudges')->where('id', $nudgeId)->whereNull('acted_at')
+                    ->update(['acted_at' => date('Y-m-d H:i:s')]);
+                self::logEvent($userId, 'nudge_action', 'nudge:' . $nudgeId . ':' . $n->type);
+                return true;
+            }
+        } catch (Throwable $e) {
+            return false;
+        }
+        return false;
+    }
+
+    /** Events the widget may log — anything else is dropped. */
+    private const EVENTS = [
+        'open', 'close', 'chip', 'starter', 'stop', 'copy', 'card_link', 'toast_open', 'toast_close',
+        'memory_view', 'memory_forget', 'new_chat', 'quiet_on', 'quiet_off', 'voice_on', 'voice_off',
+        'thumb_up', 'thumb_down', 'nudge_done', 'nudge_snooze', 'nudge_action', 'retry', 'expand', 'mic',
+    ];
+
+    /** Usage signal for the scorecard. Never throws, never blocks. */
+    public static function logEvent(int $userId, string $event, string $detail = ''): void
+    {
+        if (!in_array($event, self::EVENTS, true)) {
+            return;
+        }
+        try {
+            DB::table('buddy_events')->insert([
+                'user_id'    => $userId,
+                'event'      => $event,
+                'detail'     => mb_substr($detail, 0, 255),
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+        } catch (Throwable $e) {
+            // no buddy_events table before the migration — measurement is optional
+        }
     }
 
     // =========================================================================
@@ -1724,36 +2534,70 @@ PROMPT;
         ]);
     }
 
-    /** @return array<array{role: string, content: string}> oldest→newest */
+    /**
+     * The conversation as the model will see it, oldest→newest. Her failed
+     * answers (kind 'fallback', plus v1's "I can't reach my AI brain" rows,
+     * which have no kind) never go back in: a model shown its own error
+     * messages starts producing them.
+     *
+     * @return array<array{role: string, content: string}>
+     */
     private function loadHistory(int $convId): array
     {
-        return DB::table('buddy_messages')
+        $base = fn() => DB::table('buddy_messages')
             ->where('conversation_id', $convId)
             ->whereIn('role', ['user', 'model'])
-            ->orderByDesc('id')
-            ->limit(BuddyPromptBuilder::HISTORY_MAX_MESSAGES)
-            ->get()
-            ->reverse()
+            ->where('content', 'not like', "I can't reach my AI brain%");
+        try {
+            $rows = $base()
+                ->where(fn($w) => $w->whereNull('kind')->orWhereNotIn('kind', ['fallback', 'notice']))
+                ->orderByDesc('id')->limit(BuddyPromptBuilder::HISTORY_MAX_MESSAGES)->get();
+        } catch (Throwable $e) {
+            // aisha_v2 migration not run yet — no kind column
+            $rows = $base()->orderByDesc('id')->limit(BuddyPromptBuilder::HISTORY_MAX_MESSAGES)->get();
+        }
+        return $rows->reverse()
             ->map(fn($m) => ['role' => $m->role, 'content' => $m->content])
             ->values()
             ->all();
     }
 
-    private function storeMessage(int $convId, string $role, string $content, ?int $tokensIn = null, ?int $tokensOut = null): void
+    /** False once an insert has shown the aisha_v2 columns are missing. */
+    private static bool $metaColumns = true;
+
+    /**
+     * @param array $meta kind / model / latency_ms / ai / nudge_id (aisha_v2 columns)
+     * @return int|null the new message id
+     */
+    private function storeMessage(int $convId, string $role, string $content, ?int $tokensIn = null, ?int $tokensOut = null, array $meta = []): ?int
     {
+        $row = [
+            'conversation_id' => $convId,
+            'role'            => $role,
+            'content'         => mb_substr($content, 0, 60000),
+            'tokens_in'       => $tokensIn,
+            'tokens_out'      => $tokensOut,
+            'created_at'      => date('Y-m-d H:i:s'),
+        ];
+        $meta = array_intersect_key($meta, array_flip(['kind', 'model', 'latency_ms', 'ai', 'nudge_id']));
         try {
-            DB::table('buddy_messages')->insert([
-                'conversation_id' => $convId,
-                'role'            => $role,
-                'content'         => mb_substr($content, 0, 60000),
-                'tokens_in'       => $tokensIn,
-                'tokens_out'      => $tokensOut,
-                'created_at'      => date('Y-m-d H:i:s'),
-            ]);
+            try {
+                $id = (int) DB::table('buddy_messages')->insertGetId(self::$metaColumns ? $row + $meta : $row);
+            } catch (Throwable $e) {
+                if (!self::$metaColumns || $meta === []) {
+                    throw $e;
+                }
+                // The code is deployed a moment before the migration runs:
+                // keep the message, lose only the measurement.
+                self::$metaColumns = false;
+                $id = (int) DB::table('buddy_messages')->insertGetId($row);
+            }
             DB::table('buddy_conversations')->where('id', $convId)
                 ->update(['last_message_at' => date('Y-m-d H:i:s')]);
+            return $id;
         } catch (Throwable $e) {
             ErrorLogService::log('warning', '[buddy] message persist failed: ' . $e->getMessage());
+            return null;
         }
     }
 
@@ -1770,14 +2614,21 @@ PROMPT;
             ->where('buddy_conversations.kind', $kind)
             ->where('buddy_messages.role', 'user');
 
-        $today = (clone $base)->where('buddy_messages.created_at', '>=', date('Y-m-d 00:00:00'))->count();
+        // Per SHIFT day, like everything else she counts: a midnight reset
+        // landed in the middle of the night shift.
+        try {
+            [$dayStart] = ShiftService::businessDayBounds();
+        } catch (Throwable $e) {
+            $dayStart = date('Y-m-d 00:00:00');
+        }
+        $today = (clone $base)->where('buddy_messages.created_at', '>=', (string) $dayStart)->count();
         if ($today >= $dailyLimit) {
-            return "Daily message limit reached ({$dailyLimit}). Resets at midnight.";
+            return "That's {$dailyLimit} messages this shift — my limit. It resets at 6 PM.";
         }
 
         $lastMinute = (clone $base)->where('buddy_messages.created_at', '>=', date('Y-m-d H:i:s', time() - 60))->count();
         if ($lastMinute >= $perMinuteLimit) {
-            return 'Slow down — too many messages this minute.';
+            return "You're typing faster than I can think — give me a few seconds.";
         }
 
         return null;

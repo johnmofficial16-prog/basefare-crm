@@ -3,6 +3,8 @@
 namespace App\Controllers;
 
 use App\Models\User;
+use App\Services\Buddy\AgentTools;
+use App\Services\Buddy\BuddyBudget;
 use App\Services\Buddy\BuddyService;
 use Illuminate\Database\Capsule\Manager as DB;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -123,22 +125,40 @@ class BuddyController
         // open the panel (agentHistory).
         $nudges = 0;
         try {
+            // Only what she has actually SAID and they have not seen. A nudge
+            // still waiting in the queue is not news yet: since v2 it can be
+            // held for a while (pacing, quiet mode), or dropped as already
+            // done — counting it put "3 new" on an orb with nothing new
+            // behind it.
             $nudges = (int) DB::table('buddy_nudges')
                 ->where('user_id', $userId)
-                ->whereIn('status', ['pending', 'delivered'])->count();
+                ->where('status', 'delivered')
+                ->count();
         } catch (\Throwable $e) {
             // badge is cosmetic — never block boot on it
         }
 
-        $isAdmin = (($_SESSION['role'] ?? '') === User::ROLE_ADMIN);
+        $role    = (string) ($_SESSION['role'] ?? 'agent');
+        $isAdmin = ($role === User::ROLE_ADMIN);
+        $csrf    = $_SESSION['csrf_token'];
+        $name    = $_SESSION['name'] ?? '';
+        self::release();
+        $prefs = BuddyService::prefs($userId);
         return $this->json($response, [
-            'ok'     => true,
-            'csrf'   => $_SESSION['csrf_token'],
-            'name'   => $_SESSION['name'] ?? '',
-            'admin'  => $isAdmin,
+            'ok'          => true,
+            'csrf'        => $csrf,
+            'name'        => $name,
+            'admin'       => $isAdmin,
+            'role'        => $role,
             // Admins get the Super Buddy in the widget; everyone else the agent buddy.
-            'mode'   => $isAdmin ? 'admin' : 'agent',
-            'nudges' => $nudges,
+            'mode'        => $isAdmin ? 'admin' : 'agent',
+            'nudges'      => $nudges,
+            'quiet_until' => $prefs['quiet_until'],
+            'voice'       => $prefs['voice'],
+            // 'basic' = today's AI allowance is used up (BuddyBudget): the
+            // header says so instead of letting every answer fail.
+            'ai'          => BuddyBudget::exhausted() ? 'basic' : 'ok',
+            'starters'    => $isAdmin ? [] : BuddyService::starterChips($role),
         ]);
     }
 
@@ -147,6 +167,7 @@ class BuddyController
         $csrfToken  = $_SESSION['csrf_token'] ?? '';
         $userName   = $_SESSION['name'] ?? 'there';
         $activePage = 'buddy';
+        self::release();
 
         ob_start();
         require __DIR__ . '/../Views/buddy/chat.php';
@@ -159,30 +180,14 @@ class BuddyController
     public function agentHistory(Request $request, Response $response): Response
     {
         $userId = (int) $_SESSION['user_id'];
-        $convId = DB::table('buddy_conversations')
-            ->where('user_id', $userId)->where('kind', 'agent')
-            ->orderByDesc('id')->value('id');
+        $role   = (string) ($_SESSION['role'] ?? 'agent');
+        self::release();
 
-        $messages = [];
-        if ($convId !== null) {
-            $messages = DB::table('buddy_messages')
-                ->where('conversation_id', $convId)
-                ->whereIn('role', ['user', 'model'])
-                ->orderByDesc('id')->limit(30)->get()->reverse()->values()
-                ->map(fn($m) => ['role' => $m->role, 'content' => $m->content, 'at' => $m->created_at])
-                ->all();
-        }
-
-        // Chips = recent context (last 24h), not an unbounded backlog: an agent
-        // opening the panel should see what today has thrown at them, not a
-        // wall of chips for things they resolved last week.
-        $nudges = DB::table('buddy_nudges')
-            ->where('user_id', $userId)
-            ->where('created_at', '>=', date('Y-m-d H:i:s', time() - 86400))
-            ->orderByDesc('id')->limit(6)
-            ->get(['type', 'payload_json', 'created_at'])
-            ->map(fn($n) => ['type' => $n->type, 'payload' => json_decode((string) $n->payload_json, true) ?: [], 'at' => $n->created_at])
-            ->all();
+        // v2: each message carries its id (per-message thumbs), its kind, and
+        // for nudges the tag + action button. The old "Tell me about: …" chips
+        // are gone — the nudge bubbles carry their own buttons now.
+        $messages = $this->service->historyFor($userId, 'agent');
+        $nudges   = [];
 
         // Opening the panel IS the agent seeing them — clears the badge for good.
         try {
@@ -193,7 +198,12 @@ class BuddyController
             // cosmetic — never fail a history load over the badge
         }
 
-        return $this->json($response, ['success' => true, 'messages' => $messages, 'nudges' => $nudges]);
+        return $this->json($response, [
+            'success'  => true,
+            'messages' => $messages,
+            'nudges'   => $nudges,
+            'starters' => BuddyService::starterChips($role),
+        ]);
     }
 
     /** POST — generates the once-per-business-day greeting if it is due. */
@@ -208,11 +218,15 @@ class BuddyController
         // just opened. Trusted only as a hint: the service still applies its own
         // cooldown, so a forged flag cannot make Aisha greet on a loop.
         $body = $request->getParsedBody() ?? [];
-        $result = $this->service->agentGreeting(
-            (int) $_SESSION['user_id'],
-            (string) ($_SESSION['role'] ?? 'agent'),
-            !empty($body['fresh'])
-        );
+        // The login flag is consumed HERE, then the session is let go of: the
+        // greeting can take seconds of Gemini time and must not freeze every
+        // other page the agent opens meanwhile.
+        $due = !empty($_SESSION['buddy_greet_due']);
+        unset($_SESSION['buddy_greet_due']);
+        $userId = (int) $_SESSION['user_id'];
+        $role   = (string) ($_SESSION['role'] ?? 'agent');
+        self::release();
+        $result = $this->service->agentGreeting($userId, $role, !empty($body['fresh']) || $due);
         return $this->json($response, ['success' => true] + $result);
     }
 
@@ -241,6 +255,7 @@ class BuddyController
 
         $body      = $request->getParsedBody() ?? [];
         $panelOpen = !empty($body['open']);
+        self::release();
 
         $result = $this->service->agentFeed($userId, $panelOpen);
 
@@ -273,7 +288,9 @@ class BuddyController
         if ($kind === 'admin' && ($_SESSION['role'] ?? '') !== User::ROLE_ADMIN) {
             $kind = 'agent';
         }
-        $ok = $this->service->recordFeedback($userId, $kind, (int) ($body['value'] ?? 0));
+        self::release();
+        $msgId = isset($body['message_id']) ? (int) $body['message_id'] : null;
+        $ok = $this->service->recordFeedback($userId, $kind, (int) ($body['value'] ?? 0), $msgId, (string) ($body['reason'] ?? ''));
         return $this->json($response, ['ok' => $ok]);
     }
 
@@ -284,17 +301,111 @@ class BuddyController
         }
         $body    = $request->getParsedBody() ?? [];
         $message = (string) ($body['message'] ?? '');
+        $userId  = (int) $_SESSION['user_id'];
+        $role    = (string) ($_SESSION['role'] ?? 'agent');
+        // Let go of the session lock before the seconds of Gemini time: with
+        // it held, every other CRM page the agent opened sat frozen until
+        // Aisha finished answering.
+        self::release();
 
-        $result = $this->service->agentChat(
-            (int) $_SESSION['user_id'],
-            (string) ($_SESSION['role'] ?? 'agent'),
-            $message
-        );
+        $result = $this->service->agentChat($userId, $role, $message);
 
         if (!$result['success']) {
             return $this->json($response, ['success' => false, 'error' => $result['error'] ?? 'Failed.'], 422);
         }
-        return $this->json($response, ['success' => true, 'reply' => $result['reply'], 'ai' => $result['ai']]);
+        return $this->json($response, [
+            'success'     => true,
+            'reply'       => $result['reply'],
+            'ai'          => $result['ai'],
+            'message_id'  => $result['message_id'] ?? null,
+            'suggestions' => $result['suggestions'] ?? [],
+            'retry'       => $result['retry'] ?? false,
+            'budget'      => $result['budget'] ?? false,
+        ]);
+    }
+
+    // =========================================================================
+    // AISHA v2 — the Tonight card, settings, memory, nudge buttons, events
+    // =========================================================================
+
+    /** GET /buddy/today — the Tonight card (no AI: instant and free). */
+    public function today(Request $request, Response $response): Response
+    {
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+        $role   = (string) ($_SESSION['role'] ?? 'agent');
+        self::release();
+        if ($userId <= 0) {
+            return $this->json($response, ['ok' => false], 401);
+        }
+        return $this->json($response, $this->service->todayCard($userId, $role));
+    }
+
+    /** POST /buddy/settings {quiet?: minutes|'shift'|'off', voice?: bool} */
+    public function settings(Request $request, Response $response): Response
+    {
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+        self::release();
+        $body = $request->getParsedBody() ?? [];
+        $in = array_intersect_key($body, array_flip(['quiet', 'voice']));
+        return $this->json($response, ['ok' => true] + $this->service->saveSettings($userId, $in));
+    }
+
+    /** GET /buddy/memory — "What Aisha knows": everything she remembers, for the person it is about. */
+    public function memory(Request $request, Response $response): Response
+    {
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+        $role   = (string) ($_SESSION['role'] ?? 'agent');
+        self::release();
+        BuddyService::logEvent($userId, 'memory_view');
+        $mem = AgentTools::registry($userId, $role)->execute('get_my_memory', []);
+        return $this->json($response, ['ok' => true] + $mem);
+    }
+
+    /** POST /buddy/memory/forget {fact_id} | {all: 1} — their information, their call. */
+    public function forget(Request $request, Response $response): Response
+    {
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+        self::release();
+        $body = $request->getParsedBody() ?? [];
+        if (!empty($body['all'])) {
+            $n = DB::table('buddy_agent_facts')->where('user_id', $userId)->where('active', 1)
+                ->update(['active' => 0, 'updated_at' => date('Y-m-d H:i:s')]);
+            BuddyService::logEvent($userId, 'memory_forget', 'all:' . $n);
+            return $this->json($response, ['ok' => true, 'forgotten' => $n]);
+        }
+        $r = AgentTools::forget($userId, (int) ($body['fact_id'] ?? 0));
+        BuddyService::logEvent($userId, 'memory_forget', 'fact:' . (int) ($body['fact_id'] ?? 0));
+        return $this->json($response, ['ok' => !isset($r['error'])] + $r);
+    }
+
+    /** POST /buddy/nudge/{id}/{action} — Done, Snooze (reminders), or the action button was used. */
+    public function nudgeAct(Request $request, Response $response, array $args): Response
+    {
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+        self::release();
+        $ok = $this->service->nudgeAct($userId, (int) ($args['id'] ?? 0), (string) ($args['action'] ?? ''));
+        return $this->json($response, ['ok' => $ok], $ok ? 200 : 404);
+    }
+
+    /** POST /buddy/new — start a fresh conversation (the menu's "New chat"). */
+    public function newChat(Request $request, Response $response): Response
+    {
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+        $kind   = (($_SESSION['role'] ?? '') === User::ROLE_ADMIN && (($request->getParsedBody() ?? [])['kind'] ?? '') === 'admin')
+            ? 'admin' : 'agent';
+        self::release();
+        $this->service->startNewChat($userId, $kind);
+        return $this->json($response, ['ok' => true]);
+    }
+
+    /** POST /buddy/event {event, detail} — usage signal for the scorecard; whitelisted in the service. */
+    public function event(Request $request, Response $response): Response
+    {
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
+        self::release();
+        $body = $request->getParsedBody() ?? [];
+        BuddyService::logEvent($userId, (string) ($body['event'] ?? ''), (string) ($body['detail'] ?? ''));
+        return $this->json($response, ['ok' => true]);
     }
 
     // =========================================================================
@@ -320,6 +431,8 @@ class BuddyController
             'reply'          => $result['reply'],
             'ai'             => $result['ai'],
             'pending_action' => $result['pending_action'] ?? null,
+            'message_id'     => $result['message_id'] ?? null,
+            'retry'          => $result['retry'] ?? false,
         ]);
     }
 
@@ -329,19 +442,8 @@ class BuddyController
             return $this->json($response, ['error' => 'forbidden'], 403);
         }
         $userId = (int) $_SESSION['user_id'];
-        $convId = DB::table('buddy_conversations')
-            ->where('user_id', $userId)->where('kind', 'admin')
-            ->orderByDesc('id')->value('id');
-
-        $messages = [];
-        if ($convId !== null) {
-            $messages = DB::table('buddy_messages')
-                ->where('conversation_id', $convId)
-                ->whereIn('role', ['user', 'model'])
-                ->orderByDesc('id')->limit(30)->get()->reverse()->values()
-                ->map(fn($m) => ['role' => $m->role, 'content' => $m->content, 'at' => $m->created_at])
-                ->all();
-        }
+        self::release();
+        $messages = $this->service->historyFor($userId, 'admin');
         return $this->json($response, ['success' => true, 'messages' => $messages, 'nudges' => []]);
     }
 
@@ -355,7 +457,11 @@ class BuddyController
             return $this->json($response, ['error' => 'forbidden'], 403);
         }
         $body = $request->getParsedBody() ?? [];
-        $result = $this->service->adminGreeting((int) $_SESSION['user_id'], !empty($body['fresh']));
+        $due = !empty($_SESSION['buddy_greet_due']);
+        unset($_SESSION['buddy_greet_due']);
+        $adminId = (int) $_SESSION['user_id'];
+        self::release();
+        $result = $this->service->adminGreeting($adminId, !empty($body['fresh']) || $due);
         return $this->json($response, ['success' => true] + $result);
     }
 
@@ -393,6 +499,7 @@ class BuddyController
      */
     public function ttsSynthesize(Request $request, Response $response): Response
     {
+        self::release();
         $body = $request->getParsedBody() ?? [];
 
         $voice = null;
@@ -419,6 +526,7 @@ class BuddyController
     /** GET /buddy/tts/{file} → cached MP3 (hash-shaped names only). */
     public function ttsAudio(Request $request, Response $response, array $args): Response
     {
+        self::release();
         $path = \App\Services\Buddy\TtsService::safeFile((string) ($args['file'] ?? ''));
         if ($path === null) {
             return $response->withStatus(404);
@@ -450,6 +558,19 @@ class BuddyController
     {
         $_SESSION['flash_error'] = 'Access denied.';
         return $response->withHeader('Location', '/dashboard')->withStatus(302);
+    }
+
+    /**
+     * Let go of the PHP session lock. File sessions are exclusive per user, so
+     * a buddy request that holds one for the seconds Gemini takes freezes every
+     * other CRM page that person opens meanwhile. Callers read what they need
+     * from $_SESSION first; nothing after this point may write it.
+     */
+    private static function release(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
     }
 
     private function json(Response $response, array $data, int $status = 200): Response

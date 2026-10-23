@@ -12,7 +12,12 @@
  *   2. Conversations: turns, sessions, hours of the night, what people ask about
  *   3. Proactive Aisha: nudges by type, whether they were read, replied to, resolved
  *   4. Quality: thumbs, fallback replies, reply time, tool use, "couldn't help" answers
- *   5. Samples: recent questions and thumbs-down answers, with card numbers,
+ *   5. The v2 scorecard (once the aisha_v2 migration has run): AI spend per
+ *      shift day against the cap, measured reply times, failed answers, what
+ *      people click (chips, the Tonight card, nudge buttons, quiet mode,
+ *      "What Aisha knows"), nudges acted on or dropped as already done,
+ *      reminders, and how many sittings the agent started themselves
+ *   6. Samples: recent questions and thumbs-down answers, with card numbers,
  *      emails and phone numbers masked
  *
  * Counts by shift day (6 PM to 6 PM, or system_config business_day_start_hour),
@@ -71,7 +76,7 @@ $med = function (array $v) {
 $p90 = function (array $v) {
     if (!$v) return null;
     sort($v);
-    return $v[(int) floor(0.9 * (count($v) - 1))];
+    return $v[max(0, (int) ceil(0.9 * count($v)) - 1)];   // nearest rank: never below the median on small samples
 };
 $scrub = function (string $s, int $max): string {
     $s = preg_replace_callback('/(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)/', function ($m) {
@@ -326,8 +331,90 @@ $voiceOff = count(array_filter($sellers, fn($u) => isset($settings[$u]) && !(int
 $line(sprintf('Personal touch: knows the name of %d, a goal for %d, 1+ facts for %d (of %d sellers). Voice switched off by %d.',
     $named, $goals, count(array_filter($sellers, fn($u) => ($facts[$u] ?? 0) > 0)), count($sellers), $voiceOff));
 
-// ---- 5. samples ---------------------------------------------------------------------------
-$head('5. SAMPLES (masked)');
+// ---- 5. v2 scorecard ------------------------------------------------------------------------
+$head('5. AISHA v2 SCORECARD');
+$hasV2 = $q("SHOW COLUMNS FROM buddy_messages LIKE 'kind'") !== [];
+if (!$hasV2) {
+    $line('The aisha_v2 migration has not run yet (php hostinger_migrate.php) — nothing to show.');
+} else {
+    // Spend, from the ledger BuddyBudget writes on every call.
+    $cap = (float) $env('BUDDY_DAILY_BUDGET_USD', '2.50');
+    $spend = $q("SELECT bday, model, calls, tokens_in, tokens_out, cost_usd FROM buddy_ai_usage WHERE bday >= '{$fromB}' ORDER BY bday, model");
+    $byDay = [];
+    foreach ($spend as $r) {
+        if ($r['model'] === 'tts') {
+            $byDay[$r['bday']]['tts'] = (int) $r['tokens_out'];
+            continue;
+        }
+        $byDay[$r['bday']]['usd'] = ($byDay[$r['bday']]['usd'] ?? 0) + (float) $r['cost_usd'];
+        $byDay[$r['bday']]['calls'] = ($byDay[$r['bday']]['calls'] ?? 0) + (int) $r['calls'];
+    }
+    $total = array_sum(array_map(fn($d) => $d['usd'] ?? 0, $byDay));
+    $line(sprintf('AI spend: $%.2f over %d shift days with use (cap $%.2f a day, BUDDY_DAILY_BUDGET_USD). Highest day: $%.2f.',
+        $total, count($byDay), $cap, $byDay ? max(array_map(fn($d) => $d['usd'] ?? 0, $byDay)) : 0));
+    foreach (array_slice($byDay, -7, null, true) as $d => $v) {
+        $line(sprintf('  %s  %4d calls  $%.3f%s', $d, $v['calls'] ?? 0, $v['usd'] ?? 0, isset($v['tts']) ? sprintf('  · %s characters spoken', number_format($v['tts'])) : ''));
+    }
+
+    // Measured reply time and failed answers (stored per message since v2).
+    $mm = $q("SELECT m.kind, m.latency_ms, m.model, m.ai FROM buddy_messages m JOIN buddy_conversations c ON c.id = m.conversation_id
+              WHERE m.role = 'model' AND c.kind = 'agent' AND m.kind IN ('chat', 'fallback') AND m.created_at >= '{$fromTs}'");
+    $ms = array_map(fn($r) => (int) $r['latency_ms'] / 1000, array_filter($mm, fn($r) => $r['latency_ms'] !== null && $r['kind'] === 'chat'));
+    $fb = count(array_filter($mm, fn($r) => $r['kind'] === 'fallback'));
+    $line(sprintf('Answers: %d. Measured reply time: median %ss, 90th pct %ss, over 10s %s. Failed answers (basic mode, busy, error): %d (%s).',
+        count($mm), $med($ms) !== null ? round($med($ms), 1) : '-', $p90($ms) !== null ? round($p90($ms), 1) : '-',
+        $pct(count(array_filter($ms, fn($x) => $x > 10)), count($ms)), $fb, $pct($fb, count($mm))));
+    $lanes = [];
+    foreach ($mm as $r) if ($r['model']) $lanes[$r['model']] = ($lanes[$r['model']] ?? 0) + 1;
+    if ($lanes) $line('  by brain: ' . implode(', ', array_map(fn($k, $v) => "{$k} {$v}", array_keys($lanes), $lanes)));
+
+    // What people click.
+    $ev = $q("SELECT event, COUNT(*) n, COUNT(DISTINCT user_id) people FROM buddy_events WHERE created_at >= '{$fromTs}' GROUP BY event ORDER BY n DESC");
+    if ($ev === []) {
+        $line('Clicks: none recorded yet.');
+    } else {
+        $line('Clicks and settings (times · people):');
+        foreach (array_chunk($ev, 3) as $c) {
+            $line('  ' . implode('   ', array_map(fn($e) => sprintf('%-13s %4d · %-3d', $e['event'], $e['n'], $e['people']), $c)));
+        }
+        $why = $q("SELECT SUBSTRING_INDEX(detail, ' ', -2) why, COUNT(*) n FROM buddy_events WHERE event = 'thumb_down' AND detail LIKE '% %' AND created_at >= '{$fromTs}' GROUP BY why ORDER BY n DESC LIMIT 5");
+        if ($why) $line('  thumbs-down reasons: ' . implode(', ', array_map(fn($w) => $w['why'] . ' ' . $w['n'], $why)));
+    }
+
+    // Nudges: acted on, already done before she said it, reminders.
+    $nv = $q("SELECT type, status, delivered_at, acted_at FROM buddy_nudges WHERE created_at >= '{$fromTs}'");
+    $said = array_filter($nv, fn($n) => in_array($n['status'], ['delivered', 'seen', 'done'], true) && $n['type'] !== 'reminder');
+    $acted = array_filter($said, fn($n) => $n['acted_at'] !== null);
+    $dropped = array_filter($nv, fn($n) => $n['status'] === 'expired');
+    $rem = array_filter($nv, fn($n) => $n['type'] === 'reminder');
+    $line(sprintf('Nudges she raised: %d; button pressed or marked Done: %d (%s). Dropped because already done/stale: %d.',
+        count($said), count($acted), $pct(count($acted), count($said)), count($dropped)));
+    $line(sprintf('Personal reminders set: %d (delivered %d, snoozed or pending %d).', count($rem),
+        count(array_filter($rem, fn($n) => $n['delivered_at'] !== null)), count(array_filter($rem, fn($n) => $n['status'] === 'pending'))));
+
+    // Who starts the conversation: a sitting the agent began on their own vs.
+    // one that followed her greeting or a nudge within 10 minutes.
+    $seq = $q("SELECT m.conversation_id cid, m.role, m.kind, m.created_at FROM buddy_messages m JOIN buddy_conversations c ON c.id = m.conversation_id
+               WHERE c.kind = 'agent' AND m.created_at >= '{$fromTs}' ORDER BY m.conversation_id, m.id");
+    $self = 0; $prompted = 0; $lastUser = []; $lastHers = [];
+    foreach ($seq as $r) {
+        $t = strtotime($r['created_at']);
+        if ($r['role'] === 'model' && in_array($r['kind'], ['greeting', 'nudge'], true)) {
+            $lastHers[$r['cid']] = $t;
+            continue;
+        }
+        if ($r['role'] !== 'user') continue;
+        if (!isset($lastUser[$r['cid']]) || $t - $lastUser[$r['cid']] > 1800) {
+            (isset($lastHers[$r['cid']]) && $t - $lastHers[$r['cid']] <= 600) ? $prompted++ : $self++;
+        }
+        $lastUser[$r['cid']] = $t;
+    }
+    $line(sprintf('Sittings the agent started on their own: %d of %d (%s) — the habit signal; the rest followed her greeting or a nudge.',
+        $self, $self + $prompted, $pct($self, $self + $prompted)));
+}
+
+// ---- 6. samples ---------------------------------------------------------------------------
+$head('6. SAMPLES (masked)');
 $line('Most recent 40 things staff said to her:');
 foreach (array_slice(array_reverse($agentUser), 0, 40) as $m) {
     $line(sprintf('  [%s %s] %s', date('d M H:i', strtotime($m['created_at'])), $first((int) $m['user_id']), $scrub((string) $m['content'], 140)));

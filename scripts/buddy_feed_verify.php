@@ -10,7 +10,8 @@
  *   F1. A drain phrases pending nudges as Aisha model messages and marks
  *       exactly those rows delivered.
  *   F2. Priority: praise first, then urgency, dry_spell last.
- *   F3. Batch cap: max 3 per drain; the rest stay pending for the next poll.
+ *   F3. Batch cap (v2): ONE per drain while the chat is closed (a toast is an
+ *       interruption), three with it open; the rest stay pending.
  *   F4. Idempotent: an empty drain returns messages:[] and changes nothing.
  *   F5. Quota-exempt: a drain stores ZERO role='user' rows (the quota counter).
  *   F6. Templates: every nudge type phrases non-empty, personalized, no raw
@@ -111,25 +112,31 @@ foreach ($seed as [$type, $payload, $key]) {
 
 $svc = new BuddyService();
 
-echo "F1–F3. First drain (5 pending, cap 3, priority order)\n";
+// The v2 daily ceiling is 5 a shift. The mechanics tests below drain far more
+// than that for one user, so they run with the ceiling raised; F17d puts the
+// real default back and tests it on its own.
+$_ENV['BUDDY_FEED_DAILY_MAX'] = '50';
+
+echo "F1–F3. First drain, chat closed (5 pending → ONE spoken, priority order)\n";
 $r1 = $svc->agentFeed(7);
-check('returns 3 messages', count($r1['messages']) === 3, count($r1['messages']) . ' returned');
-check('pending_left is 2', $r1['pending_left'] === 2, 'got ' . $r1['pending_left']);
+check('returns 1 message', count($r1['messages']) === 1, count($r1['messages']) . ' returned');
+check('pending_left is 4', $r1['pending_left'] === 4, 'got ' . $r1['pending_left']);
 $texts = array_column($r1['messages'], 'content');
 check('praise first',   isset($texts[0]) && str_contains($texts[0], 'G7BGL3'));
-check('departure next', isset($texts[1]) && str_contains($texts[1], 'K9PMQ2'));
-check('eticket third',  isset($texts[2]) && str_contains($texts[2], 'AHYX2I'));
 check('praise carries amount as dollars', isset($texts[0]) && str_contains($texts[0], '$1,240.50'));
 check('no raw "USD" prefix (reads badly aloud)', isset($texts[0]) && !str_contains($texts[0], 'USD 1,240'));
 check('personalized with first name', isset($texts[0]) && str_contains($texts[0], 'Sam') && !str_contains($texts[0], 'Kumar'));
+check('message carries id, kind, tag and nudge id',
+    isset($r1['messages'][0]['id'], $r1['messages'][0]['nudge_id'])
+    && ($r1['messages'][0]['kind'] ?? '') === 'nudge' && ($r1['messages'][0]['tag'] ?? '') === 'Win');
 
 $delivered = Capsule::table('buddy_nudges')->where('status', 'delivered')->whereNotNull('delivered_at')->count();
-check('exactly 3 nudges marked delivered', $delivered === 3, "got {$delivered}");
+check('exactly 1 nudge marked delivered', $delivered === 1, "got {$delivered}");
 
 $conv = Capsule::table('buddy_conversations')->where('user_id', 7)->where('kind', 'agent')->first();
 check('agent conversation opened', $conv !== null);
 $stored = Capsule::table('buddy_messages')->where('conversation_id', $conv->id)->where('role', 'model')->count();
-check('3 model messages stored (history stays coherent)', $stored === 3, "got {$stored}");
+check('1 model message stored (history stays coherent)', $stored === 1, "got {$stored}");
 
 echo "F5. Quota exemption\n";
 $userRows = Capsule::table('buddy_messages')->where('role', 'user')->count();
@@ -139,12 +146,16 @@ check("zero role='user' rows (agent quota untouched)", $userRows === 0, "got {$u
 // mechanics tests below pass panelOpen=true — the agent is sitting in the chat,
 // which is the one case that legitimately bypasses the cooldown — so they keep
 // testing draining rather than accidentally testing the pacing gate.
-echo "F1/F3. Second drain (remaining 2)\n";
+echo "F1/F3. Chat open: up to three per drain\n";
 $r2 = $svc->agentFeed(7, true);
-check('returns the remaining 2', count($r2['messages']) === 2, count($r2['messages']) . ' returned');
-check('pending_left is 0', $r2['pending_left'] === 0);
+check('returns 3', count($r2['messages']) === 3, count($r2['messages']) . ' returned');
+check('pending_left is 1', $r2['pending_left'] === 1, 'got ' . $r2['pending_left']);
 $t2 = array_column($r2['messages'], 'content');
-check('acceptance before dry_spell', isset($t2[0], $t2[1]) && str_contains($t2[0], '#88') && str_contains($t2[1], '4 days'));
+check('departure, then e-ticket, then acceptance', isset($t2[0], $t2[1], $t2[2])
+    && str_contains($t2[0], 'K9PMQ2') && str_contains($t2[1], 'AHYX2I') && str_contains($t2[2], '#88'));
+$r2b = $svc->agentFeed(7, true);
+check('dry spell last', count($r2b['messages']) === 1 && str_contains($r2b['messages'][0]['content'], '4 days'));
+check('pending_left is 0', $r2b['pending_left'] === 0);
 
 echo "F4. Third drain (empty) is a no-op\n";
 $r3 = $svc->agentFeed(7, true);
@@ -376,13 +387,13 @@ for ($i = 0; $i < 9; $i++) {
     $mk(31, 'eticket_lag', ['ref' => 'P' . $i, 'waiting_hours' => 5], 'pc:' . $i);
 }
 $p1 = $svc->agentFeed(31);
-check('first batch speaks (3)', count($p1['messages']) === 3, count($p1['messages']) . ' returned');
+check('first batch speaks (1 — chat closed)', count($p1['messages']) === 1, count($p1['messages']) . ' returned');
 $p2 = $svc->agentFeed(31);
 check('immediate re-poll is held', $p2['messages'] === []);
-check('hold_seconds reported to the client', ($p2['hold_seconds'] ?? 0) > 0 && ($p2['hold_seconds'] ?? 0) <= 180);
-check('backlog still reported while held', $p2['pending_left'] === 6);
+check('hold_seconds reported to the client (20-minute cooldown)', ($p2['hold_seconds'] ?? 0) > 180 && ($p2['hold_seconds'] ?? 0) <= 1200);
+check('backlog still reported while held', $p2['pending_left'] === 8);
 check('nothing extra was drained during the hold',
-    Capsule::table('buddy_nudges')->where('user_id', 31)->where('status', 'pending')->count() === 6);
+    Capsule::table('buddy_nudges')->where('user_id', 31)->where('status', 'pending')->count() === 8);
 
 echo "F17b. Opening the chat bypasses the cooldown (they are asking)\n";
 $p3 = $svc->agentFeed(31, true);
@@ -398,7 +409,8 @@ $urgent = $svc->agentFeed(32);
 $ut = implode(' | ', array_column($urgent['messages'], 'content'));
 check('admin message punches through the cooldown', str_contains($ut, 'Ring me now please.'));
 
-echo "F17d. Daily ceiling on how much she initiates\n";
+echo "F17d. Daily ceiling on how much she initiates (v2 default: 5 a shift)\n";
+unset($_ENV['BUDDY_FEED_DAILY_MAX']);
 $capUser = 33;
 for ($i = 0; $i < 20; $i++) {
     $mk($capUser, 'eticket_lag', ['ref' => 'C' . $i, 'waiting_hours' => 5], 'cap:' . $i);
@@ -409,13 +421,19 @@ for ($round = 0; $round < 10; $round++) {
     $said += count($r['messages']);
     if ($r['messages'] === []) { break; }
 }
-check('daily ceiling enforced (<= 12 initiated)', $said <= 12, "said {$said}");
-check('ceiling actually reached, not just a short queue', $said === 12, "said {$said}");
+check('daily ceiling enforced (<= 5 initiated)', $said <= 5, "said {$said}");
+check('ceiling actually reached, not just a short queue', $said === 5, "said {$said}");
 $after = $svc->agentFeed($capUser, true);
 check('further drains held once capped', $after['messages'] === []);
 check('hold points past today, not a short pause', ($after['hold_seconds'] ?? 0) > 180);
 check('remaining nudges left pending, not silently binned',
-    Capsule::table('buddy_nudges')->where('user_id', $capUser)->where('status', 'pending')->count() === 8);
+    Capsule::table('buddy_nudges')->where('user_id', $capUser)->where('status', 'pending')->count() === 15);
+
+echo "F17f. Her own reminder and a person's message don't use up the ceiling\n";
+$mk($capUser, 'admin_message', ['message' => 'Still there?', 'from' => 'admin'], 'cap:adm');
+$capped = $svc->agentFeed($capUser, true);
+check('admin message still delivered after the ceiling', str_contains(implode(' ', array_column($capped['messages'], 'content')), 'Still there?'));
+$_ENV['BUDDY_FEED_DAILY_MAX'] = '50';
 
 echo "F17e. A swallowed-only drain must not start a cooldown\n";
 $staleOnly = 34;
@@ -859,6 +877,11 @@ $easy = [
     'call me TJ please',
     'thanks! see you tomorrow',
     'whats the status of booking G7BGL3',
+    // v2: the fast lane has the tools for these now; the exam showed the slow
+    // lane costing 9–14 seconds for answers the fast brain gets right.
+    'how am i doing against my goal this month',
+    'how do i create an e-ticket?',
+    'customer wants a refund, what should i do?',
 ];
 foreach ($easy as $q) {
     check("fast lane: \"{$q}\"", BuddyService::isHardQuestion($q) === false, $q);
@@ -866,7 +889,6 @@ foreach ($easy as $q) {
 $hard = [
     'do you see any patterns in my work?',
     'whats my conversion rate like?',
-    'how am i doing against my goal this month',
     'compare this week to last week',
     'why did my numbers drop? and what should i focus on?',
     'give me advice on improving my e-ticket speed',
@@ -876,8 +898,8 @@ $hard = [
 foreach ($hard as $q) {
     check("thinking lane: \"" . mb_substr($q, 0, 40) . "\"", BuddyService::isHardQuestion($q) === true, $q);
 }
-// Length alone qualifies (compound intent), two question marks qualify.
-check('long message routes to thinking', BuddyService::isHardQuestion(str_repeat('tell me about my day and then some more words ', 5)));
+// v2: length alone no longer buys the slow lane; two question marks still do.
+check('a long message alone stays in the fast lane', !BuddyService::isHardQuestion(str_repeat('tell me about my day and then some more words ', 5)));
 check('double question routes to thinking', BuddyService::isHardQuestion('sales today? bookings tomorrow?'));
 
 echo "F28. Arrival greeting — browser reopen, not calendar day\n";
