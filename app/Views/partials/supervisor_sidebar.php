@@ -20,6 +20,7 @@ if (str_starts_with($__path, '/call-logs')) {
 
 $navItems = [
     ['href' => '/dashboard',                'icon' => 'dashboard',       'label' => 'Dashboard',        'key' => 'dashboard'],
+    ['href' => '/kra',                      'icon' => 'trending_up',     'label' => 'My KRA',           'key' => 'kra'],
     ['section' => 'My team'],
     ['href' => '/attendance/admin',         'icon' => 'groups',          'label' => 'Live Board',       'key' => 'attendance'],
     ['href' => '/attendance/admin/history', 'icon' => 'history',         'label' => 'Team History',     'key' => 'history'],

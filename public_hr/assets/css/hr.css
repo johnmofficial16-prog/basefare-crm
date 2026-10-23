@@ -1270,3 +1270,12 @@ a.attchip:hover { border-color: var(--ink-2); }
 .av--xs { width: 26px; height: 26px; font-size: 11.5px; }
 .chatsubj { font-weight: 600; color: var(--ink-2); }
 .rtable td small.meta { display: block; max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* KRA & incentives */
+.kra-group { font-size: var(--fs-list); font-weight: 700; margin: 20px 0 10px; color: var(--ink-2); }
+.kra-group:first-child { margin-top: 0; }
+.kra-meta { font-size: var(--fs-meta); color: var(--meta); }
+.rtable.kra-people tbody tr { cursor: default; }
+.rtable.kra-people tbody tr:hover { background: transparent; }
+.rtable.kra-people .field { gap: 4px; }
+.rtable.kra-people .input { min-width: 140px; }

@@ -15,6 +15,7 @@ use App\Controllers\AnalyticsController;
 use App\Controllers\ChargebackController;
 use App\Controllers\ReminderController;
 use App\Controllers\CallLogController;
+use App\Controllers\KraController;
 use App\Controllers\ChatController;
 use App\Controllers\NoteController;
 use App\Controllers\NotificationController;
@@ -449,6 +450,8 @@ $app->group('', function ($group) {
     $group->get('/call-logs/team',                         [CallLogController::class, 'teamPage']);
     $group->get('/call-logs/export',                       [CallLogController::class, 'export']);
     $group->post('/call-logs/settings',                    [CallLogController::class, 'saveSettings']);
+    // My KRA — own targets, progress and incentive (rules set in Trio HR).
+    $group->get('/kra',                                    [KraController::class, 'page']);
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())

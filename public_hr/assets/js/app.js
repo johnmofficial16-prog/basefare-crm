@@ -20,6 +20,7 @@ const ADMIN_NAV = [
   { k: 'People' },
   { key: 'people', label: 'People', icon: 'users', href: '#/people' },
   { key: 'attendance', label: 'Attendance', icon: 'clock', href: '#/attendance' },
+  { key: 'kra', label: 'KRA & incentives', icon: 'chart', href: '#/kra' },
   { k: 'Company' },
   { key: 'letters', label: 'Letters', icon: 'file', href: '#/letters', badge: true },
   { key: 'policies', label: 'Policies', icon: 'flag', href: '#/policies' },
@@ -30,7 +31,6 @@ const ADMIN_NAV = [
 // Modules still to come, folded under "Coming next" so the built ones fit a laptop screen.
 const SOON_NAV = [
   { key: 'payroll', label: 'Payroll', icon: 'wallet', href: '#/payroll', soon: 'Phase 3' },
-  { key: 'incentives', label: 'Incentives', icon: 'chart', href: '#/incentives', soon: 'Phase 3' },
   { key: 'tax', label: 'Tax (TDS)', icon: 'receipt', href: '#/tax', soon: 'Phase 3' },
   { key: 'hiring', label: 'Hiring & joining', icon: 'brief', href: '#/hiring', soon: 'Phase 4' },
 ];
@@ -81,7 +81,8 @@ const ROUTES = [
   [/^\/attendance\/close$/, 'attendance', 'close', 'admin', 'attendance'],
   [/^\/attendance\/holidays$/, 'attendance', 'holidays', 'admin', 'attendance'],
   [/^\/attendance\/balances$/, 'attendance', 'balances', 'admin', 'attendance'],
-  [/^\/(hiring|payroll|incentives|tax)$/, 'soon', 'render', 'admin', '$1'],
+  [/^\/kra$/, 'kra', 'render', 'admin', 'kra'],
+  [/^\/(hiring|payroll|tax)$/, 'soon', 'render', 'admin', '$1'],
   [/^\/help$/, 'mail', 'render', 'admin', 'mail'],
   [/^\/me$/, 'staff', 'home', 'staff', 'me'],
   [/^\/me\/attendance$/, 'staff', 'attendance', 'staff', 'attendance'],
@@ -113,7 +114,7 @@ const TITLES = {
   today: 'Today', floor: 'Tonight on the floor', compliance: 'Compliance', approvals: 'Approvals', people: 'People', org: 'Org chart',
   letters: 'Letters', policies: 'Policies', settings: 'Settings', account: 'My account', me: 'Home', attendance: 'Attendance',
   leave: 'Leave', pay: 'Pay', more: 'More', hiring: 'Hiring & joining', payroll: 'Payroll',
-  incentives: 'Incentives', tax: 'Tax (TDS)', mail: 'Trio Mail', inbox: 'Inbox', fromCrm: 'Opening Trio HR',
+  kra: 'KRA & incentives', tax: 'Tax (TDS)', mail: 'Trio Mail', inbox: 'Inbox', fromCrm: 'Opening Trio HR',
 };
 
 /** The browser tab's title; screens with a name (a person, a letter) set their own. */

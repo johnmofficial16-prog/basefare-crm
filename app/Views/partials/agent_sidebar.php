@@ -10,6 +10,7 @@ $activePage = $activePage ?? '';
 
 $navItems = [
     ['href' => '/dashboard',     'icon' => 'dashboard',      'label' => 'Dashboard',    'key' => 'dashboard'],
+    ['href' => '/kra',           'icon' => 'trending_up',    'label' => 'My KRA',       'key' => 'kra'],
     ['href' => '/transactions',  'icon' => 'payments',       'label' => 'Transactions', 'key' => 'transactions'],
     ['href' => '/call-logs',     'icon' => 'phone_in_talk',  'label' => 'Call Logs',    'key' => 'call_logs'],
     ['href' => '/acceptance',    'icon' => 'verified',       'label' => 'Acceptance',   'key' => 'acceptance'],

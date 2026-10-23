@@ -11,6 +11,7 @@ $activePage = $activePage ?? '';
 
 $navItems = [
     ['href' => '/dashboard',               'icon' => 'dashboard',      'label' => 'Dashboard',      'key' => 'dashboard'],
+    ['href' => '/kra',                      'icon' => 'trending_up',    'label' => 'Floor KRA',      'key' => 'kra'],
     ['href' => '/attendance/admin',         'icon' => 'groups',         'label' => 'Live Board',     'key' => 'attendance'],
     ['href' => '/attendance/admin/history', 'icon' => 'history',        'label' => 'History',        'key' => 'history'],
     ['href' => '/performance',              'icon' => 'leaderboard',    'label' => 'Performance',    'key' => 'performance'],

@@ -10,6 +10,7 @@ use App\Hr\Domain\Colleagues;
 use App\Hr\Domain\Attendance;
 use App\Hr\Domain\Defaults;
 use App\Hr\Domain\Documents;
+use App\Hr\Domain\Kra;
 use App\Hr\Domain\Letters;
 use App\Hr\Domain\Policies;
 use App\Hr\Domain\Floor;
@@ -503,6 +504,11 @@ final class Api
         $app->patch('/settings/centres', self::h(fn(Ctx $c) => Setup::saveCentre($c)))->add($admin);
         $app->patch('/settings/rules', self::h(fn(Ctx $c) => Setup::saveRules($c)))->add($admin);
         $app->patch('/settings/security', self::h(fn(Ctx $c) => Setup::saveSecurity($c)))->add($owner);
+
+        // KRA & incentives (admins): the rules, people's costs and targets.
+        $app->get('/kra/settings', self::h(fn(Ctx $c) => Kra::settings($c)))->add($admin);
+        $app->patch('/kra/settings', self::h(fn(Ctx $c) => Kra::saveRules($c)))->add($admin);
+        $app->patch('/kra/people', self::h(fn(Ctx $c) => Kra::savePeople($c)))->add($admin);
         $app->get('/law', self::h(fn(Ctx $c) => Setup::law()))->add($admin);
         $app->post('/law', self::h(fn(Ctx $c) => Setup::addLaw($c)))->add($admin);
         $app->get('/admins', self::h(fn(Ctx $c) => Setup::admins()))->add($admin);

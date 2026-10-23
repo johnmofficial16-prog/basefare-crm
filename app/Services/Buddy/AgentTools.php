@@ -268,6 +268,17 @@ class AgentTools
             ],
             fn(array $a) => self::forget($userId, (int) ($a['fact_id'] ?? 0), (string) ($a['words'] ?? ''))
         );
+        if (in_array($role, ['agent', 'supervisor', 'manager'], true)) {
+            $r->register(
+                'get_my_kra',
+                "The agent's OWN KRA this month: target, levels, progress, how far to the next level, their projected "
+                . 'incentive (₹), their weakest lever (calls, closing, profit per sale) with what fixing it is worth, and '
+                . 'two steps to try. Team leaders and managers also get their team\'s progress (never anyone else\'s money). '
+                . 'Use for "my target", "my incentive", "how much will I earn", "what should I improve".',
+                [],
+                fn() => self::kra($userId)
+            );
+        }
         if ($role === 'supervisor') {
             $r->register(
                 'get_my_team',
@@ -961,6 +972,64 @@ class AgentTools
     // =========================================================================
     // AISHA v2 HANDLERS (23 Oct 2026)
     // =========================================================================
+
+    /**
+     * The person's own KRA, trimmed to what Aisha needs. Incentive figures are
+     * the caller's own; team members appear as progress only, with no money —
+     * incentives are confidential to each person (owner's rule, 23 Oct 2026).
+     */
+    private static function kra(int $userId): array
+    {
+        $card = (new \App\Services\Kra\KraEngine(DB::connection()))->card($userId);
+        if ($card === null) {
+            return ['live' => false, 'note' => 'KRA targets have not been set up yet. Say so; do not guess any target or incentive.'];
+        }
+        if (empty($card['in_kra'])) {
+            return ['live' => true, 'in_kra' => false];
+        }
+        $me = $card['me'];
+        $out = [
+            'month'      => date('F Y', strtotime($card['month'] . '-01')),
+            'days_left'  => $card['days_left'],
+            'confidential' => 'This incentive is private to the person you are talking to. Never mention anyone else\'s.',
+        ];
+        if ($me['role'] !== 'manager') {
+            $out['net_mco'] = $me['mco'];
+            $out['sales'] = $me['sales'];
+            if ($me['set_up']) {
+                $out += [
+                    'target'          => $me['levels']['l2'],
+                    'level_1'         => $me['levels']['l1'],
+                    'level_3'         => $me['levels']['l3'],
+                    'progress_pct'    => $me['progress'],
+                    'current_level'   => $me['level'],
+                    'next_level'      => $me['next'],
+                    'per_night_needed'=> $card['nightly'],
+                    'incentive_inr_projected' => $me['incentive'],
+                    'quality_gate_hit'=> $me['quality_hit'],
+                    'levers'          => array_map(fn($l) => ['lever' => $l['label'], 'now' => $l['text'], 'target' => $l['target_text'], 'on_target' => $l['ok']], $me['levers']),
+                    'weakest'         => $me['gap'],
+                ];
+            } else {
+                $out['target'] = 'not set yet — HR still has to set it';
+            }
+        }
+        if (isset($me['team'])) {
+            $out['team'] = [
+                'net_mco'   => $me['team']['mco'],
+                'target'    => $me['team']['target'],
+                'progress_pct' => $me['team']['progress'],
+                'past_level_1' => $me['team']['past_l1'] . ' of ' . $me['team']['set_up'],
+                'my_share_inr_projected' => $me['team']['share_inr'],
+                'members'   => array_map(fn($m) => ['name' => $m['name'], 'progress_pct' => $m['progress'], 'weakest' => $m['weakest']], $card['team']),
+            ];
+            if ($me['role'] === 'supervisor') {
+                $out['team']['bonus'] = $me['team']['bonus_unlocked'] ? 'unlocked' : ('needs ' . $me['team']['bonus_need'] . ' agents past Level 1');
+            }
+            $out['incentive_inr_total_projected'] = $me['incentive_total'];
+        }
+        return $out;
+    }
 
     /** Rank is on unless BUDDY_RANK_ENABLED=false. */
     private static function rankEnabled(): bool
