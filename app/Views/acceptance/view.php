@@ -245,13 +245,13 @@ tailwind.config = {
       <div class="bg-white border border-primary-100 rounded-xl shadow-sm overflow-hidden">
         <div class="px-5 py-3 flex items-center gap-2" style="background:linear-gradient(135deg,#0f1e3c,#1a3a6b);">
           <span class="material-symbols-outlined text-gold text-base">link</span>
-          <span class="text-white font-bold text-sm">Customer Authorization Link</span>
+          <span class="text-[#fff] font-bold text-sm">Customer Authorization Link</span>
           <?php if ($isPending): ?>
-          <span class="ml-auto text-[10px] text-blue-300">Expires <?= htmlspecialchars($acceptance->expires_at->format('M j \a\t g:i A')) ?></span>
+          <span class="ml-auto text-[12px] text-[#93c5fd]">Expires <?= htmlspecialchars($acceptance->expires_at->format('M j \a\t g:i A')) ?></span>
           <?php elseif ($isApproved): ?>
-          <span class="ml-auto text-[10px] text-emerald-300">✓ Already signed</span>
+          <span class="ml-auto text-[12px] text-[#6ee7b7]">✓ Already signed</span>
           <?php elseif ($isExpired): ?>
-          <span class="ml-auto text-[10px] text-rose-300">⚠ Link expired — resend to refresh</span>
+          <span class="ml-auto text-[12px] text-[#fda4af]">⚠ Link expired — resend to refresh</span>
           <?php endif; ?>
         </div>
         <div class="p-4">
@@ -391,7 +391,7 @@ tailwind.config = {
               echo '<p class="text-xs text-slate-400 italic">No segments recorded.</p>';
               return;
           }
-          $accent = $theme === 'rose' ? 'bg-rose-700' : ($theme === 'emerald' ? 'bg-emerald-700' : 'bg-slate-800');
+          $accent = $theme === 'rose' ? 'bg-[#be123c]' : ($theme === 'emerald' ? 'bg-[#047857]' : 'bg-[#1e293b]');   // dark tile in both themes
           foreach ($segs as $i => $seg):
               $iata   = strtoupper($seg['airline_iata'] ?? '');
               $aName  = $AIRLINES[$iata] ?? $iata;
@@ -416,8 +416,8 @@ tailwind.config = {
                   onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                 <?php endif; ?>
                 <div style="display:<?= $logo?'none':'flex' ?>;width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#fff;background:<?= $bgColor ?>"><?= htmlspecialchars($iata ?: '?') ?></div>
-                  <span class="text-[11px] font-black text-white"><?= htmlspecialchars($iata) ?></span>
-                  <span class="text-[9px] text-slate-300 text-center leading-tight"><?= htmlspecialchars($aName) ?></span>
+                  <span class="text-[12px] font-black text-[#fff]"><?= htmlspecialchars($iata) ?></span>
+                  <span class="text-[12px] text-[#e2e8f0] text-center leading-tight"><?= htmlspecialchars($aName) ?></span>
                 </div>
                 <div class="flex-1 p-4 grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
                   <div class="text-right">

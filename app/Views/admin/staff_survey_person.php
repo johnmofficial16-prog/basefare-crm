@@ -77,7 +77,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
 .tnum{font-variant-numeric:tabular-nums}
 .pips{display:flex;gap:4px}
-.pips i{width:22px;height:8px;border-radius:99px;background:#e5e9f0}
+.pips i{width:22px;height:8px;border-radius:99px;background:rgb(var(--bf-slate-200))}
 </style>
 </head>
 <body class="bg-background font-body text-on-surface antialiased min-h-screen">

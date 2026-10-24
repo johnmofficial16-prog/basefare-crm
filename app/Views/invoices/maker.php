@@ -58,9 +58,9 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
 #preview-wrapper { width: 760px; max-width: 100%; }
 #invoice-printable { max-width: 100%; }
-.fld { margin-top:.25rem; width:100%; border:1px solid #e2e8f0; border-radius:.5rem; padding:.5rem .75rem; font-size:.875rem; background:#f8fafc; }
-.fld:focus { outline:none; box-shadow:0 0 0 2px rgba(22,50,116,.25); border-color:#163274; }
-.flbl { font-size:10px; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.03em; }
+.fld { margin-top:.25rem; width:100%; border:1px solid rgb(var(--bf-slate-200)); border-radius:.5rem; padding:.5rem .75rem; font-size:.875rem; background:rgb(var(--bf-slate-50)); }
+.fld:focus { outline:none; box-shadow:0 0 0 2px rgb(var(--bf-primary) / .25); border-color:rgb(var(--bf-primary)); }
+.flbl { font-size:12px; font-weight:600; color:rgb(var(--bf-slate-500)); text-transform:uppercase; letter-spacing:.03em; }
 </style>
 </head>
 <body class="bg-background font-body text-on-surface antialiased min-h-screen">
@@ -242,7 +242,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5 mb-4">
           <span class="material-symbols-outlined text-sm text-primary">visibility</span> Live Preview
         </p>
-        <div id="preview-wrapper">
+        <div id="preview-wrapper" data-theme="light">
           <?php include __DIR__ . '/invoice_template.php'; ?>
         </div>
       </div>

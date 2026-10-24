@@ -46,10 +46,10 @@ tailwind.config = {
 }
 </script>
 <style>
-.field-label { display:block; font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.25rem; }
-.field-input { width:100%; border:1px solid #e2e8f0; border-radius:0.5rem; padding:0.5rem 0.75rem; font-size:0.8125rem; background:#f8fafc; outline:none; transition:all .15s; }
-.field-input:focus { box-shadow:0 0 0 2px rgba(15,30,60,0.2); border-color:rgba(15,30,60,0.4); background:#fff; }
-.blank { background:#e0e7ff; color:#3730a3; border-radius:4px; padding:0 3px; font-weight:600; }
+.field-label { display:block; font-size:12px; font-weight:700; color:rgb(var(--bf-slate-500)); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.25rem; }
+.field-input { width:100%; border:1px solid rgb(var(--bf-slate-200)); border-radius:0.5rem; padding:0.5rem 0.75rem; font-size:0.8125rem; background:rgb(var(--bf-slate-50)); outline:none; transition:all .15s; }
+.field-input:focus { box-shadow:0 0 0 2px rgba(15,30,60,0.2); border-color:rgba(15,30,60,0.4); background:rgb(var(--bf-white)); }
+.blank { background:rgb(var(--bf-indigo-100)); color:rgb(var(--bf-indigo-800)); border-radius:4px; padding:0 3px; font-weight:600; }
 </style>
 </head>
 <body class="bg-[#f8f9fa] font-sans text-slate-900 antialiased min-h-screen">
@@ -197,7 +197,7 @@ tailwind.config = {
       '<div><div class="font-bold text-slate-500 text-[10px] uppercase mb-1">Fare Rules</div><div>' + fill(get('fare_rules'), seen) + '</div></div>' +
       '<div><div class="font-bold text-slate-500 text-[10px] uppercase mb-1">Policy clause 2</div><div>2. ' + fill(get('refund_clause'), seen) + '</div></div>' +
       '<div class="p-2 bg-amber-50 border border-amber-200 rounded"><div class="font-bold text-amber-700 text-[10px] uppercase mb-1">Customer ticks (authorization)</div>&#9745; ' + fill(get('checkbox'), seen) + '</div>' +
-      '<div class="p-2 bg-slate-800 text-slate-100 rounded"><div class="font-bold text-amber-300 text-[10px] uppercase mb-1">E-ticket acknowledgement</div>I acknowledge that this e-ticket is <strong>' + fill(get('eticket_ack'), seen) + '</strong>.</div>';
+      '<div class="p-2 bg-[#1e293b] text-[#f1f5f9] rounded"><div class="font-bold text-[#fcd34d] text-[12px] uppercase mb-1">E-ticket acknowledgement</div>I acknowledge that this e-ticket is <strong>' + fill(get('eticket_ack'), seen) + '</strong>.</div>';
   }
   document.querySelectorAll('[data-tpl-form]').forEach(function (form) {
     draw(form);

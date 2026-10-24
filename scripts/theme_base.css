@@ -1,0 +1,50 @@
+
+/* ---- Hand-written rules (scripts/theme_base.css, appended by the build) ---- */
+
+/* Type: Hanken Grotesk everywhere, and nothing under 12px (owner's rule). */
+/* html[data-theme]: only CRM pages; print iframes that copy this stylesheet keep their own body. */
+html[data-theme] body { font-family: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+html[data-theme] body { background-color: rgb(var(--bf-background)); color: rgb(var(--bf-on-surface)); }
+html .text-slate-300, html .text-gray-300 { color: rgb(var(--bf-faint)); }
+html .text-\[8px\], html .text-\[9px\], html .text-\[10px\], html .text-\[11px\], html .text-\[11\.5px\] { font-size: 12px; }
+
+/* The sidebar: dark in both themes (it is a dark island, see data-theme on <aside>). */
+html .bf-side { background-color: rgb(var(--bf-side)) !important; border-color: rgb(var(--bf-side-line)) !important; box-shadow: none !important; }
+.bf-side .bf-logo { width: 40px; height: 40px; border-radius: 11px; display: block; flex-shrink: 0; }
+.bf-side .bf-brand { color: #FFFFFF; font-weight: 800; font-size: 17px; line-height: 1.15; letter-spacing: -0.01em; }
+.bf-side .bf-brand small { display: block; color: #8FA0BF; font-weight: 500; font-size: 13px; letter-spacing: 0; }
+
+/* Theme switch in the sidebar footer. */
+.bf-theme-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 11px; white-space: nowrap; border-radius: 10px;
+  border: 1px solid rgb(var(--bf-slate-200)); background: transparent; color: rgb(var(--bf-on-surface-variant));
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.bf-theme-toggle:hover { color: rgb(var(--bf-on-surface)); background: rgb(var(--bf-slate-100)); }
+.bf-theme-toggle .material-symbols-outlined { font-size: 19px; }
+.bf-theme-toggle.bf-full { display: flex; width: 100%; justify-content: flex-start; }
+.bf-theme-toggle[aria-busy="true"] { opacity: .6; cursor: progress; }
+
+/* Dark mode: "white" text is dark ink on the lifted fills, so the softened
+ * variants (text-white/70 on a blue card) lose too much contrast: use it full. */
+[data-theme="dark"] [class*="text-white/"]:not([data-theme="light"] *) { color: rgb(var(--bf-white)); }
+html[data-theme="light"] [class*="text-white/"]:not(.bf-side *) { color: rgb(255 255 255 / 0.92); }
+
+/* Sent emails shown in the CRM look like the email: paper-white in dark mode too. */
+[data-theme="dark"] .bf-mail { background: #ffffff; color: #334155; border-radius: 10px; padding: 12px 14px; }
+
+/* Text in a data-driven colour (e.g. each centre's colour): set --cc on the
+ * element; dark mode lifts it so it stays readable on dark cards. */
+.bf-cc { color: var(--cc); }
+[data-theme="dark"] .bf-cc { color: color-mix(in srgb, var(--cc) 50%, #ffffff); }
+@media print { [data-theme="dark"] .bf-cc { color: var(--cc); } }
+
+/* Form controls follow the theme. :where() keeps this at zero specificity, so
+ * any colour a page sets on its own fields still wins; tokens (not a dark-only
+ * selector) keep fields inside a document paper-white. */
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="submit"]):not([type="button"])),
+:where(select, textarea) { background-color: rgb(var(--bf-white)); color: rgb(var(--bf-on-surface)); }
+:where(option) { background-color: rgb(var(--bf-white)); color: rgb(var(--bf-on-surface)); }
+::placeholder { color: rgb(var(--bf-placeholder)); opacity: 1; }
+
+/* Documents (invoices, letters, vouchers, payslips) stay paper-white: an element
+ * marked data-theme="light" gets the light tokens back, whatever the page is. */
+[data-theme="light"] { color-scheme: light; }

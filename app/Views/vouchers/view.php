@@ -56,7 +56,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     
     <!-- Voucher Rendering -->
     <div class="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm overflow-x-auto flex justify-center items-center">
-        <div id="preview-wrapper">
+        <div id="preview-wrapper" data-theme="light">
           <?php include __DIR__ . '/voucher_template.php'; ?>
         </div>
     </div>

@@ -135,7 +135,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
   <div class="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 items-start">
 
     <!-- Document -->
-    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 overflow-x-auto">
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 overflow-x-auto" data-theme="light">
       <?php include __DIR__ . '/invoice_template.php'; ?>
     </div>
 

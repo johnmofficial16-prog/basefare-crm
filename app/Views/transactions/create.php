@@ -74,12 +74,12 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','Manr
 <style>
 .step-panel{display:none}.step-panel.active{display:block}
 .type-card{cursor:pointer;transition:all .15s ease}.type-card:hover{transform:translateY(-1px)}.type-card.selected{outline:2px solid;outline-offset:2px}
-.gds-terminal{background:#0f172a;color:#4ade80;font-family:'Courier New',monospace}.gds-terminal::placeholder{color:#374151}
+.gds-terminal{background:rgb(var(--bf-slate-900));color:rgb(var(--bf-green-400));font-family:'Courier New',monospace}.gds-terminal::placeholder{color:rgb(var(--bf-slate-700))}
 .seg-card{animation:slideIn .2s ease}@keyframes slideIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .fare-row{animation:slideIn .15s ease}
-.field-input{width:100%;border:1px solid #e2e8f0;border-radius:0.5rem;padding:0.5rem 0.75rem;font-size:0.875rem;background:#f8fafc;outline:none;transition:all .15s}
+.field-input{width:100%;border:1px solid rgb(var(--bf-slate-200));border-radius:0.5rem;padding:0.5rem 0.75rem;font-size:0.875rem;background:rgb(var(--bf-slate-50));outline:none;transition:all .15s}
 .field-input:focus{box-shadow:0 0 0 2px rgba(15,30,60,0.2);border-color:rgba(15,30,60,0.4)}
-.field-label{display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.375rem}
+.field-label{display:block;font-size:12px;font-weight:700;color:rgb(var(--bf-slate-500));text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.375rem}
 </style>
 </head>
 <body class="bg-[#f8f9fa] font-sans text-slate-900 antialiased min-h-screen">
@@ -494,7 +494,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','Manr
     <div class="space-y-4 sticky top-6 self-start">
       <!-- Import from Acceptance -->
       <div class="bg-gradient-to-b from-blue-50 to-indigo-50 border border-blue-200 rounded-xl shadow-sm overflow-hidden">
-        <div class="px-4 py-3 border-b border-blue-100 flex items-center gap-2" style="background:#0f1e3c">
+        <div class="px-4 py-3 border-b border-blue-100 flex items-center gap-2" style="background:rgb(var(--bf-primary))">
           <span class="material-symbols-outlined text-blue-300 text-base">magic_button</span>
           <span class="text-sm font-bold text-white">Import from Acceptance</span>
         </div>
@@ -519,7 +519,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','Manr
 
       <!-- Draft Summary -->
       <div class="bg-white border border-primary-100 rounded-xl shadow-sm overflow-hidden">
-        <div class="px-4 py-3 border-b border-slate-100 flex items-center gap-2" style="background:#0f1e3c">
+        <div class="px-4 py-3 border-b border-slate-100 flex items-center gap-2" style="background:rgb(var(--bf-primary))">
           <span class="material-symbols-outlined text-amber-400 text-base">edit_note</span>
           <span class="text-sm font-bold text-white">Draft Summary</span>
         </div>

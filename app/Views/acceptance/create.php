@@ -111,8 +111,8 @@ tailwind.config = {
   .type-card { cursor: pointer; transition: all 0.15s ease; }
   .type-card:hover { transform: translateY(-1px); }
   .type-card.selected { outline: 2px solid; outline-offset: 2px; }
-  .gds-terminal { background: #0f172a; color: #4ade80; font-family: 'Courier New', monospace; }
-  .gds-terminal::placeholder { color: #374151; }
+  .gds-terminal { background: rgb(var(--bf-slate-900)); color: rgb(var(--bf-green-400)); font-family: 'Courier New', monospace; }
+  .gds-terminal::placeholder { color: rgb(var(--bf-slate-700)); }
   .seg-card { animation: slideIn 0.2s ease; }
   @keyframes slideIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
   .fare-row { animation: fadeIn 0.15s ease; }
@@ -166,7 +166,7 @@ tailwind.config = {
   <?php else: ?>
   <div class="bg-white border border-slate-200 rounded-xl px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
     <div class="flex-1">
-      <p class="text-xs font-semibold" id="modeBannerText" style="color:<?= $initIsPreauth ? '#b45309' : '#1a3a6b' ?>">
+      <p class="text-xs font-semibold" id="modeBannerText" style="color:<?= $initIsPreauth ? 'rgb(var(--bf-amber-700))' : 'rgb(var(--bf-primary))' ?>">
         <?= $initIsPreauth
           ? '⚡ Quick Pre-Auth — sends total amount only to the customer. Send a Full Acceptance after ticketing with full breakdown.'
           : '📋 Full Acceptance — complete fare breakdown, split charges, endorsements and signed receipt.' ?>
@@ -663,49 +663,49 @@ tailwind.config = {
         <div id="sec-miles-booking" class="hidden bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div class="px-6 py-4 flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/50">
             <div class="flex items-center gap-3">
-              <span class="material-symbols-outlined text-2xl" style="color:#7c3aed;">stars</span>
+              <span class="material-symbols-outlined text-2xl" style="color:rgb(var(--bf-violet-600));">stars</span>
               <div>
                 <p class="font-bold text-slate-900 text-sm">Award / Miles Booking Details</p>
                 <p class="text-xs text-slate-500 mt-0.5">Please provide the miles redeemed and the frequent flyer program.</p>
               </div>
             </div>
           </div>
-          <div id="miles-fields" class="px-6 pb-5 pt-4 space-y-4" style="background:linear-gradient(135deg,#faf5ff 0%,#f5f3ff 100%);">
+          <div id="miles-fields" class="px-6 pb-5 pt-4 space-y-4" style="background:linear-gradient(135deg,rgb(var(--bf-purple-50)) 0%,rgb(var(--bf-violet-50)) 100%);">
             <div class="flex items-center gap-2 mb-1">
-              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style="background:#7c3aed;color:#fff;">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style="background:rgb(var(--bf-violet-600));color:rgb(var(--bf-white));">
                 <span class="material-symbols-outlined text-sm">stars</span>
                 Award Ticket – Miles Redemption
               </span>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:#6d28d9;">
+                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:rgb(var(--bf-violet-700));">
                   Miles Redeemed <span class="text-rose-500">*</span>
                 </label>
                 <div class="relative">
-                  <span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-base" style="color:#7c3aed;">stars</span>
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-base" style="color:rgb(var(--bf-violet-600));">stars</span>
                   <input type="number" name="miles_used" id="field_miles_used" min="0" step="1"
                     placeholder="e.g. 25000"
                     oninput="syncSummary()"
                     class="w-full rounded-lg px-3 py-2 text-sm font-bold pl-9 focus:outline-none focus:ring-2"
-                    style="border:1px solid #c4b5fd;background:#ede9fe;color:#4c1d95;focus-ring-color:#7c3aed;">
+                    style="border:1px solid rgb(var(--bf-violet-300));background:rgb(var(--bf-violet-100));color:rgb(var(--bf-violet-900));focus-ring-color:rgb(var(--bf-violet-600));">
                 </div>
-                <p class="text-[10px] mt-1" style="color:#7c3aed;">Number of miles/points being redeemed for this ticket.</p>
+                <p class="text-[10px] mt-1" style="color:rgb(var(--bf-violet-600));">Number of miles/points being redeemed for this ticket.</p>
               </div>
               <div>
-                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:#6d28d9;">
+                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:rgb(var(--bf-violet-700));">
                   Loyalty Program <span class="text-slate-400 font-normal">(Optional)</span>
                 </label>
                 <input type="text" name="miles_program" id="field_miles_program"
                   maxlength="100" placeholder="e.g. United MileagePlus, Delta SkyMiles"
                   class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2"
-                  style="border:1px solid #c4b5fd;background:#ede9fe;color:#4c1d95;">
-                <p class="text-[10px] mt-1" style="color:#7c3aed;">Airline loyalty program name (shown on e-ticket and auth page).</p>
+                  style="border:1px solid rgb(var(--bf-violet-300));background:rgb(var(--bf-violet-100));color:rgb(var(--bf-violet-900));">
+                <p class="text-[10px] mt-1" style="color:rgb(var(--bf-violet-600));">Airline loyalty program name (shown on e-ticket and auth page).</p>
               </div>
             </div>
-            <div class="rounded-lg px-4 py-3 flex items-start gap-2" style="background:#ddd6fe;border:1px solid #a78bfa;">
-              <span class="material-symbols-outlined text-base flex-none mt-0.5" style="color:#6d28d9;">info</span>
-              <p class="text-xs" style="color:#4c1d95;">
+            <div class="rounded-lg px-4 py-3 flex items-start gap-2" style="background:rgb(var(--bf-violet-200));border:1px solid rgb(var(--bf-violet-400));">
+              <span class="material-symbols-outlined text-base flex-none mt-0.5" style="color:rgb(var(--bf-violet-700));">info</span>
+              <p class="text-xs" style="color:rgb(var(--bf-violet-900));">
                 <strong>Cash Co-Pay = Taxes &amp; Fees only.</strong> Set the <em>Total Amount</em> below to the cash portion the customer owes (e.g. $50 for taxes). Miles do not affect the MCO calculation.
               </p>
             </div>
@@ -916,7 +916,7 @@ tailwind.config = {
                     oninput="this.value=this.value.replace(/[^\d\s]/g,'').replace(/(\d{4})(?=\d)/g,'$1 ').trim().slice(0,19); syncSummary(); ccValidator.validateNumber(this);"
                     onblur="ccValidator.validateNumber(this);"
                     class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono font-bold tracking-widest bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-600 pr-24">
-                  <span id="cc-type-badge" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;display:none;"></span>
+                  <span id="cc-type-badge" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:12px;font-weight:700;padding:2px 8px;border-radius:4px;display:none;"></span>
                 </div>
                 <p id="cc-num-error" class="hidden mt-1 text-[11px] font-semibold text-rose-600 flex items-center gap-1"><span class="material-symbols-outlined text-sm">error</span><span></span></p>
               </div>
@@ -1063,7 +1063,7 @@ tailwind.config = {
 
         <!-- Preview Panel -->
         <div class="bg-white border border-primary-100 rounded-xl shadow-sm overflow-hidden">
-          <div class="px-6 py-4 border-b border-primary-100" style="background:linear-gradient(135deg,#0f1e3c,#1a3a6b);">
+          <div class="px-6 py-4 border-b border-primary-100" style="background:linear-gradient(135deg,rgb(var(--bf-primary)),rgb(var(--bf-primary)));">
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-[10px] font-bold text-blue-300 uppercase tracking-widest">Lets Fly Travel LLC DBA Base Fare</p>
@@ -1213,7 +1213,7 @@ tailwind.config = {
 
       <!-- Draft Summary -->
       <div class="bg-white border border-primary-100 rounded-xl shadow-sm overflow-hidden">
-        <div class="px-4 py-3 border-b border-slate-100 flex items-center gap-2" style="background:#0f1e3c;">
+        <div class="px-4 py-3 border-b border-slate-100 flex items-center gap-2" style="background:rgb(var(--bf-primary));">
           <span class="material-symbols-outlined text-gold text-base">edit_note</span>
           <span class="text-sm font-bold text-white">Draft Summary</span>
         </div>
@@ -1427,8 +1427,8 @@ const ccValidator = {
     if (msg) {
       errEl.classList.remove('hidden');
       errEl.querySelector('span:last-child').textContent = msg;
-      inputEl.style.borderColor = '#f87171';
-      inputEl.style.background  = '#fff5f5';
+      inputEl.style.borderColor = 'rgb(var(--bf-red-400))';
+      inputEl.style.background  = 'rgb(var(--bf-red-50))';
     } else {
       errEl.classList.add('hidden');
       inputEl.style.borderColor = '';
@@ -2187,7 +2187,7 @@ const flightMgr = {
             <div class="bg-slate-900 px-3 py-3 flex flex-col items-center justify-center gap-1 min-w-[72px]">
               ${logoUrl ? `<img src="${logoUrl}" alt="${_esc(seg.airline_iata)}" class="w-9 h-9 object-contain"
                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">` : ''}
-              <div style="display:${logoUrl?'none':'flex'};width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#fff;background:${bgColor};">${_esc(seg.airline_iata||'?')}</div>
+              <div style="display:${logoUrl?'none':'flex'};width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:rgb(var(--bf-white));background:${bgColor};">${_esc(seg.airline_iata||'?')}</div>
               <span class="text-[11px] font-black text-white">${_esc(seg.airline_iata)}</span>
               <span class="text-[9px] text-slate-400 text-center leading-tight">${_esc(aName)}</span>
             </div>
@@ -2613,10 +2613,10 @@ function confirmItinerary(group) {
 
           return `
             <div class="flex items-stretch bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <div class="px-3 py-3 flex flex-col items-center justify-center gap-1 min-w-[72px]" style="background:#1e293b;">
+              <div class="px-3 py-3 flex flex-col items-center justify-center gap-1 min-w-[72px]" style="background:rgb(var(--bf-slate-800));">
                 ${logoUrl ? `<img src="${logoUrl}" alt="${_esc(s.airline_iata)}" class="w-9 h-9 object-contain"
                   onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">` : ''}
-                <div style="display:${logoUrl?'none':'flex'};width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#fff;background:${bgColor};">${_esc(s.airline_iata||'?')}</div>
+                <div style="display:${logoUrl?'none':'flex'};width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:rgb(var(--bf-white));background:${bgColor};">${_esc(s.airline_iata||'?')}</div>
                 <span class="text-[11px] font-black text-white">${_esc(s.airline_iata)}</span>
                 <span class="text-[9px] text-slate-400 text-center leading-tight">${_esc(aName)}</span>
               </div>
@@ -3151,10 +3151,10 @@ function setMode(mode) {
   if (banner) {
     if (mode === 'preauth') {
       banner.textContent = '⚡ Quick Pre-Auth — sends total amount only to the customer. Send a Full Acceptance after ticketing with full breakdown.';
-      banner.style.color = '#b45309';
+      banner.style.color = 'rgb(var(--bf-amber-700))';
     } else {
       banner.textContent = '📋 Full Acceptance — complete fare breakdown, split charges, endorsements and signed receipt.';
-      banner.style.color = '#1a3a6b';
+      banner.style.color = 'rgb(var(--bf-primary))';
     }
   }
 

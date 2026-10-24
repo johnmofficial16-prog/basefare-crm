@@ -27,34 +27,34 @@ $showMandatoryModal = !in_array($currentRole ?? 'agent', ['admin', 'manager']);
 <?php if ($showMandatoryModal): ?>
 <div id="note-modal-overlay"
   style="position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,0.82);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:1rem;width:min(540px,95vw);box-shadow:0 25px 60px rgba(0,0,0,0.35);overflow:hidden;">
+  <div style="background:rgb(var(--bf-white));border-radius:1rem;width:min(540px,95vw);box-shadow:0 25px 60px rgba(0,0,0,0.35);overflow:hidden;">
     <!-- Header -->
-    <div style="background:linear-gradient(135deg,#1e3a6e,#2563eb);padding:1.25rem 1.5rem;display:flex;align-items:center;gap:.75rem;">
-      <span class="material-symbols-outlined" style="color:#fff;font-size:1.5rem;">history_edu</span>
+    <div style="background:linear-gradient(135deg,rgb(var(--bf-sky-900)),rgb(var(--bf-blue-600)));padding:1.25rem 1.5rem;display:flex;align-items:center;gap:.75rem;">
+      <span class="material-symbols-outlined" style="color:rgb(var(--bf-white));font-size:1.5rem;">history_edu</span>
       <div>
-        <div style="color:#fff;font-weight:800;font-size:1rem;font-family:Manrope,sans-serif;">Mandatory Access Note</div>
-        <div style="color:#bfdbfe;font-size:.75rem;margin-top:.1rem;">You must log a note before viewing this record</div>
+        <div style="color:rgb(var(--bf-white));font-weight:800;font-size:1rem;font-family:Manrope,sans-serif;">Mandatory Access Note</div>
+        <div style="color:rgb(var(--bf-blue-200));font-size:.75rem;margin-top:.1rem;">You must log a note before viewing this record</div>
       </div>
     </div>
     <!-- Body -->
     <div style="padding:1.25rem 1.5rem;">
-      <p style="font-size:.8rem;color:#475569;margin-bottom:.75rem;">
+      <p style="font-size:.8rem;color:rgb(var(--bf-slate-600));margin-bottom:.75rem;">
         Your name <strong><?= htmlspecialchars($_SESSION['user_name'] ?? 'Unknown') ?></strong> and timestamp will be
         logged regardless of content. Briefly describe why you are viewing or what action you took.
       </p>
       <div style="position:relative;">
         <textarea id="modal-note-text" rows="4"
           placeholder="e.g. Reviewed at customer request. Confirmed booking details. No changes made."
-          style="width:100%;border:2px solid #e2e8f0;border-radius:.6rem;padding:.75rem;font-size:.85rem;resize:none;outline:none;box-sizing:border-box;transition:border-color .2s;"
+          style="width:100%;border:2px solid rgb(var(--bf-slate-200));border-radius:.6rem;padding:.75rem;font-size:.85rem;resize:none;outline:none;box-sizing:border-box;transition:border-color .2s;"
           oninput="document.getElementById('modal-submit-btn').disabled=this.value.trim().length===0;this.style.borderColor=this.value.trim().length?'#2563eb':'#e2e8f0';"
         ></textarea>
       </div>
-      <div id="modal-note-error" style="display:none;color:#dc2626;font-size:.75rem;margin-top:.4rem;font-weight:600;"></div>
+      <div id="modal-note-error" style="display:none;color:rgb(var(--bf-red-600));font-size:.75rem;margin-top:.4rem;font-weight:600;"></div>
       <div style="display:flex;justify-content:flex-end;margin-top:1rem;">
         <button id="modal-submit-btn" disabled
           onclick="submitModalNote()"
-          style="background:#2563eb;color:#fff;border:none;border-radius:.6rem;padding:.6rem 1.5rem;font-size:.85rem;font-weight:700;cursor:pointer;opacity:.6;transition:opacity .2s,background .2s;"
-          onmouseover="if(!this.disabled)this.style.background='#1d4ed8'" onmouseout="this.style.background='#2563eb'">
+          style="background:rgb(var(--bf-blue-600));color:rgb(var(--bf-white));border:none;border-radius:.6rem;padding:.6rem 1.5rem;font-size:.85rem;font-weight:700;cursor:pointer;opacity:.6;transition:opacity .2s,background .2s;"
+          onmouseover="if(!this.disabled)this.style.background='rgb(var(--bf-blue-700))'" onmouseout="this.style.background='rgb(var(--bf-blue-600))'">
           <span class="material-symbols-outlined" style="font-size:1rem;vertical-align:middle;margin-right:.3rem;">send</span>
           Log Note &amp; Continue
         </button>
@@ -133,7 +133,7 @@ function submitModalNote() {
         <div class="flex items-start gap-3">
           <!-- Avatar -->
           <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-black text-white"
-            style="background:<?= $badge['color'] === 'emerald' ? '#059669' : ($badge['color'] === 'rose' ? '#e11d48' : ($badge['color'] === 'blue' ? '#2563eb' : ($badge['color'] === 'amber' ? '#d97706' : '#7c3aed'))) ?>;">
+            style="background:<?= $badge['color'] === 'emerald' ? 'rgb(var(--bf-emerald-600))' : ($badge['color'] === 'rose' ? 'rgb(var(--bf-rose-600))' : ($badge['color'] === 'blue' ? 'rgb(var(--bf-blue-600))' : ($badge['color'] === 'amber' ? 'rgb(var(--bf-amber-600))' : 'rgb(var(--bf-violet-600))'))) ?>;">
             <?= strtoupper(substr($n->user?->name ?? 'System', 0, 1)) ?>
           </div>
           <div class="flex-1 min-w-0">
@@ -168,7 +168,7 @@ function submitModalNote() {
         class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-600 bg-white"></textarea>
       <button onclick="notesPanel.submit()" id="add-note-btn"
         class="inline-flex items-center gap-1.5 text-white text-sm font-bold rounded-lg px-4 py-2 transition-colors flex-shrink-0"
-        style="background:#163274;" onmouseover="this.style.background='#1e40af'" onmouseout="this.style.background='#163274'">
+        style="background:rgb(var(--bf-primary));" onmouseover="this.style.background='rgb(var(--bf-blue-800))'" onmouseout="this.style.background='rgb(var(--bf-primary))'">
         <span class="material-symbols-outlined text-base">send</span> Post
       </button>
     </div>

@@ -94,7 +94,7 @@ tailwind.config = { darkMode: "class", theme: { extend: {
         <?php if ($inbound): /* customer text is untrusted — escape verbatim */ ?>
           <div class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed"><?= htmlspecialchars($m->final_body) ?></div>
         <?php else: /* our outbound — render the same safe Markdown the customer received */ ?>
-          <div class="text-sm text-slate-700 leading-relaxed"><?= \App\Services\EmailMarkdown::toEmailHtml($m->final_body) ?></div>
+          <div class="bf-mail text-sm text-slate-700 leading-relaxed" data-theme="light"><?= \App\Services\EmailMarkdown::toEmailHtml($m->final_body) ?></div>
         <?php endif; ?>
         <?php $atts = $m->loadedAttachments(); require __DIR__ . '/_attach_list.php'; ?>
 
@@ -153,7 +153,7 @@ tailwind.config = { darkMode: "class", theme: { extend: {
           <option value="apology">Apology</option>
           <option value="doc_request">Doc request</option>
         </select>
-        <button type="button" id="rGenBtn" class="inline-flex items-center gap-1.5 px-4 py-2 bg-gold text-primary text-sm font-bold rounded-lg hover:brightness-95 whitespace-nowrap">
+        <button type="button" id="rGenBtn" class="inline-flex items-center gap-1.5 px-4 py-2 bg-gold text-on-gold text-sm font-bold rounded-lg hover:brightness-95 whitespace-nowrap">
           <span class="material-symbols-outlined text-base" id="rGenIcon">auto_awesome</span> Draft
         </button>
       </div>

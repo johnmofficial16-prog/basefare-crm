@@ -60,10 +60,10 @@ tailwind.config = {
 <style>
   body { font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
-  .card { background: #fff; border: 1px solid #e5e8f0; border-radius: 18px; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+  .card { background: rgb(var(--bf-white)); border: 1px solid rgb(var(--bf-slate-200)); border-radius: 18px; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
   .tip { position: relative; display: inline-flex; cursor: help; }
   .tip .tip-box { visibility: hidden; opacity: 0; position: absolute; z-index: 40; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
-    width: 260px; background: #0f172a; color: #fff; font-size: 13px; line-height: 1.5; font-weight: 500; padding: 10px 12px; border-radius: 10px;
+    width: 260px; background: rgb(var(--bf-slate-900)); color: rgb(var(--bf-white)); font-size: 13px; line-height: 1.5; font-weight: 500; padding: 10px 12px; border-radius: 10px;
     transition: opacity .15s; text-transform: none; letter-spacing: 0; box-shadow: 0 10px 30px rgba(15,23,42,.25); }
   .tip:hover .tip-box, .tip:focus-within .tip-box { visibility: visible; opacity: 1; }
   .fade-out { transition: opacity .35s, transform .35s; opacity: 0; transform: translateY(-4px); }

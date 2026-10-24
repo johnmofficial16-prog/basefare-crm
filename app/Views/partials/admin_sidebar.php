@@ -6,6 +6,7 @@
  * @var string $activePage  e.g. 'dashboard', 'attendance', 'history', 'shifts'
  */
 $activePage = $activePage ?? '';
+\App\Services\Theme::markStaffPage();
 
 $actorRole = $_SESSION['role'] ?? 'agent';
 
@@ -40,35 +41,33 @@ if ($__hr = \App\Services\HrLink::navItem()) { $navItems[] = $__hr + ['roles' =>
 array_splice($navItems, 1, 0, [\App\Services\ChatService::navItem() + ['roles' => ['admin', 'manager', 'supervisor']]]); // Messages, right after Dashboard
 array_splice($navItems, 2, 0, [['href' => '#notepad', 'icon' => 'edit_note', 'label' => 'Notepad', 'key' => 'notepad', 'roles' => ['admin', 'manager', 'supervisor']]]); // Notepad (opens the slide-in panel)
 ?>
-<aside class="fixed left-0 top-0 h-full w-60 bg-white border-r border-gray-100 flex flex-col z-30 shadow-sm">
+<aside class="bf-side fixed left-0 top-0 h-full w-60 bg-white border-r border-slate-200 flex flex-col z-30" data-theme="dark">
   <!-- Logo -->
-  <div class="px-6 py-5 border-b border-gray-100">
-    <a href="/dashboard" class="flex items-center gap-2 no-underline">
-      <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-        <span class="material-symbols-outlined text-white text-sm">flight_takeoff</span>
-      </div>
-      <span class="font-headline font-extrabold text-primary text-sm leading-tight">Base Fare<br><span class="text-on-surface-variant font-medium text-xs">CRM <?= ucfirst(htmlspecialchars($actorRole)) ?></span></span>
+  <div class="px-5 py-5 border-b border-slate-200">
+    <a href="/dashboard" class="flex items-center gap-3 no-underline">
+      <img src="/assets/img/basefare-logo-email.png" alt="" class="bf-logo">
+      <span class="bf-brand">Base Fare<small>CRM <?= ucfirst(htmlspecialchars($actorRole)) ?></small></span>
     </a>
   </div>
 
   <!-- Navigation -->
-  <nav class="flex-1 py-4 overflow-y-auto">
+  <nav class="flex-1 py-3 overflow-y-auto space-y-0.5" aria-label="Main">
     <?php foreach ($navItems as $item): ?>
     <?php if (!in_array($actorRole, $item['roles'])) continue; ?>
     <?php $isDisabled = !empty($item['disabled']); ?>
     <a href="<?= $item['href'] ?>"<?= !empty($item['new_tab']) ? ' target="_blank" rel="noopener"' : '' ?>
-       class="flex items-center gap-3 px-5 py-3 text-sm font-semibold transition-all
+       class="flex items-center gap-3 mx-3 px-3 py-2.5 rounded-lg text-[15px] font-semibold transition-colors no-underline
        <?= $activePage === $item['key']
-           ? 'bg-primary/10 text-primary border-r-4 border-primary'
+           ? 'bg-primary/15 text-slate-900'
            : ($isDisabled 
-               ? 'text-gray-300 cursor-not-allowed' 
-               : 'text-on-surface-variant hover:bg-gray-50 hover:text-primary') ?>"
+               ? 'text-slate-400 cursor-not-allowed' 
+               : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900') ?>"
        <?= $isDisabled ? 'onclick="return false;"' : '' ?>>
-      <span class="material-symbols-outlined text-[20px]"><?= $item['icon'] ?></span>
+      <span class="material-symbols-outlined text-[20px]<?= $activePage === $item['key'] ? ' text-primary' : '' ?>"><?= $item['icon'] ?></span>
       <?= $item['label'] ?>
-      <?php if (!empty($item['badge'])): ?><span class="ml-auto min-w-[22px] h-[22px] px-1.5 rounded-full bg-rose-600 text-white text-[11px] font-bold flex items-center justify-center" aria-label="<?= (int) $item['badge'] ?> unread"><?= (int) $item['badge'] ?></span><?php endif; ?>
+      <?php if (!empty($item['badge'])): ?><span class="ml-auto min-w-[22px] h-[22px] px-1.5 rounded-full bg-rose-600 text-white text-[12px] font-bold flex items-center justify-center" aria-label="<?= (int) $item['badge'] ?> unread"><?= (int) $item['badge'] ?></span><?php endif; ?>
       <?php if ($isDisabled): ?>
-      <span class="text-[9px] text-gray-300 ml-auto">Soon</span>
+      <span class="text-[12px] text-slate-400 ml-auto">Soon</span>
       <?php endif; ?>
     </a>
     <?php endforeach; ?>
@@ -86,25 +85,28 @@ array_splice($navItems, 2, 0, [['href' => '#notepad', 'icon' => 'edit_note', 'la
   <?php endif; ?>
 
   <!-- Bottom user info -->
-  <div class="px-5 py-4 border-t border-gray-100">
+  <div class="px-5 py-4 border-t border-slate-200">
     <div class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
+      <div class="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-[14px] shrink-0">
         <?= strtoupper(substr($_SESSION['user_name'] ?? 'A', 0, 1)) ?>
       </div>
       <div class="flex-1 min-w-0">
-        <p class="text-xs font-bold text-on-surface truncate"><?= htmlspecialchars($_SESSION['user_name'] ?? 'Admin') ?></p>
+        <p class="text-[15px] font-semibold text-slate-900 truncate"><?= htmlspecialchars($_SESSION['user_name'] ?? 'Admin') ?></p>
         <?php 
           $displayRole = $_SESSION['role'] ?? 'admin';
           if (stripos($_SESSION['user_name'] ?? '', 'thomas') !== false) {
               $displayRole = 'manager';
           }
         ?>
-        <p class="text-[10px] text-on-surface-variant capitalize"><?= htmlspecialchars($displayRole) ?></p>
+        <p class="text-[13px] text-slate-600 capitalize"><?= htmlspecialchars($displayRole) ?></p>
       </div>
     </div>
-    <a href="/logout" class="mt-3 flex items-center gap-2 text-xs text-on-surface-variant hover:text-red-600 font-semibold transition-colors">
-      <span class="material-symbols-outlined text-sm">logout</span> Sign Out
-    </a>
+    <div class="flex items-center justify-between gap-2 mt-3">
+      <a href="/logout" class="flex items-center gap-2 text-[14px] text-slate-600 hover:text-rose-600 font-semibold transition-colors no-underline whitespace-nowrap">
+        <span class="material-symbols-outlined text-[18px]">logout</span> Sign out
+      </a>
+      <?= \App\Services\Theme::toggleButton() ?>
+    </div>
   </div>
 </aside>
 <?php require __DIR__ . '/notepad_quick.php'; ?>

@@ -76,7 +76,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 .centre-card{position:relative;overflow:hidden}
 .centre-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--accent)}
 .centre-glow{position:absolute;top:-40px;right:-40px;width:130px;height:130px;border-radius:50%;opacity:.08;background:var(--accent)}
-.stat-up{color:#059669}.stat-down{color:#e11d48}
+.stat-up{color:rgb(var(--bf-emerald-600))}.stat-down{color:rgb(var(--bf-rose-600))}
 @keyframes floatIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .float-in{animation:floatIn .4s ease both}
 </style>
@@ -165,12 +165,12 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     <div class="centre-card card-hover float-in bg-white rounded-2xl p-5 shadow-sm border border-slate-200" style="--accent:<?= $c['color'] ?>;animation-delay:<?= 0.05 * array_search($code, CentreService::ALL) ?>s">
       <div class="centre-glow"></div>
       <div class="flex items-center gap-2.5 mb-4 relative">
-        <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-sm" style="background:<?= $c['color'] ?>"><span class="material-symbols-outlined text-xl">groups</span></div>
+        <div class="w-9 h-9 rounded-xl flex items-center justify-center text-[#fff] shadow-sm" style="background:<?= $c['color'] ?>"><span class="material-symbols-outlined text-xl">groups</span></div>
         <div>
           <h3 class="font-headline font-extrabold text-slate-900 leading-none"><?= $h($c['label']) ?></h3>
           <p class="text-[11px] font-semibold text-slate-400 mt-0.5"><?= (int)$c['agents'] ?> agents</p>
         </div>
-        <span class="ml-auto text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg" style="background:<?= $c['color'] ?>18;color:<?= $c['color'] ?>"><?= $code ?></span>
+        <span class="bf-cc ml-auto text-[12px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg" style="background:<?= $c['color'] ?>18;--cc:<?= $c['color'] ?>"><?= $code ?></span>
       </div>
 
       <!-- Hero: Net MCO -->
@@ -196,7 +196,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <span class="text-sm font-extrabold <?= $roiGood ? 'text-emerald-600' : ($roi !== null ? 'text-amber-600' : 'text-slate-400') ?>"><?= $roi !== null ? $roi.'×' : '—' ?></span>
         </div>
         <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
-          <div class="h-full rounded-full" style="width:<?= round($roiPct, 1) ?>%;background:<?= $roiGood ? '#059669' : '#d97706' ?>"></div>
+          <div class="h-full rounded-full" style="width:<?= round($roiPct, 1) ?>%;background:<?= $roiGood ? 'rgb(var(--bf-emerald-600))' : 'rgb(var(--bf-amber-600))' ?>"></div>
         </div>
         <p class="text-[10px] text-slate-400 mt-1.5">Cost / booking: <span class="font-bold text-slate-500"><?= $c['cost_per_booking'] !== null ? $cur.' '.$m2($c['cost_per_booking']) : '—' ?></span></p>
       </div>
@@ -338,7 +338,7 @@ async function runAi(){
     const colors={DMR:'#2563eb',MOH:'#7c3aed',JSR:'#0d9488'};
     Object.keys(j.centre_notes||{}).forEach(code=>{
       const d=document.createElement('div'); d.className='rounded-xl border border-slate-200 p-3';
-      d.innerHTML='<p class="text-[11px] font-bold uppercase mb-1" style="color:'+(colors[code]||'#64748b')+'">'+escapeHtml(code)+'</p><p class="text-[13px] text-slate-600">'+escapeHtml(j.centre_notes[code])+'</p>';
+      d.innerHTML='<p class="text-[11px] font-bold uppercase mb-1" style="color:'+(colors[code]||'rgb(var(--bf-slate-500))')+'">'+escapeHtml(code)+'</p><p class="text-[13px] text-slate-600">'+escapeHtml(j.centre_notes[code])+'</p>';
       notes.appendChild(d);
     });
     const sug=document.getElementById('aiSuggestions');

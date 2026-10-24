@@ -40,8 +40,8 @@ tailwind.config = {
 }
 </script>
 <style>
-.field-label { display:block; font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.375rem; }
-.field-input { width:100%; border:1px solid #e2e8f0; border-radius:0.5rem; padding:0.5rem 0.75rem; font-size:0.875rem; background:#f8fafc; outline:none; transition:all .15s; }
+.field-label { display:block; font-size:12px; font-weight:700; color:rgb(var(--bf-slate-500)); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.375rem; }
+.field-input { width:100%; border:1px solid rgb(var(--bf-slate-200)); border-radius:0.5rem; padding:0.5rem 0.75rem; font-size:0.875rem; background:rgb(var(--bf-slate-50)); outline:none; transition:all .15s; }
 .field-input:focus { box-shadow:0 0 0 2px rgba(15,30,60,0.2); border-color:rgba(15,30,60,0.4); }
 </style>
 </head>

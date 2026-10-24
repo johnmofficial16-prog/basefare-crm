@@ -84,23 +84,23 @@ tailwind.config = {
 </script>
 <style>
   .msym { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; font-size: 20px; line-height: 1; display: inline-block; vertical-align: middle; }
-  .fi { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; font-size: 13px; background: #f8fafc; outline: none; transition: border-color .15s, box-shadow .15s; }
-  .fi:focus { border-color: rgba(22,50,116,.5); box-shadow: 0 0 0 3px rgba(22,50,116,.08); }
-  .fl { display: block; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
-  .type-card { cursor: pointer; border: 2px solid #e2e8f0; border-radius: 12px; padding: 14px 10px; text-align: center; transition: all .18s; background: #fff; }
+  .fi { width: 100%; border: 1px solid rgb(var(--bf-slate-200)); border-radius: 8px; padding: 8px 12px; font-size: 13px; background: rgb(var(--bf-slate-50)); outline: none; transition: border-color .15s, box-shadow .15s; }
+  .fi:focus { border-color: rgb(var(--bf-primary) / .5); box-shadow: 0 0 0 3px rgb(var(--bf-primary) / .08); }
+  .fl { display: block; font-size:12px; font-weight: 700; color: rgb(var(--bf-slate-500)); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+  .type-card { cursor: pointer; border: 2px solid rgb(var(--bf-slate-200)); border-radius: 12px; padding: 14px 10px; text-align: center; transition: all .18s; background: rgb(var(--bf-white)); }
   .type-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
   .type-card.active { border-color: var(--tc); background: color-mix(in srgb, var(--tc) 8%, white); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc) 20%, transparent); transform: translateY(-2px); }
-  .admin-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 999px; font-size: 11px; font-weight: 700; color: #1d4ed8; }
-  .section { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.05); overflow: hidden; }
-  .section-head { padding: 14px 22px; border-bottom: 1px solid #f1f5f9; background: #f8fafc; display: flex; align-items: center; justify-content: space-between; }
-  .section-head h2 { font-family: Manrope; font-weight: 700; font-size: 14px; color: #1e293b; display: flex; align-items: center; gap: 6px; }
+  .admin-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: rgb(var(--bf-blue-50)); border: 1px solid rgb(var(--bf-blue-200)); border-radius: 999px; font-size:12px; font-weight: 700; color: rgb(var(--bf-blue-700)); }
+  .section { background: rgb(var(--bf-white)); border: 1px solid rgb(var(--bf-slate-200)); border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.05); overflow: hidden; }
+  .section-head { padding: 14px 22px; border-bottom: 1px solid rgb(var(--bf-slate-100)); background: rgb(var(--bf-slate-50)); display: flex; align-items: center; justify-content: space-between; }
+  .section-head h2 { font-family: Manrope; font-weight: 700; font-size: 14px; color: rgb(var(--bf-slate-800)); display: flex; align-items: center; gap: 6px; }
   .section-body { padding: 20px 22px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
   .grid4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px; }
 </style>
 </head>
-<body style="background:#f4f6fb;font-family:Inter,sans-serif;min-height:100vh;">
+<body style="background:rgb(var(--bf-background));font-family:Inter,sans-serif;min-height:100vh;">
 
 <?php $activePage = 'transactions'; require __DIR__ . '/../layout/sidebar.php'; ?>
 
@@ -109,11 +109,11 @@ tailwind.config = {
   <!-- ── Page Header ──────────────────────────────────────────────────────── -->
   <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;">
     <div>
-      <h1 style="font-family:Manrope;font-size:22px;font-weight:800;color:#163274;display:flex;align-items:center;gap:8px;margin:0;">
+      <h1 style="font-family:Manrope;font-size:22px;font-weight:800;color:rgb(var(--bf-primary));display:flex;align-items:center;gap:8px;margin:0;">
         <span class="msym">edit_note</span> Edit Transaction #<?= $txn->id ?>
       </h1>
-      <p style="font-size:13px;color:#64748b;margin-top:4px;">
-        Status: <span style="font-weight:700;color:<?= $statusInfo['color'] === 'amber' ? '#d97706' : ($statusInfo['color'] === 'emerald' ? '#059669' : '#dc2626') ?>">
+      <p style="font-size:13px;color:rgb(var(--bf-slate-500));margin-top:4px;">
+        Status: <span style="font-weight:700;color:<?= $statusInfo['color'] === 'amber' ? 'rgb(var(--bf-amber-600))' : ($statusInfo['color'] === 'emerald' ? 'rgb(var(--bf-emerald-600))' : 'rgb(var(--bf-red-600))') ?>">
           <?= $statusInfo['label'] ?>
         </span>
         <?php if ($isAdmin): ?>
@@ -121,13 +121,13 @@ tailwind.config = {
         <?php endif; ?>
       </p>
     </div>
-    <a href="/transactions/<?= $txn->id ?>" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#64748b;text-decoration:none;padding:8px 14px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;transition:all .15s;" onmouseover="this.style.color='#163274'" onmouseout="this.style.color='#64748b'">
+    <a href="/transactions/<?= $txn->id ?>" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:rgb(var(--bf-slate-500));text-decoration:none;padding:8px 14px;border:1px solid rgb(var(--bf-slate-200));border-radius:8px;background:rgb(var(--bf-white));transition:all .15s;" onmouseover="this.style.color='rgb(var(--bf-primary))'" onmouseout="this.style.color='rgb(var(--bf-slate-500))'">
       <span class="msym" style="font-size:16px;">arrow_back</span> Back to Transaction
     </a>
   </div>
 
   <?php if ($flashError): ?>
-  <div style="margin-bottom:16px;padding:12px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;font-size:13px;font-weight:600;color:#dc2626;display:flex;align-items:center;gap:8px;">
+  <div style="margin-bottom:16px;padding:12px 16px;background:rgb(var(--bf-red-50));border:1px solid rgb(var(--bf-red-200));border-radius:10px;font-size:13px;font-weight:600;color:rgb(var(--bf-red-600));display:flex;align-items:center;gap:8px;">
     <span class="msym" style="font-size:18px;">error</span><?= htmlspecialchars($flashError) ?>
   </div>
   <?php endif; ?>
@@ -137,22 +137,22 @@ tailwind.config = {
 
     <!-- ── Admin: Status Control ─────────────────────────────────────────── -->
     <?php if ($isAdmin): ?>
-    <div class="section" style="border-color:#bfdbfe;background:linear-gradient(135deg,#eff6ff,#fff);">
-      <div class="section-head" style="background:rgba(219,234,254,.4);border-color:#bfdbfe;">
-        <h2 style="color:#1d4ed8;"><span class="msym" style="font-size:18px;color:#3b82f6;">admin_panel_settings</span> Transaction Status <span style="font-size:10px;font-weight:600;background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:999px;margin-left:4px;">ADMIN ONLY</span></h2>
+    <div class="section" style="border-color:rgb(var(--bf-blue-200));background:linear-gradient(135deg,rgb(var(--bf-blue-50)),rgb(var(--bf-white)));">
+      <div class="section-head" style="background:rgb(var(--bf-blue-100) / .4);border-color:rgb(var(--bf-blue-200));">
+        <h2 style="color:rgb(var(--bf-blue-700));"><span class="msym" style="font-size:18px;color:rgb(var(--bf-blue-500));">admin_panel_settings</span> Transaction Status <span style="font-size:12px;font-weight:600;background:rgb(var(--bf-blue-100));color:rgb(var(--bf-blue-700));padding:2px 8px;border-radius:999px;margin-left:4px;">ADMIN ONLY</span></h2>
       </div>
       <div class="section-body">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
           <div>
-            <label class="fl" style="color:#1d4ed8;">Change Status</label>
-            <select name="status" class="fi" style="border-color:#93c5fd;color:#1e3a8a;font-weight:700;background:#eff6ff;font-size:13px;">
+            <label class="fl" style="color:rgb(var(--bf-blue-700));">Change Status</label>
+            <select name="status" class="fi" style="border-color:rgb(var(--bf-blue-300));color:rgb(var(--bf-blue-900));font-weight:700;background:rgb(var(--bf-blue-50));font-size:13px;">
               <option value="pending_review" <?= $currentStatus === 'pending_review' ? 'selected' : '' ?>>⏳ Pending Review — Agent can still edit</option>
               <option value="approved"       <?= $currentStatus === 'approved'       ? 'selected' : '' ?>>✅ Approved — Locked from agent</option>
               <option value="voided"         <?= $currentStatus === 'voided'         ? 'selected' : '' ?>>🚫 Voided — Cancelled / reversed</option>
             </select>
           </div>
           <div style="padding-top:22px;">
-            <p style="font-size:12px;color:#64748b;line-height:1.6;background:#f1f5f9;padding:10px 12px;border-radius:8px;border:1px solid #e2e8f0;">
+            <p style="font-size:12px;color:rgb(var(--bf-slate-500));line-height:1.6;background:rgb(var(--bf-slate-100));padding:10px 12px;border-radius:8px;border:1px solid rgb(var(--bf-slate-200));">
               <strong>Pending Review</strong> — Visible & editable by the agent.<br>
               <strong>Approved</strong> — Agent can no longer edit; manager oversight done.<br>
               <strong>Voided</strong> — Marks this transaction as cancelled.
@@ -175,7 +175,7 @@ tailwind.config = {
                style="--tc:<?= $tc['color'] ?>;"
                onclick="selectType('<?= $tc['value'] ?>')">
             <span class="msym" style="font-size:24px;color:<?= $tc['color'] ?>;display:block;margin-bottom:6px;"><?= $tc['icon'] ?></span>
-            <p style="font-size:11px;font-weight:700;color:#1e293b;margin:0;"><?= $tc['label'] ?></p>
+            <p style="font-size:12px;font-weight:700;color:rgb(var(--bf-slate-800));margin:0;"><?= $tc['label'] ?></p>
           </div>
           <?php endforeach; ?>
         </div>
@@ -215,7 +215,7 @@ tailwind.config = {
     <div class="section">
       <div class="section-head">
         <h2><span class="msym">groups</span> Passengers</h2>
-        <button type="button" onclick="paxMgr.add()" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:#163274;background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px;" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='none'">
+        <button type="button" onclick="paxMgr.add()" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:rgb(var(--bf-primary));background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px;" onmouseover="this.style.background='rgb(var(--bf-blue-50))'" onmouseout="this.style.background='none'">
           <span class="msym" style="font-size:16px;">add_circle</span> Add Passenger
         </button>
       </div>
@@ -226,23 +226,23 @@ tailwind.config = {
     </div>
 
     <!-- ── Other type description (shown only for 'other' type) ─────────── -->
-    <div id="section-other-desc" class="section" style="border-color:#f59e0b;background:linear-gradient(135deg,#fffbeb,#fff);display:none;">
-      <div class="section-head" style="background:rgba(254,243,199,.5);border-color:#fde68a;">
-        <h2 style="color:#92400e;"><span class="msym" style="color:#f59e0b;">description</span> Charge Description <span style="font-size:11px;font-weight:600;color:#b45309;">— required for Other / Miscellaneous</span></h2>
+    <div id="section-other-desc" class="section" style="border-color:rgb(var(--bf-amber-500));background:linear-gradient(135deg,rgb(var(--bf-amber-50)),rgb(var(--bf-white)));display:none;">
+      <div class="section-head" style="background:rgb(var(--bf-amber-100) / .5);border-color:rgb(var(--bf-amber-200));">
+        <h2 style="color:rgb(var(--bf-amber-800));"><span class="msym" style="color:rgb(var(--bf-amber-500));">description</span> Charge Description <span style="font-size:12px;font-weight:600;color:rgb(var(--bf-amber-700));">— required for Other / Miscellaneous</span></h2>
       </div>
       <div class="section-body">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
           <div>
-            <label class="fl" style="color:#92400e;">Charge Title / Short Description *</label>
+            <label class="fl" style="color:rgb(var(--bf-amber-800));">Charge Title / Short Description *</label>
             <input type="text" name="other_title" id="other_title_field"
                    value="<?= htmlspecialchars($txn->data['other_title'] ?? '') ?>"
                    placeholder="e.g. Airport transfer fee, Visa processing, Seat upgrade misc..."
-                   class="fi" style="border-color:#fcd34d;">
-            <p style="font-size:10px;color:#92400e;margin-top:4px;">A short title that describes what this charge is for.</p>
+                   class="fi" style="border-color:rgb(var(--bf-amber-300));">
+            <p style="font-size:12px;color:rgb(var(--bf-amber-800));margin-top:4px;">A short title that describes what this charge is for.</p>
           </div>
           <div>
-            <label class="fl" style="color:#92400e;">Additional Notes</label>
-            <textarea name="other_notes" id="other_notes_field" rows="2" class="fi" style="border-color:#fcd34d;resize:none;"><?= htmlspecialchars($txn->data['other_notes'] ?? '') ?></textarea>
+            <label class="fl" style="color:rgb(var(--bf-amber-800));">Additional Notes</label>
+            <textarea name="other_notes" id="other_notes_field" rows="2" class="fi" style="border-color:rgb(var(--bf-amber-300));resize:none;"><?= htmlspecialchars($txn->data['other_notes'] ?? '') ?></textarea>
           </div>
         </div>
       </div>
@@ -258,22 +258,22 @@ tailwind.config = {
             <input type="number" step="0.01" name="total_amount" id="field_total_amount"
                    value="<?= $prefill['total_amount'] ?>" required class="fi"
                    style="font-family:monospace;font-weight:700;">
-            <p style="font-size:10px;color:#64748b;margin-top:3px;">Amount billed to the customer's card</p>
+            <p style="font-size:12px;color:rgb(var(--bf-slate-500));margin-top:3px;">Amount billed to the customer's card</p>
           </div>
           <div>
             <label class="fl">Cost / Net (Supplier Price)</label>
             <input type="number" step="0.01" name="cost_amount" id="field_cost_amount"
                    value="<?= $prefill['cost_amount'] ?>" class="fi"
                    style="font-family:monospace;">
-            <p style="font-size:10px;color:#64748b;margin-top:3px;">What we paid to the airline / supplier</p>
+            <p style="font-size:12px;color:rgb(var(--bf-slate-500));margin-top:3px;">What we paid to the airline / supplier</p>
           </div>
           <div>
             <label class="fl">MCO — Profit Margin</label>
             <input type="number" step="0.01" name="profit_mco" id="field_profit_mco"
                    value="<?= htmlspecialchars($txn->profit_mco) ?>" required class="fi"
                    <?= !$isAdmin ? 'readonly' : '' ?>
-                   style="font-family:monospace;font-weight:700;color:#059669;background-color:<?= !$isAdmin ? '#d1fae5' : '#ecfdf5' ?>;border-color:#34d399;<?= !$isAdmin ? 'cursor:not-allowed;' : '' ?>">
-            <p style="font-size:10px;color:#64748b;margin-top:3px;">
+                   style="font-family:monospace;font-weight:700;color:rgb(var(--bf-emerald-600));background-color:<?= !$isAdmin ? 'rgb(var(--bf-emerald-100))' : 'rgb(var(--bf-emerald-50))' ?>;border-color:rgb(var(--bf-emerald-400));<?= !$isAdmin ? 'cursor:not-allowed;' : '' ?>">
+            <p style="font-size:12px;color:rgb(var(--bf-slate-500));margin-top:3px;">
               <?= $isAdmin ? 'Manual entry (Admin/Manager)' : 'Locked (Admin/Manager only)' ?>
             </p>
           </div>
@@ -306,24 +306,24 @@ tailwind.config = {
     </div>
 
     <!-- ── Notes & Auditing ─────────────────────────────────────────────── -->
-    <div class="section" style="border-color:#e2e8f0;background:#fff;">
+    <div class="section" style="border-color:rgb(var(--bf-slate-200));background:rgb(var(--bf-white));">
       <div class="section-head">
         <h2><span class="msym">gavel</span> Notes & Auditing</h2>
       </div>
       <div class="section-body">
         <div>
-          <label class="fl">Agent Notes (Required) <span style="color:#ef4444">*</span></label>
+          <label class="fl">Agent Notes (Required) <span style="color:rgb(var(--bf-red-500))">*</span></label>
           <textarea name="agent_notes" rows="3" required class="fi" style="resize:none;" placeholder="Required: Please describe what you changed and why."><?= htmlspecialchars($prefill['agent_notes'] ?? '') ?></textarea>
-          <p style="font-size:10px;color:#64748b;margin-top:4px;">Mandatory for auditing. Your name and timestamp will be recorded.</p>
+          <p style="font-size:12px;color:rgb(var(--bf-slate-500));margin-top:4px;">Mandatory for auditing. Your name and timestamp will be recorded.</p>
         </div>
       </div>
     </div>
 
     <!-- ── Proof of Sale ──────────────────────────────────────────────────── -->
-    <div class="section" style="border-color:#fde68a;background:linear-gradient(135deg,#fffbeb,#fff);">
-      <div class="section-head" style="background:rgba(254,243,199,.5);border-color:#fde68a;">
-        <h2 style="color:#92400e;">
-          <span class="msym" style="font-size:18px;color:#d97706;">receipt</span>
+    <div class="section" style="border-color:rgb(var(--bf-amber-200));background:linear-gradient(135deg,rgb(var(--bf-amber-50)),rgb(var(--bf-white)));">
+      <div class="section-head" style="background:rgb(var(--bf-amber-100) / .5);border-color:rgb(var(--bf-amber-200));">
+        <h2 style="color:rgb(var(--bf-amber-800));">
+          <span class="msym" style="font-size:18px;color:rgb(var(--bf-amber-600));">receipt</span>
           Proof of Sale
         </h2>
       </div>
@@ -334,21 +334,21 @@ tailwind.config = {
         ?>
         <?php if (!empty($proofPaths)): ?>
         <div style="margin-bottom:14px;">
-          <p style="font-size:11px;font-weight:700;color:#065f46;margin-bottom:8px;">Current Documents (<?= count($proofPaths) ?>)</p>
+          <p style="font-size:12px;font-weight:700;color:rgb(var(--bf-emerald-800));margin-bottom:8px;">Current Documents (<?= count($proofPaths) ?>)</p>
           <div style="display:flex;flex-wrap:wrap;gap:8px;">
             <?php foreach ($proofPaths as $idx => $path): ?>
-            <div class="proof-chip" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
-              <span class="msym proof-ok" style="color:#16a34a;font-size:16px;">check_circle</span>
-              <span class="proof-name" style="font-size:11px;font-family:monospace;color:#166534;"><?= htmlspecialchars(basename($path)) ?></span>
+            <div class="proof-chip" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgb(var(--bf-green-50));border:1px solid rgb(var(--bf-green-200));border-radius:10px;">
+              <span class="msym proof-ok" style="color:rgb(var(--bf-green-600));font-size:16px;">check_circle</span>
+              <span class="proof-name" style="font-size:12px;font-family:monospace;color:rgb(var(--bf-green-800));"><?= htmlspecialchars(basename($path)) ?></span>
               <a href="/transactions/<?= $txn->id ?>/proof?index=<?= $idx ?>" target="_blank"
-                 style="flex-none;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#0f1e3c;background:#fff;border:1px solid #d1fae5;padding:4px 10px;border-radius:7px;text-decoration:none;">
+                 style="flex-none;display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:rgb(var(--bf-primary));background:rgb(var(--bf-white));border:1px solid rgb(var(--bf-emerald-100));padding:4px 10px;border-radius:7px;text-decoration:none;">
                 <span class="msym" style="font-size:13px;">open_in_new</span> View
               </a>
               <?php if ($isAdmin): ?>
               <label title="Remove this document (admin only)"
-                     style="flex-none;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#b91c1c;background:#fff;border:1px solid #fecaca;padding:4px 10px;border-radius:7px;cursor:pointer;user-select:none;">
+                     style="flex-none;display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:rgb(var(--bf-red-700));background:rgb(var(--bf-white));border:1px solid rgb(var(--bf-red-200));padding:4px 10px;border-radius:7px;cursor:pointer;user-select:none;">
                 <input type="checkbox" name="remove_proofs[]" value="<?= htmlspecialchars($path) ?>"
-                       onchange="toggleProofRemoval(this)" style="accent-color:#dc2626;cursor:pointer;">
+                       onchange="toggleProofRemoval(this)" style="accent-color:rgb(var(--bf-red-600));cursor:pointer;">
                 <span class="msym" style="font-size:13px;">delete</span> Remove
               </label>
               <?php endif; ?>
@@ -356,48 +356,48 @@ tailwind.config = {
             <?php endforeach; ?>
           </div>
           <?php if ($isAdmin): ?>
-          <p style="font-size:10px;color:#b45309;margin-top:6px;display:flex;align-items:center;gap:4px;">
+          <p style="font-size:12px;color:rgb(var(--bf-amber-700));margin-top:6px;display:flex;align-items:center;gap:4px;">
             <span class="msym" style="font-size:13px;">admin_panel_settings</span>
             Admin: checking <strong style="margin:0 3px;">Remove</strong> deletes that document permanently when you save.
           </p>
           <?php endif; ?>
         </div>
         <?php else: ?>
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;margin-bottom:14px;">
-          <span class="msym" style="color:#dc2626;font-size:18px;">warning</span>
-          <p style="font-size:12px;font-weight:600;color:#991b1b;">No proof of sale on file for this transaction.</p>
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgb(var(--bf-red-50));border:1px solid rgb(var(--bf-red-200));border-radius:10px;margin-bottom:14px;">
+          <span class="msym" style="color:rgb(var(--bf-red-600));font-size:18px;">warning</span>
+          <p style="font-size:12px;font-weight:600;color:rgb(var(--bf-red-800));">No proof of sale on file for this transaction.</p>
         </div>
         <?php endif; ?>
 
         <div>
-          <label class="fl" style="color:#92400e;">Add More Proof of Sale Documents</label>
-          <div id="proof-drop-zone" style="border:2px dashed #fcd34d;border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:#fffbeb;transition:all .15s;"
+          <label class="fl" style="color:rgb(var(--bf-amber-800));">Add More Proof of Sale Documents</label>
+          <div id="proof-drop-zone" style="border:2px dashed rgb(var(--bf-amber-300));border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:rgb(var(--bf-amber-50));transition:all .15s;"
                onclick="document.getElementById('proof_of_sale_edit').click()"
-               onmouseover="this.style.borderColor='#f59e0b'" onmouseout="this.style.borderColor='#fcd34d'">
+               onmouseover="this.style.borderColor='rgb(var(--bf-amber-500))'" onmouseout="this.style.borderColor='rgb(var(--bf-amber-300))'">
             <input type="file" name="proof_of_sale[]" id="proof_of_sale_edit"
                    accept="image/*,application/pdf,message/rfc822,.eml,application/vnd.ms-outlook,.msg,.heic,.heif,.bmp"
                    capture="environment"
                    multiple
                    style="display:none;"
                    onchange="handleEditProof(this)">
-            <span class="msym" style="font-size:28px;color:#d97706;">upload_file</span>
-            <p style="font-size:13px;font-weight:700;color:#92400e;margin-top:6px;">Click or tap to select proof file(s)</p>
-            <p style="font-size:10px;color:#b45309;margin-top:3px;">JPG, PNG, PDF, HEIC, EML, MSG &mdash; max 15 MB each &mdash; multiple files allowed</p>
-            <p id="proof-edit-name" style="font-size:11px;font-weight:700;color:#059669;margin-top:6px;"></p>
+            <span class="msym" style="font-size:28px;color:rgb(var(--bf-amber-600));">upload_file</span>
+            <p style="font-size:13px;font-weight:700;color:rgb(var(--bf-amber-800));margin-top:6px;">Click or tap to select proof file(s)</p>
+            <p style="font-size:12px;color:rgb(var(--bf-amber-700));margin-top:3px;">JPG, PNG, PDF, HEIC, EML, MSG &mdash; max 15 MB each &mdash; multiple files allowed</p>
+            <p id="proof-edit-name" style="font-size:12px;font-weight:700;color:rgb(var(--bf-emerald-600));margin-top:6px;"></p>
           </div>
-          <p style="font-size:10px;color:#94a3b8;margin-top:6px;display:flex;align-items:center;gap:4px;">
+          <p style="font-size:12px;color:rgb(var(--bf-slate-400));margin-top:6px;display:flex;align-items:center;gap:4px;">
             <span class="msym" style="font-size:13px;">info</span>
             New files will be added to the existing list. Leave blank to keep current documents only.
           </p>
-          <p id="proof-edit-error" style="font-size:11px;color:#dc2626;font-weight:600;margin-top:4px;display:none;"></p>
+          <p id="proof-edit-error" style="font-size:12px;color:rgb(var(--bf-red-600));font-weight:600;margin-top:4px;display:none;"></p>
         </div>
     </div>
     <!-- ── Action Bar ────────────────────────────────────────────────────── -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 0;">
-      <a href="/transactions/<?= $txn->id ?>" style="font-size:13px;font-weight:600;color:#94a3b8;text-decoration:none;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#94a3b8'">
+      <a href="/transactions/<?= $txn->id ?>" style="font-size:13px;font-weight:600;color:rgb(var(--bf-slate-400));text-decoration:none;" onmouseover="this.style.color='rgb(var(--bf-red-500))'" onmouseout="this.style.color='rgb(var(--bf-slate-400))'">
         Cancel & go back
       </a>
-      <button type="submit" style="display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:#163274;color:#fff;font-family:Manrope;font-weight:800;font-size:14px;border:none;border-radius:12px;cursor:pointer;box-shadow:0 4px 14px rgba(22,50,116,.25);transition:all .2s;" onmouseover="this.style.background='#0f2358'" onmouseout="this.style.background='#163274'">
+      <button type="submit" style="display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:rgb(var(--bf-primary));color:rgb(var(--bf-white));font-family:Manrope;font-weight:800;font-size:14px;border:none;border-radius:12px;cursor:pointer;box-shadow:0 4px 14px rgb(var(--bf-primary) / .25);transition:all .2s;" onmouseover="this.style.background='rgb(var(--bf-blue-950))'" onmouseout="this.style.background='rgb(var(--bf-primary))'">
         <span class="msym" style="font-size:20px;">save</span> Save Changes
       </button>
     </div>
@@ -433,18 +433,18 @@ const paxMgr = {
   _render() {
     const c = document.getElementById('pax-list');
     c.innerHTML = this.list.map((p, i) => `
-      <div style="display:grid;grid-template-columns:1fr 1fr 140px 100px 130px 120px 36px;gap:8px;align-items:center;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
-        <div><input type="text" value="${this._e(p.first_name)}" placeholder="First name" onchange="paxMgr.list[${i}].first_name=this.value" style="width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;font-size:12px;background:#fff;"></div>
-        <div><input type="text" value="${this._e(p.last_name)}" placeholder="Last name" onchange="paxMgr.list[${i}].last_name=this.value" style="width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;font-size:12px;background:#fff;"></div>
-        <div><input type="date" value="${p.dob||''}" onchange="paxMgr.list[${i}].dob=this.value" style="width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;font-size:12px;background:#fff;" title="Date of Birth"></div>
-        <div><select onchange="paxMgr.list[${i}].pax_type=this.value" style="width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;font-size:12px;background:#fff;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 140px 100px 130px 120px 36px;gap:8px;align-items:center;padding:12px;background:rgb(var(--bf-slate-50));border:1px solid rgb(var(--bf-slate-200));border-radius:10px;">
+        <div><input type="text" value="${this._e(p.first_name)}" placeholder="First name" onchange="paxMgr.list[${i}].first_name=this.value" style="width:100%;border:1px solid rgb(var(--bf-slate-200));border-radius:6px;padding:6px 10px;font-size:12px;background:rgb(var(--bf-white));"></div>
+        <div><input type="text" value="${this._e(p.last_name)}" placeholder="Last name" onchange="paxMgr.list[${i}].last_name=this.value" style="width:100%;border:1px solid rgb(var(--bf-slate-200));border-radius:6px;padding:6px 10px;font-size:12px;background:rgb(var(--bf-white));"></div>
+        <div><input type="date" value="${p.dob||''}" onchange="paxMgr.list[${i}].dob=this.value" style="width:100%;border:1px solid rgb(var(--bf-slate-200));border-radius:6px;padding:6px 10px;font-size:12px;background:rgb(var(--bf-white));" title="Date of Birth"></div>
+        <div><select onchange="paxMgr.list[${i}].pax_type=this.value" style="width:100%;border:1px solid rgb(var(--bf-slate-200));border-radius:6px;padding:6px 8px;font-size:12px;background:rgb(var(--bf-white));">
           <option value="adult"  ${p.pax_type==='adult'?'selected':''}>Adult</option>
           <option value="child"  ${p.pax_type==='child'?'selected':''}>Child</option>
           <option value="infant" ${p.pax_type==='infant'?'selected':''}>Infant</option>
         </select></div>
-        <div><input type="text" value="${this._e(p.ticket_number||'')}" placeholder="Ticket #" onchange="paxMgr.list[${i}].ticket_number=this.value" style="width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;font-size:12px;font-family:monospace;background:#fff;" title="Ticket Number"></div>
-        <div><input type="text" value="${this._e(p.frequent_flyer||'')}" placeholder="FF # (optional)" onchange="paxMgr.list[${i}].frequent_flyer=this.value" style="width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;font-size:12px;font-family:monospace;background:#fff;" title="Frequent Flyer Number"></div>
-        <div><button type="button" onclick="paxMgr.remove(${i})" style="width:32px;height:32px;border:1px solid #fecaca;border-radius:6px;background:#fef2f2;color:#dc2626;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Remove">✕</button></div>
+        <div><input type="text" value="${this._e(p.ticket_number||'')}" placeholder="Ticket #" onchange="paxMgr.list[${i}].ticket_number=this.value" style="width:100%;border:1px solid rgb(var(--bf-slate-200));border-radius:6px;padding:6px 10px;font-size:12px;font-family:monospace;background:rgb(var(--bf-white));" title="Ticket Number"></div>
+        <div><input type="text" value="${this._e(p.frequent_flyer||'')}" placeholder="FF # (optional)" onchange="paxMgr.list[${i}].frequent_flyer=this.value" style="width:100%;border:1px solid rgb(var(--bf-slate-200));border-radius:6px;padding:6px 10px;font-size:12px;font-family:monospace;background:rgb(var(--bf-white));" title="Frequent Flyer Number"></div>
+        <div><button type="button" onclick="paxMgr.remove(${i})" style="width:32px;height:32px;border:1px solid rgb(var(--bf-red-200));border-radius:6px;background:rgb(var(--bf-red-50));color:rgb(var(--bf-red-600));font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Remove">✕</button></div>
       </div>
     `).join('');
     this._sync();
@@ -467,7 +467,7 @@ function handleEditProof(input) {
     const sizeMB = file.size / (1024 * 1024);
     if (sizeMB > MAX_MB) {
       if (errEl)  { errEl.textContent = '"' + file.name + '" is too large (' + sizeMB.toFixed(1) + ' MB). Max 15 MB per file.'; errEl.style.display = 'block'; }
-      if (zone)   zone.style.borderColor = '#fca5a5';
+      if (zone)   zone.style.borderColor = 'rgb(var(--bf-red-300))';
       input.value = '';
       if (nameEl) nameEl.textContent = '';
       return;
@@ -475,7 +475,7 @@ function handleEditProof(input) {
     names.push(file.name);
   }
   if (errEl)  { errEl.textContent = ''; errEl.style.display = 'none'; }
-  if (zone)   zone.style.borderColor = '#34d399';
+  if (zone)   zone.style.borderColor = 'rgb(var(--bf-emerald-400))';
   if (nameEl) nameEl.textContent = '\u2713 ' + names.length + ' file(s): ' + names.join(', ');
 }
 
@@ -486,15 +486,15 @@ function toggleProofRemoval(cb) {
   const name = chip.querySelector('.proof-name');
   const ok   = chip.querySelector('.proof-ok');
   if (cb.checked) {
-    chip.style.background = '#fef2f2';
-    chip.style.borderColor = '#fecaca';
-    if (name) { name.style.textDecoration = 'line-through'; name.style.color = '#b91c1c'; }
-    if (ok)   { ok.textContent = 'delete'; ok.style.color = '#dc2626'; }
+    chip.style.background = 'rgb(var(--bf-red-50))';
+    chip.style.borderColor = 'rgb(var(--bf-red-200))';
+    if (name) { name.style.textDecoration = 'line-through'; name.style.color = 'rgb(var(--bf-red-700))'; }
+    if (ok)   { ok.textContent = 'delete'; ok.style.color = 'rgb(var(--bf-red-600))'; }
   } else {
-    chip.style.background = '#f0fdf4';
-    chip.style.borderColor = '#bbf7d0';
-    if (name) { name.style.textDecoration = 'none'; name.style.color = '#166534'; }
-    if (ok)   { ok.textContent = 'check_circle'; ok.style.color = '#16a34a'; }
+    chip.style.background = 'rgb(var(--bf-green-50))';
+    chip.style.borderColor = 'rgb(var(--bf-green-200))';
+    if (name) { name.style.textDecoration = 'none'; name.style.color = 'rgb(var(--bf-green-800))'; }
+    if (ok)   { ok.textContent = 'check_circle'; ok.style.color = 'rgb(var(--bf-green-600))'; }
   }
 }
 

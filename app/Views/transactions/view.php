@@ -786,7 +786,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             ?>
             <div class="flex border border-slate-200 rounded-xl overflow-hidden">
               <!-- Airline Bar -->
-              <div class="w-16 flex-none flex flex-col items-center justify-center py-3 gap-1" style="background:#1a3a6b;">
+              <div class="w-16 flex-none flex flex-col items-center justify-center py-3 gap-1" style="background:rgb(var(--bf-primary));">
                 <?php if ($logo35): ?>
                 <img src="<?= htmlspecialchars($logo35) ?>" alt="<?= htmlspecialchars($iata) ?>"
                   class="w-7 h-7 object-contain" onerror="this.style.display='none'">
@@ -888,8 +888,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 
       <!-- Agent Notes / Transaction Summary (txn->agent_notes OR acceptance->agent_notes) -->
       <?php if ($displayAgentNotes): ?>
-      <div class="border-2 border-amber-300 rounded-xl overflow-hidden" style="background:linear-gradient(135deg,#fffbeb,#fef9ed);">
-        <div class="px-5 py-3 flex items-center gap-2" style="background:#92400e;">
+      <div class="border-2 border-amber-300 rounded-xl overflow-hidden" style="background:linear-gradient(135deg,rgb(var(--bf-amber-50)),rgb(var(--bf-orange-50)));">
+        <div class="px-5 py-3 flex items-center gap-2" style="background:rgb(var(--bf-amber-800));">
           <span class="material-symbols-outlined text-amber-200 text-base">sticky_note_2</span>
           <span class="font-extrabold text-white text-sm" style="font-family:Manrope">Transaction Summary / Agent Notes</span>
           <span class="ml-auto text-[10px] text-amber-200 font-semibold uppercase tracking-wider">Internal — not shared with customer</span>

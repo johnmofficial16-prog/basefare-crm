@@ -37,7 +37,7 @@ $JS = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 <script>
 tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","primary-container":"#314a8d",background:"#f8f9fa","on-surface":"#191c1d","on-surface-variant":"#434653"},fontFamily:{headline:["Manrope"],body:["Inter"]}}}};
 </script>
-<style>.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}.fld{margin-top:.25rem;width:100%;border:1px solid #e2e8f0;border-radius:.5rem;padding:.5rem .75rem;font-size:.875rem;background:#f8fafc}</style>
+<style>.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}.fld{margin-top:.25rem;width:100%;border:1px solid rgb(var(--bf-slate-200));border-radius:.5rem;padding:.5rem .75rem;font-size:.875rem;background:rgb(var(--bf-slate-50))}</style>
 </head>
 <body class="bg-background font-body text-on-surface antialiased min-h-screen">
 
@@ -149,7 +149,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <tr><td colspan="6" class="px-6 py-10 text-center text-slate-400">No marketing spend recorded yet.</td></tr>
           <?php else: foreach ($spends as $s): ?>
           <tr class="border-b border-slate-50">
-            <td class="px-6 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style="background:<?= CentreService::COLORS[$s->centre] ?? '#64748b' ?>"><?= $h($s->centre) ?></span></td>
+            <td class="px-6 py-3"><span class="px-2 py-0.5 rounded-full text-[12px] font-bold text-[#fff]" style="background:<?= CentreService::COLORS[$s->centre] ?? 'rgb(var(--bf-slate-500))' ?>"><?= $h($s->centre) ?></span></td>
             <td class="px-6 py-3 text-slate-500 text-[13px]"><?= $h($s->period_start->format('M j')) ?> – <?= $h($s->period_end->format('M j, Y')) ?></td>
             <td class="px-6 py-3 text-right font-bold text-slate-700"><?= $h($s->currency) ?> <?= number_format($s->amount, 2) ?></td>
             <td class="px-6 py-3 text-slate-500 text-[13px]"><?= $h($s->channel ?: '—') ?></td>

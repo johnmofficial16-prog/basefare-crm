@@ -69,10 +69,10 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 </script>
 <style>
 .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
-.bar{height:10px;border-radius:99px;background:#eef1f6;overflow:hidden}
-.bar>i{display:block;height:100%;border-radius:inherit;background:#163274}
+.bar{height:10px;border-radius:99px;background:rgb(var(--bf-slate-100));overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:inherit;background:rgb(var(--bf-primary))}
 .resp-row{cursor:pointer}
-.resp-row:hover td{background:#f8fafc}
+.resp-row:hover td{background:rgb(var(--bf-slate-50))}
 .clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .clamp3{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .tnum{font-variant-numeric:tabular-nums}

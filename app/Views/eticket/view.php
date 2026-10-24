@@ -223,7 +223,7 @@ tailwind.config = {
                   echo '<p class="text-xs text-slate-400 italic">No segments recorded.</p>';
                   return;
               }
-              $accent = $theme === 'rose' ? 'bg-rose-700' : ($theme === 'emerald' ? 'bg-emerald-700' : 'bg-slate-800');
+              $accent = $theme === 'rose' ? 'bg-[#be123c]' : ($theme === 'emerald' ? 'bg-[#047857]' : 'bg-[#1e293b]');   // dark tile in both themes
               foreach ($segs as $i => $seg):
                   $iata   = strtoupper($seg['airline_iata'] ?? $seg['airline'] ?? '');
                   $aName  = $AIRLINES[$iata] ?? $iata;
@@ -255,8 +255,8 @@ tailwind.config = {
                       onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                     <?php endif; ?>
                     <div style="display:<?= $logo?'none':'flex' ?>;width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#fff;background:<?= $bgColor ?>"><?= htmlspecialchars($iata ?: '?') ?></div>
-                      <span class="text-[11px] font-black text-white"><?= htmlspecialchars($iata) ?></span>
-                      <span class="text-[9px] text-slate-300 text-center leading-tight"><?= htmlspecialchars($aName) ?></span>
+                      <span class="text-[12px] font-black text-[#fff]"><?= htmlspecialchars($iata) ?></span>
+                      <span class="text-[12px] text-[#e2e8f0] text-center leading-tight"><?= htmlspecialchars($aName) ?></span>
                     </div>
                     <div class="flex-1 p-4 grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
                       <div class="text-right">

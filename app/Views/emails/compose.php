@@ -105,7 +105,7 @@ tailwind.config = { darkMode: "class", theme: { extend: {
         </div>
 
         <button type="button" id="genBtn" <?= $aiConfigured ? '' : 'disabled' ?>
-                class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gold text-primary font-extrabold rounded-xl hover:brightness-95 transition-all text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gold text-on-gold font-extrabold rounded-xl hover:brightness-95 transition-all text-sm disabled:opacity-40 disabled:cursor-not-allowed">
           <span class="material-symbols-outlined text-base" id="genIcon">auto_awesome</span>
           <span id="genLabel">Generate Draft with AI</span>
         </button>
@@ -133,7 +133,7 @@ tailwind.config = { darkMode: "class", theme: { extend: {
 
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1">Formatted preview <span class="font-normal text-slate-400">(what the customer sees)</span></label>
-          <div id="bodyPreview" class="rounded-lg border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-700 leading-relaxed min-h-[72px]"><span class="text-slate-400">Your formatted email will appear here…</span></div>
+          <div id="bodyPreview" data-theme="light" class="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 leading-relaxed min-h-[72px]"><span class="text-slate-400">Your formatted email will appear here…</span></div>
         </div>
 
         <div>

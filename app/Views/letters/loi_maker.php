@@ -39,14 +39,14 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 /* ── Editor line-item rows ─────────────────────────────────────────────── */
 .li-row{display:grid;grid-template-columns:1fr 32px;gap:6px;align-items:center}
 .li-row.kv{grid-template-columns:1fr 1fr 32px}
-.li-input{width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:12.5px;font-family:'Inter',sans-serif;color:#1e293b;background:#f8fafc;transition:border-color .12s}
-.li-input:focus{outline:none;border-color:#163274;background:#fff}
-.rm-btn{width:30px;height:30px;border-radius:7px;border:none;background:#fee2e2;color:#dc2626;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1}
-.rm-btn:hover{background:#fecaca}
-.fld-lbl{font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.03em}
-.fld{margin-top:4px;width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;background:#f8fafc}
-.fld:focus{outline:none;border-color:#163274;background:#fff;box-shadow:0 0 0 2px rgba(22,50,116,.18)}
-.sec-hd{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.li-input{width:100%;border:1.5px solid rgb(var(--bf-slate-200));border-radius:8px;padding:7px 10px;font-size:12.5px;font-family:'Inter',sans-serif;color:rgb(var(--bf-slate-800));background:rgb(var(--bf-slate-50));transition:border-color .12s}
+.li-input:focus{outline:none;border-color:rgb(var(--bf-primary));background:rgb(var(--bf-white))}
+.rm-btn{width:30px;height:30px;border-radius:7px;border:none;background:rgb(var(--bf-red-100));color:rgb(var(--bf-red-600));cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1}
+.rm-btn:hover{background:rgb(var(--bf-red-200))}
+.fld-lbl{font-size:12px;font-weight:600;color:rgb(var(--bf-slate-500));text-transform:uppercase;letter-spacing:.03em}
+.fld{margin-top:4px;width:100%;border:1px solid rgb(var(--bf-slate-200));border-radius:8px;padding:8px 12px;font-size:13px;background:rgb(var(--bf-slate-50))}
+.fld:focus{outline:none;border-color:rgb(var(--bf-primary));background:rgb(var(--bf-white));box-shadow:0 0 0 2px rgb(var(--bf-primary) / .18)}
+.sec-hd{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgb(var(--bf-slate-400));margin-bottom:12px;display:flex;align-items:center;gap:6px}
 
 /* ═══ THE LETTER ═══════════════════════════════════════════════════════════
    Sizes are in mm/pt so screen, print and PDF agree.
@@ -128,10 +128,10 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 .pg-spacer{flex-shrink:0}
 
 /* Editor marker picker */
-.mk-btn{flex:1;padding:6px 4px;border:1.5px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#64748b;
-  font-size:11px;font-weight:700;cursor:pointer;transition:all .12s;font-family:'Inter',sans-serif}
-.mk-btn:hover{border-color:#cbd5e1}
-.mk-btn.active{border-color:#163274;background:#163274;color:#fff}
+.mk-btn{flex:1;padding:6px 4px;border:1.5px solid rgb(var(--bf-slate-200));border-radius:8px;background:rgb(var(--bf-slate-50));color:rgb(var(--bf-slate-500));
+  font-size:12px;font-weight:700;cursor:pointer;transition:all .12s;font-family:'Inter',sans-serif}
+.mk-btn:hover{border-color:rgb(var(--bf-slate-300))}
+.mk-btn.active{border-color:rgb(var(--bf-primary));background:rgb(var(--bf-primary));color:rgb(var(--bf-white))}
 
 /* Signature */
 .sig-block{margin-top:7mm;display:flex;justify-content:space-between;align-items:flex-end;gap:10mm}
@@ -352,7 +352,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           </span>
         </div>
         <div class="flex-1 overflow-y-auto -mx-1 px-1">
-          <div id="sheet-viewport">
+          <div id="sheet-viewport" data-theme="light">
             <div id="loi-sheet" class="loi-sheet sheet-shadow"></div>
           </div>
         </div>

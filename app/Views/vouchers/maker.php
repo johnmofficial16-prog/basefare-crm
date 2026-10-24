@@ -301,7 +301,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5 mb-4">
           <span class="material-symbols-outlined text-sm text-primary">visibility</span> Live Preview
         </p>
-        <div id="preview-wrapper">
+        <div id="preview-wrapper" data-theme="light">
           <?php include __DIR__ . '/voucher_template.php'; ?>
         </div>
       </div>

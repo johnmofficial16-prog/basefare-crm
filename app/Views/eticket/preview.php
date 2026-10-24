@@ -115,7 +115,7 @@ tailwind.config = {
           <span class="ml-auto text-xs font-bold text-sky-800"><?= htmlspecialchars($voucherData['amount']) ?> · valid until <?= htmlspecialchars($voucherData['expiry']) ?></span>
         </div>
         <div class="p-4">
-          <div class="voucher-frame" id="voucher-frame">
+          <div class="voucher-frame" id="voucher-frame" data-theme="light">
             <div class="voucher-scale" id="voucher-scale">
               <?php require __DIR__ . '/../vouchers/voucher_template.php'; ?>
             </div>

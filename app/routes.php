@@ -18,6 +18,7 @@ use App\Controllers\CallLogController;
 use App\Controllers\KraController;
 use App\Controllers\ChatController;
 use App\Controllers\NoteController;
+use App\Controllers\ThemeController;
 use App\Controllers\NotificationController;
 use App\Controllers\AdminController;
 use App\Controllers\FareTermsController;
@@ -421,6 +422,13 @@ $app->group('', function ($group) {
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
 ->add(new AuthMiddleware());
+
+// ==========================================================================
+// Theme — each person's own dark-mode switch (sidebar footer).
+// ==========================================================================
+$app->post('/theme', [ThemeController::class, 'save'])
+    ->add(new IpRestrictionMiddleware())
+    ->add(new AuthMiddleware());
 
 // ==========================================================================
 // Notepad — each user's own notes (slide-in panel on every page). Private to the writer.

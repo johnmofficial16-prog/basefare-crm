@@ -5,6 +5,7 @@
  * 
  * @var array $stateInfo  From AttendanceService::getCurrentState()
  */
+\App\Services\Theme::markStaffPage();   // themed like the rest of the CRM (no sidebar here)
 
 use App\Services\AttendanceService;
 use App\Services\ShiftService;
@@ -74,7 +75,7 @@ tailwind.config = {
 </script>
 <style>
 .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
-@keyframes pulse-glow{0%,100%{box-shadow:0 0 0 0 rgba(22,50,116,0.4)}50%{box-shadow:0 0 0 15px rgba(22,50,116,0)}}
+@keyframes pulse-glow{0%,100%{box-shadow:0 0 0 0 rgb(var(--bf-primary) / 0.4)}50%{box-shadow:0 0 0 15px rgb(var(--bf-primary) / 0)}}
 .pulse-glow{animation:pulse-glow 2s ease-in-out infinite}
 </style>
 </head>

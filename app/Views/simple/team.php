@@ -24,7 +24,7 @@ $nowLabel = [
 ];
 $working = count(array_filter($people, fn($p) => in_array($p['now'], ['in', 'on_break'], true)));
 $off     = count(array_filter($people, fn($p) => !$p['active']));
-$avatarBg = ['#163274', '#0d9488', '#7c3aed', '#c2410c', '#2563eb', '#be185d', '#15803d'];
+$avatarBg = ['#163274', '#0f766e', '#7c3aed', '#c2410c', '#2563eb', '#be185d', '#15803d'];
 ?>
 
 <header class="mb-6 flex items-end justify-between gap-6">
@@ -55,7 +55,7 @@ $avatarBg = ['#163274', '#0d9488', '#7c3aed', '#c2410c', '#2563eb', '#be185d', '
     <?php foreach ($groups[$g] as $p): [$nl, $dot, $txt] = $p['active'] ? $nowLabel[$p['now']] : ['Login turned off', 'bg-rose-500', 'text-rose-700']; ?>
     <article class="card p-5 flex flex-col <?= $p['active'] ? '' : 'opacity-75' ?>" data-person data-search="<?= sv_e(mb_strtolower($p['name'] . ' ' . $p['email'])) ?>">
       <div class="flex items-start gap-3">
-        <span class="w-12 h-12 rounded-full text-white font-bold text-[15px] flex items-center justify-center flex-none"
+        <span class="w-12 h-12 rounded-full text-[#fff] font-bold text-[15px] flex items-center justify-center flex-none"
               style="background:<?= $avatarBg[$p['id'] % count($avatarBg)] ?>"><?= sv_e(sv_initials($p['name'])) ?></span>
         <div class="min-w-0 flex-1">
           <h3 class="text-[16px] font-bold truncate"><?= sv_e($p['name']) ?></h3>

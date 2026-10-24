@@ -18,11 +18,11 @@
     <!-- Attendance Status Strip -->
     <div id="sb-att" class="<?= in_array($_sb_state, ['clocked_in','on_break']) ? '' : 'hidden' ?> rounded-xl overflow-hidden border border-primary/20">
       <!-- Dark header: status + timer -->
-      <div class="px-3 py-2.5 flex items-center justify-between" style="background:#0f1e3c;">
+      <div class="px-3 py-2.5 flex items-center justify-between bg-slate-50">
         <span id="sb-state-label" class="text-xs font-bold <?= $_sb_state === 'on_break' ? 'text-amber-300' : 'text-green-300' ?>">
           <?= $_sb_state === 'on_break' ? '☕ On Break' : '● Clocked In' ?>
         </span>
-        <span id="sb-timer" class="font-mono font-bold text-white text-sm tracking-widest">00:00:00</span>
+        <span id="sb-timer" class="font-mono font-bold text-slate-900 text-[15px] tracking-widest">00:00:00</span>
       </div>
       <!-- Controls -->
       <div class="bg-primary/5 p-3 space-y-2">

@@ -100,6 +100,9 @@ $errorMiddleware->setDefaultErrorHandler(function (
 // Include routes
 require __DIR__ . '/../app/routes.php';
 
+// CRM theme (Peacock / Night Shift) on staff pages — see App\Services\Theme
+$app->add(new \App\Middleware\ThemeMiddleware());
+
 // Add Global Security Headers Middleware
 $app->add(new \App\Middleware\SecurityHeadersMiddleware());
 

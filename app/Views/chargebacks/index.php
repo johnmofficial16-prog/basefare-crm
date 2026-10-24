@@ -74,8 +74,8 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 .centre-card{position:relative;overflow:hidden}
 .centre-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--accent)}
 .seg{transition:all .12s ease}
-.fld{width:100%;margin-top:.25rem;border:1px solid #e2e8f0;border-radius:.6rem;padding:.5rem .7rem;font-size:.85rem;background:#fff;outline:none}
-.fld:focus{box-shadow:0 0 0 2px rgba(22,50,116,.18);border-color:#163274}
+.fld{width:100%;margin-top:.25rem;border:1px solid rgb(var(--bf-slate-200));border-radius:.6rem;padding:.5rem .7rem;font-size:.85rem;background:rgb(var(--bf-white));outline:none}
+.fld:focus{box-shadow:0 0 0 2px rgb(var(--bf-primary) / .18);border-color:rgb(var(--bf-primary))}
 @keyframes floatIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .float-in{animation:floatIn .35s ease both}
 #toast{transition:opacity .25s ease, transform .25s ease}
@@ -156,7 +156,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
     <?php foreach (CentreService::ALL as $code): $c = $centres[$code]; ?>
     <div class="centre-card card-hover float-in bg-white rounded-2xl p-5 shadow-sm border border-slate-200" style="--accent:<?= $c['color'] ?>">
       <div class="flex items-center justify-between mb-3">
-        <span class="font-headline font-extrabold text-lg" style="color:<?= $c['color'] ?>"><?= $h($c['label']) ?></span>
+        <span class="bf-cc font-headline font-extrabold text-lg" style="--cc:<?= $c['color'] ?>"><?= $h($c['label']) ?></span>
         <span class="text-xs font-bold text-slate-400"><?= $c['total_count'] ?> events</span>
       </div>
       <div class="flex items-end justify-between gap-3">
@@ -281,7 +281,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           <tr id="row-<?= (int)$e->id ?>" class="hover:bg-slate-50"
               data-json='<?= $h(json_encode(["id"=>$e->id,"centre"=>$e->centre,"kind"=>$e->kind,"event_date"=>$e->event_date?$e->event_date->format("Y-m-d"):"","amount"=>(float)$e->amount,"currency"=>$e->currency,"pnr"=>$e->pnr,"customer_name"=>$e->customer_name,"reason"=>$e->reason,"outcome"=>$e->outcome])) ?>'>
             <td class="px-6 py-3 text-slate-500 text-[13px] whitespace-nowrap"><?= $e->event_date ? $h($e->event_date->format('M j, Y')) : '—' ?></td>
-            <td class="px-6 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style="background:<?= CentreService::COLORS[$e->centre] ?? '#64748b' ?>"><?= $h($e->centre) ?></span></td>
+            <td class="px-6 py-3"><span class="px-2 py-0.5 rounded-full text-[12px] font-bold text-[#fff]" style="background:<?= CentreService::COLORS[$e->centre] ?? 'rgb(var(--bf-slate-500))' ?>"><?= $h($e->centre) ?></span></td>
             <td class="px-6 py-3"><?= cbrKindBadge($e->kind) ?></td>
             <td class="px-6 py-3 text-right font-bold <?= $e->kind==='chargeback'?'text-red-600':'text-amber-600' ?> whitespace-nowrap"><?= $h($e->currency) ?> <?= $m2($e->amount) ?></td>
             <td class="px-6 py-3 font-mono text-[13px] text-slate-600"><?= $h($e->pnr ?: '—') ?></td>
@@ -405,7 +405,7 @@ function rowHtml(en){
   const esc=s=>(s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const amtCls = en.kind==='chargeback'?'text-red-600':'text-amber-600';
   return '<td class="px-6 py-3 text-slate-500 text-[13px] whitespace-nowrap">'+esc(en.event_date)+'</td>'
-    +'<td class="px-6 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style="background:'+(en.centre_color||'#64748b')+'">'+esc(en.centre)+'</span></td>'
+    +'<td class="px-6 py-3"><span class="px-2 py-0.5 rounded-full text-[12px] font-bold text-[#fff]" style="background:'+(en.centre_color||'rgb(var(--bf-slate-500))')+'">'+esc(en.centre)+'</span></td>'
     +'<td class="px-6 py-3">'+kindBadge+'</td>'
     +'<td class="px-6 py-3 text-right font-bold '+amtCls+' whitespace-nowrap">'+esc(en.currency)+' '+Number(en.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'
     +'<td class="px-6 py-3 font-mono text-[13px] text-slate-600">'+esc(en.pnr||'—')+'</td>'

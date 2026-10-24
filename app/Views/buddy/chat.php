@@ -6,6 +6,7 @@
  *
  * @var string $userName
  */
+\App\Services\Theme::markStaffPage();   // themed like the rest of the CRM (no sidebar here)
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -16,14 +17,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <script src="<?= \App\Services\Asset::url('assets/js/error-beacon.js') ?>"></script>
 <style>
-  html, body { margin: 0; height: 100%; background: #f3f4f8; color: #191c1d; font-family: Inter, system-ui, sans-serif; }
+  html, body { margin: 0; height: 100%; background: rgb(var(--bf-slate-100)); color: rgb(var(--bf-on-surface)); font-family: Inter, system-ui, sans-serif; }
   .ap-wrap { box-sizing: border-box; max-width: 880px; margin: 0 auto; padding: 16px 16px 20px; height: 100%; display: flex; flex-direction: column; gap: 12px; }
   .ap-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .ap-back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px 0 8px; border-radius: 12px; color: #163274; font: 600 15px/1 Inter, sans-serif; text-decoration: none; }
-  .ap-back:hover { background: #e7eaf3; }
-  .ap-back:focus-visible { outline: 3px solid #4f6bed; outline-offset: 2px; }
+  .ap-back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px 0 8px; border-radius: 12px; color: rgb(var(--bf-primary)); font: 600 15px/1 Inter, sans-serif; text-decoration: none; }
+  .ap-back:hover { background: rgb(var(--bf-slate-200)); }
+  .ap-back:focus-visible { outline: 3px solid rgb(var(--bf-indigo-500)); outline-offset: 2px; }
   .ap-back svg { width: 20px; height: 20px; }
-  .ap-hint { font-size: 13px; color: #6b7080; }
+  .ap-hint { font-size: 13px; color: rgb(var(--bf-slate-500)); }
   #aisha-page { flex: 1; min-height: 0; }
   @media (max-width: 639px) { .ap-wrap { padding: 8px 8px 12px; } .ap-hint { display: none; } }
 </style>

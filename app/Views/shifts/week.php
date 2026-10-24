@@ -166,7 +166,7 @@ tailwind.config = {
                 </div>
               <?php elseif ($schedule): ?>
                 <div class="relative group/cell" data-assigned="1" data-start="<?= $schedule->shift_start ?>" data-end="<?= $schedule->shift_end ?>">
-                  <span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight cursor-pointer" style="background:#E8F5E9;color:#2E7D32">
+                  <span class="block px-3 py-2 rounded-lg text-[11px] font-bold leading-tight cursor-pointer" style="background:rgb(var(--bf-green-100));color:rgb(var(--bf-green-700))">
                     Custom<br/>
                     <?= date('g:iA', strtotime($schedule->shift_start)) ?>–<?= date('g:iA', strtotime($schedule->shift_end)) ?>
                   </span>
@@ -198,7 +198,7 @@ tailwind.config = {
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <?php foreach ($templates as $t): ?>
         <div class="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/10 shadow-sm flex flex-col items-center text-center gap-2 hover:translate-y-[-2px] transition-transform">
-          <div class="w-3 h-3 rounded-full" style="background:<?= match(strtolower($t->name)) { 'morning' => '#1565C0', 'evening' => '#F57F17', 'night' => '#283593', 'split' => '#6A1B9A', default => '#2E7D32' } ?>"></div>
+          <div class="w-3 h-3 rounded-full" style="background:<?= match(strtolower($t->name)) { 'morning' => 'rgb(var(--bf-primary))', 'evening' => 'rgb(var(--bf-orange-500))', 'night' => 'rgb(var(--bf-blue-900))', 'split' => 'rgb(var(--bf-purple-800))', default => 'rgb(var(--bf-green-700))' } ?>"></div>
           <span class="text-[11px] font-extrabold uppercase tracking-wider text-on-surface-variant"><?= htmlspecialchars($t->name) ?></span>
           <span class="text-xs font-medium opacity-60">
             <?= date('g:iA', strtotime($t->start_time)) ?> – <?= date('g:iA', strtotime($t->end_time)) ?>

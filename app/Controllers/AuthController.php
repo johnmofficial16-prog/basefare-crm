@@ -124,6 +124,8 @@ class AuthController
             // starts there on every sign-in (full access is one click away).
             $_SESSION['simple_mode'] = $user->role === \App\Models\User::ROLE_ADMIN && !empty($user->simple_view);
             $_SESSION['simple_available'] = $_SESSION['simple_mode'];   // shows "Back to Simple view" in the full CRM
+            // Theme: their own dark-mode choice (NULL = the standard light look).
+            $_SESSION['theme'] = \App\Services\Theme::normalise($user->theme ?? null);
 
             // ── Audit: record the successful login ──────────────────────────
             // Until now nothing recorded a successful login anywhere: logout was

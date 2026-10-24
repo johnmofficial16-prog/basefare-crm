@@ -5,6 +5,7 @@
  * 
  * @var array $stateInfo  From AttendanceService::getCurrentState()
  */
+\App\Services\Theme::markStaffPage();   // themed like the rest of the CRM (no sidebar here)
 $userName = $_SESSION['user_name'] ?? 'Agent';
 ?>
 <!DOCTYPE html>

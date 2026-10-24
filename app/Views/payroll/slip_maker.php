@@ -22,10 +22,10 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
 /* Line item rows */
 .li-row{display:grid;grid-template-columns:1fr 130px 32px;gap:6px;align-items:center}
-.li-input{width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:12.5px;font-family:'Inter',sans-serif;color:#1e293b;background:#f8fafc;transition:border-color .12s}
-.li-input:focus{outline:none;border-color:#163274;background:#fff}
-.rm-btn{width:30px;height:30px;border-radius:7px;border:none;background:#fee2e2;color:#dc2626;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1}
-.rm-btn:hover{background:#fecaca}
+.li-input{width:100%;border:1.5px solid rgb(var(--bf-slate-200));border-radius:8px;padding:7px 10px;font-size:12.5px;font-family:'Inter',sans-serif;color:rgb(var(--bf-slate-800));background:rgb(var(--bf-slate-50));transition:border-color .12s}
+.li-input:focus{outline:none;border-color:rgb(var(--bf-primary));background:rgb(var(--bf-white))}
+.rm-btn{width:30px;height:30px;border-radius:7px;border:none;background:rgb(var(--bf-red-100));color:rgb(var(--bf-red-600));cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1}
+.rm-btn:hover{background:rgb(var(--bf-red-200))}
 /* Slip styles */
 #slip-inner{font-family:'Noto Sans',sans-serif;color:#1e293b;font-size:12px}
 .slip-hdr{background:linear-gradient(135deg,#163274 0%,#314a8d 100%);color:#fff;padding:20px 24px;display:flex;align-items:flex-start;justify-content:space-between}
@@ -44,9 +44,9 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
 .slip-footer{padding:10px 24px;display:flex;justify-content:space-between;border-top:1px solid #f1f5f9;font-size:9.5px;color:#94a3b8}
 .sig-line{width:90px;border-top:1.5px solid #cbd5e1;margin:0 auto 3px}
 /* Slip-type toggle */
-.slip-type-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 8px;border:1.5px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#64748b;font-size:12.5px;font-weight:700;cursor:pointer;transition:all .12s}
-.slip-type-btn:hover{border-color:#cbd5e1}
-.slip-type-btn.active{border-color:#163274;background:#163274;color:#fff;box-shadow:0 4px 12px -4px rgba(22,50,116,.4)}
+.slip-type-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 8px;border:1.5px solid rgb(var(--bf-slate-200));border-radius:10px;background:rgb(var(--bf-slate-50));color:rgb(var(--bf-slate-500));font-size:12.5px;font-weight:700;cursor:pointer;transition:all .12s}
+.slip-type-btn:hover{border-color:rgb(var(--bf-slate-300))}
+.slip-type-btn.active{border-color:rgb(var(--bf-primary));background:rgb(var(--bf-primary));color:rgb(var(--bf-white));box-shadow:0 4px 12px -4px rgb(var(--bf-primary) / .4)}
 .slip-type-btn .material-symbols-outlined{font-size:18px}
 /* Fallback for Ctrl+P on the main page. The Print button uses printSlip()
    (isolated iframe) which is the reliable path. NOTE: not position:fixed —
@@ -257,7 +257,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
           </p>
           <span class="text-[10px] text-slate-300 font-medium">Updates as you type</span>
         </div>
-        <div id="slip-preview" class="border border-slate-100 rounded-lg overflow-hidden shadow-sm"></div>
+        <div id="slip-preview" data-theme="light" class="bg-white border border-slate-100 rounded-lg overflow-hidden shadow-sm"></div>
       </div>
     </div>
 
