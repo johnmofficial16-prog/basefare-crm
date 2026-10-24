@@ -509,6 +509,15 @@ final class Api
         $app->get('/kra/settings', self::h(fn(Ctx $c) => Kra::settings($c)))->add($admin);
         $app->patch('/kra/settings', self::h(fn(Ctx $c) => Kra::saveRules($c)))->add($admin);
         $app->patch('/kra/people', self::h(fn(Ctx $c) => Kra::savePeople($c)))->add($admin);
+        $app->get('/kra/insights', self::h(fn(Ctx $c) => Kra::insights($c)))->add($admin);
+        $app->get('/kra/feedback', self::h(fn(Ctx $c) => Kra::feedback($c)))->add($admin);
+        $app->post('/kra/feedback', self::h(fn(Ctx $c) => Kra::saveFeedback($c)))->add($admin);
+        $app->get('/kra/boosters', self::h(fn(Ctx $c) => Kra::boosters($c)))->add($admin);
+        $app->post('/kra/boosters', self::h(fn(Ctx $c) => Kra::createBooster($c)))->add($admin);
+        $app->post('/kra/boosters/{id:[0-9]+}/stop', self::h(fn(Ctx $c) => Kra::stopBooster($c, $c->id())))->add($admin);
+        $app->get('/kra/payouts', self::h(fn(Ctx $c) => Kra::payouts($c)))->add($admin);
+        $app->post('/kra/payouts/close', self::h(fn(Ctx $c) => Kra::closePayouts($c)))->add($admin);
+        $app->post('/kra/payouts/reopen', self::h(fn(Ctx $c) => Kra::reopenPayouts($c)))->add($admin);
         $app->get('/law', self::h(fn(Ctx $c) => Setup::law()))->add($admin);
         $app->post('/law', self::h(fn(Ctx $c) => Setup::addLaw($c)))->add($admin);
         $app->get('/admins', self::h(fn(Ctx $c) => Setup::admins()))->add($admin);

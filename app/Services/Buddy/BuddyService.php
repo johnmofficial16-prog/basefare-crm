@@ -804,7 +804,7 @@ class BuddyService
      * Types that ignore pacing and quiet mode: a person wrote it, or the agent
      * asked for it at a time they chose. Neither is Aisha's chatter to ration.
      */
-    private const FEED_BYPASS = ['admin_message', 'reminder'];
+    private const FEED_BYPASS = ['admin_message', 'reminder', 'booster'];
 
     /**
      * Delivery order when several nudges are pending: a real person's message
@@ -812,7 +812,7 @@ class BuddyService
      * human deliberately authored and confirmed — it outranks everything.
      */
     private const FEED_PRIORITY = [
-        'admin_message', 'reminder', 'goal_hit', 'sale_praise_t2', 'sale_praise_t1',
+        'admin_message', 'reminder', 'booster', 'goal_hit', 'sale_praise_t2', 'sale_praise_t1',
         'first_sale_today', 'departure_24h', 'eticket_lag', 'acceptance_lag',
         'shift_wrap', 'goal_pace', 'dry_spell',
     ];
@@ -853,6 +853,7 @@ class BuddyService
      */
     private const FEED_NEVER_EXPIRES = [
         'admin_message', 'sale_praise_t1', 'sale_praise_t2', 'goal_hit', 'reminder',
+        'booster',   // dropped by nudgeResolved() once it has ended instead
     ];
 
     /**
@@ -1134,6 +1135,28 @@ class BuddyService
                 }
                 return DB::table('etickets')->where('transaction_id', $txnId)->exists();
             }
+            if ($type === 'booster') {
+                // Over (or stopped) by the time they'd hear about it: say nothing.
+                $p = json_decode((string) ($n->payload_json ?? ''), true) ?: [];
+                if (isset($p['ends']) && strtotime((string) $p['ends']) <= time()) {
+                    return true;
+                }
+                $b = DB::table('kra_boosters')->where('id', (int) ($p['booster_id'] ?? 0))->first();
+                if ($b === null || $b->stopped_at !== null) {
+                    return true;
+                }
+                // Budget already used up: announcing it now would promise money that's gone.
+                $q = DB::table('transactions')->where('status', 'approved')->where('created_at', '>=', $b->starts_at);
+                if ($b->min_mco !== null) {
+                    $q->whereRaw('(profit_mco - refund_mco_impact) >= ?', [(float) $b->min_mco]);
+                }
+                if (preg_match('/^team:(\d+)$/', (string) $b->scope, $m)) {
+                    $q->whereIn('agent_id', DB::table('users')->where('reports_to_id', (int) $m[1])->pluck('id')->all() ?: [0]);
+                } else {
+                    $q->whereIn('agent_id', DB::table('users')->whereIn('role', ['agent', 'supervisor'])->pluck('id')->all() ?: [0]);
+                }
+                return ($q->count() + 1) * (int) $b->amount_inr > (int) $b->budget_inr;
+            }
             if ($type === 'acceptance_lag') {
                 $accId = preg_match('/:acc:(\d+)/', (string) ($n->dedupe_key ?? ''), $m) ? (int) $m[1] : 0;
                 return $accId > 0 && DB::table('transactions')
@@ -1151,6 +1174,7 @@ class BuddyService
         return match (true) {
             $type === 'reminder'              => 'Reminder',
             $type === 'admin_message'         => 'From your admin',
+            $type === 'booster'               => 'Booster',
             str_starts_with($type, 'sale_praise'), $type === 'first_sale_today' => 'Win',
             $type === 'eticket_lag'           => 'E-ticket',
             $type === 'acceptance_lag'        => 'Card authorization',
@@ -1193,6 +1217,9 @@ class BuddyService
             if ($accId > 0) {
                 return ['label' => 'Record the sale', 'href' => '/transactions/create?acceptance_id=' . $accId];
             }
+        }
+        if ($type === 'booster') {
+            return ['label' => 'See my KRA', 'href' => '/kra'];
         }
         if ((str_starts_with($type, 'sale_praise') || $type === 'first_sale_today') && $txnId > 0) {
             return ['label' => 'Open the booking', 'href' => '/transactions/' . $txnId];
@@ -1327,6 +1354,17 @@ class BuddyService
             $variants = [
                 "{$hi}, passing this on from the admin:\n\n\"{$msg}\"",
                 "Message for you from the admin, {$hi}:\n\n\"{$msg}\"",
+            ];
+            return $variants[abs($seed) % count($variants)];
+        }
+
+        // A booster the admin switched on: the rule and the end time, plainly.
+        if ($type === 'booster') {
+            $rule = trim((string) ($payload['rule'] ?? 'a bonus for every approved sale'));
+            $ends = isset($payload['ends']) ? \App\Services\Kra\KraEngine::endsLabel((string) $payload['ends']) : 'the end of the night';
+            $variants = [
+                "🚀 Booster on, {$hi}! {$rule} until {$ends}. Let's make the most of it.",
+                "🚀 {$hi}, a booster just started: {$rule}, until {$ends}. Every qualifying sale counts.",
             ];
             return $variants[abs($seed) % count($variants)];
         }

@@ -56,6 +56,11 @@ final class KraEngine
         'calls_target'    => 40,     // calls a shift
         'conv_target'     => 16,     // one sale in this many calls
         'pps_target'      => 130,    // $ profit per sale
+        'spot_first_sale' => 500,    // ₹ for the first sale on the floor each shift (0 = off)
+        'spot_best_week'  => 1000,   // ₹ for the floor's best single sale of the week
+        'spot_best_month' => 500,    // ₹ for beating your own best month
+        'spot_budget'     => 25000,  // ₹ a month for all spot rewards together
+        'refund_cutoff'   => 5,      // refunds up to this day of next month are taken off before paying
     ];
 
     /** What each number means and its sensible range, for HR's form and validation. */
@@ -78,6 +83,11 @@ final class KraEngine
         'calls_target'    => ['Calls a shift (target)', 'number', 1, 300, 'calls'],
         'conv_target'     => ['One sale in every … calls (target)', 'number', 2, 500, 'calls'],
         'pps_target'      => ['Profit per sale (target)', 'number', 1, 10000, '$'],
+        'spot_first_sale' => ['First sale of each shift', 'number', 0, 100000, '₹'],
+        'spot_best_week'  => ['Best single sale of the week (whole floor)', 'number', 0, 1000000, '₹'],
+        'spot_best_month' => ['New personal best month', 'number', 0, 1000000, '₹'],
+        'spot_budget'     => ['Monthly budget for all spot rewards', 'number', 0, 10000000, '₹'],
+        'refund_cutoff'   => ['Refunds up to this day of the next month are taken off', 'number', 1, 28, 'day'],
     ];
 
     /** Two concrete things to try, per lever. Shown on the card and used by Aisha. */
@@ -96,7 +106,7 @@ final class KraEngine
         ],
         'logging' => [
             'Log every call with Alt+L — it takes about ten seconds.',
-            'Your conversion and your weakest area can only be worked out from logged calls.',
+            'Log the calls that don\'t buy too — they show where your sales slip away.',
         ],
     ];
 
@@ -124,6 +134,10 @@ final class KraEngine
             return null;
         }
         $saved = json_decode((string) $row->config, true) ?: [];
+        if (!array_key_exists('spot_budget', $saved)) {
+            // Saved before spot rewards existed: they stay off until the admin turns them on.
+            $saved += ['spot_first_sale' => 0, 'spot_best_week' => 0, 'spot_best_month' => 0, 'spot_budget' => 0];
+        }
         $cfg = array_merge(self::DEFAULTS, array_intersect_key($saved, self::DEFAULTS));
         $cfg['_from_month'] = $row->month;
         $cfg['_saved_at'] = $row->saved_at;
@@ -193,8 +207,16 @@ final class KraEngine
         [$from, $to, $daysIn, $dayNow, $isCurrent] = self::monthBounds($month);
         $people = $this->people($month);
 
-        $users = $this->db->table('users')->whereNull('deleted_at')->where('status', 'active')
-            ->whereIn('role', ['agent', 'supervisor', 'manager'])
+        // Everyone active, plus anyone who sold this month and has since left — they still earned it.
+        $soldIds = $this->db->table('transactions')->where('status', 'approved')->whereBetween('created_at', [$from, $to])
+            ->distinct()->pluck('agent_id')->map(fn($v) => (int) $v)->all();
+        $users = $this->db->table('users')->whereIn('role', ['agent', 'supervisor', 'manager'])
+            ->where(function ($q) use ($soldIds) {
+                $q->where(fn($a) => $a->whereNull('deleted_at')->where('status', 'active'));
+                if ($soldIds) {
+                    $q->orWhereIn('id', $soldIds);
+                }
+            })
             ->get(['id', 'name', 'role', 'reports_to_id'])->keyBy('id');
         $ids = $users->keys()->map(fn($v) => (int) $v)->all();
 
@@ -241,13 +263,27 @@ final class KraEngine
             } elseif ($r['role'] === 'manager') {
                 $r['team'] = $this->teamBlock($out, $this->below($users, $id, true), $cfg, $scale, false);
             }
-            $r['incentive_total'] = $r['incentive'] + (int) ($r['team']['share_inr'] ?? 0) + (int) ($r['team']['bonus_inr'] ?? 0);
+        }
+        unset($r);
+
+        // Spot rewards and boosters, paid per sale / per moment on top.
+        $sellers = array_keys(array_filter($out, fn($r) => in_array($r['role'], ['agent', 'supervisor'], true)));
+        $spots = $this->spotRewards($month, $cfg, $sellers);
+        $boost = $this->boosterEarnings($from, $to, $users, $sellers);
+        foreach ($out as $id => &$r) {
+            $r['spots'] = $spots['by_user'][$id] ?? [];
+            $r['spot_inr'] = array_sum(array_map(fn($a) => $a['paid'] ? $a['amount'] : 0, $r['spots']));
+            $r['booster_inr'] = (int) ($boost['by_user'][$id] ?? 0);
+            $r['team_inr'] = (int) ($r['team']['share_inr'] ?? 0) + (int) ($r['team']['bonus_inr'] ?? 0);
+            $r['incentive_total'] = $r['incentive'] + $r['team_inr'] + $r['spot_inr'] + $r['booster_inr'];
         }
         unset($r);
 
         return [
             'month'      => $month,
             'config'     => $cfg,
+            'spots'      => ['spent' => $spots['spent'], 'over_budget' => $spots['over_budget']],
+            'boosters'   => $boost['boosters'],
             'days_in'    => $daysIn,
             'day_now'    => $dayNow,
             'days_left'  => $isCurrent ? max(0, $daysIn - $dayNow) : 0,
@@ -444,6 +480,342 @@ final class KraEngine
         return $block;
     }
 
+
+    // =========================================================================
+    // SPOT REWARDS
+    // =========================================================================
+
+    /**
+     * Spot rewards for a month, worked out from the sales themselves:
+     *  - the first approved sale on the floor each shift (shift days that
+     *    start in this month),
+     *  - the floor's best single sale of each week (Monday–Sunday by shift
+     *    day, credited to the month the week ends in, once the week is over),
+     *  - a new personal best month (beats their best of the previous 12).
+     * Paid in time order while the month's spot budget lasts; anything that
+     * doesn't fit is listed but not paid. An award once paid keeps its place
+     * ahead of later ones (see committed()), so a sale approved late can't
+     * take back money someone was already shown.
+     *
+     * @return array{by_user: array<int, array>, spent: int, over_budget: int}
+     */
+    public function spotRewards(string $month, array $cfg, array $sellerIds): array
+    {
+        $out = ['by_user' => [], 'spent' => 0, 'over_budget' => 0];
+        if (!$sellerIds) {
+            return $out;
+        }
+        [$from, $to, , , $isCurrent] = self::monthBounds($month);
+        $h = $this->rolloverHour();
+        $awards = [];
+
+        $first = (int) $cfg['spot_first_sale'];
+        if ($first > 0) {
+            // Shift days that start in this month: the 1st's shift to the last day's, each running to the next rollover.
+            $shiftFrom = date('Y-m-d H:i:s', strtotime($from) + $h * 3600);
+            $shiftTo = date('Y-m-d H:i:s', strtotime($to) + $h * 3600);
+            $sales = $this->db->table('transactions')->whereIn('agent_id', $sellerIds)->where('status', 'approved')
+                ->whereBetween('created_at', [$shiftFrom, $shiftTo])->orderBy('created_at')->orderBy('id')
+                ->get(['agent_id', 'created_at']);
+            $seen = [];
+            foreach ($sales as $t) {
+                $day = date('Y-m-d', strtotime((string) $t->created_at) - $h * 3600);
+                if (!isset($seen[$day])) {
+                    $seen[$day] = true;
+                    $awards[] = ['user' => (int) $t->agent_id, 'kind' => 'first_sale', 'key' => 'spot:first:' . $day . ':' . $t->agent_id,
+                                 'label' => 'First sale on the floor · ' . date('j M', strtotime($day)),
+                                 'amount' => $first, 'at' => (string) $t->created_at];
+                }
+            }
+        }
+
+        $week = (int) $cfg['spot_best_week'];
+        if ($week > 0) {
+            // Weeks ending inside this month (Sunday shift days), and already over.
+            $d = strtotime(substr($from, 0, 10));
+            $end = strtotime(substr($to, 0, 10));
+            for (; $d <= $end; $d += 86400) {
+                if ((int) date('N', $d) !== 7) {
+                    continue;
+                }
+                $weekEndAt = date('Y-m-d H:i:s', $d + 86400 + $h * 3600 - 1);   // the Sunday shift runs to Monday's rollover
+                if (strtotime($weekEndAt) > time()) {
+                    continue;
+                }
+                $weekStartAt = date('Y-m-d H:i:s', $d - 6 * 86400 + $h * 3600);
+                // After refunds: a refunded sale can't win the week.
+                $best = $this->db->table('transactions')->whereIn('agent_id', $sellerIds)->where('status', 'approved')
+                    ->whereBetween('created_at', [$weekStartAt, $weekEndAt])
+                    ->selectRaw('agent_id, (profit_mco - refund_mco_impact) AS net')
+                    ->orderByDesc('net')->orderBy('created_at')->first();
+                if ($best !== null && (float) $best->net > 0) {
+                    $awards[] = ['user' => (int) $best->agent_id, 'kind' => 'best_week', 'key' => 'spot:week:' . date('Y-m-d', $d) . ':' . $best->agent_id,
+                                 'label' => 'Best sale of the week to ' . date('j M', $d) . ' · $' . number_format((float) $best->net) . ' MCO',
+                                 'amount' => $week, 'at' => $weekEndAt];
+                }
+            }
+        }
+
+        $pb = (int) $cfg['spot_best_month'];
+        if ($pb > 0) {
+            $prevFrom = date('Y-m-01 00:00:00', strtotime($month . '-01 -12 months'));
+            $rows = $this->db->table('transactions')->whereIn('agent_id', $sellerIds)->where('status', 'approved')
+                ->whereBetween('created_at', [$prevFrom, $to])
+                ->groupBy('agent_id', $this->db->raw("DATE_FORMAT(created_at, '%Y-%m')"))
+                ->selectRaw("agent_id, DATE_FORMAT(created_at, '%Y-%m') AS m, SUM(profit_mco - refund_mco_impact) AS net")
+                ->get();
+            $byUserMonth = [];
+            foreach ($rows as $t) {
+                $byUserMonth[(int) $t->agent_id][(string) $t->m] = (float) $t->net;
+            }
+            foreach ($byUserMonth as $uid => $months) {
+                $now = $months[$month] ?? 0;
+                unset($months[$month]);
+                $prevBest = $months ? max($months) : null;
+                // A first-ever month is not a "personal best"; there's nothing to beat.
+                if ($prevBest !== null && $prevBest > 0 && $now > $prevBest) {
+                    $awards[] = ['user' => $uid, 'kind' => 'best_month', 'key' => 'spot:month:' . $month . ':' . $uid,
+                                 'label' => 'New personal best month' . ($isCurrent ? ' (so far)' : '') . ' · $' . number_format($now),
+                                 'amount' => $pb, 'at' => $to];
+                }
+            }
+        }
+
+        $held = $this->committed(array_column($awards, 'key'));
+        usort($awards, fn($a, $b) => self::payOrder($held, $a['key'], $a['at'], $b['key'], $b['at']));
+        $budget = (int) $cfg['spot_budget'];
+        $new = [];
+        foreach ($awards as $a) {
+            $a['paid'] = $out['spent'] + $a['amount'] <= $budget;
+            if ($a['paid']) {
+                $out['spent'] += $a['amount'];
+                if (!isset($held[$a['key']])) {
+                    $new[] = $a['key'];
+                }
+            } else {
+                $out['over_budget'] += $a['amount'];
+            }
+            $out['by_user'][$a['user']][] = $a;
+        }
+        $this->commit($new);
+        foreach ($out['by_user'] as &$list) {
+            usort($list, fn($a, $b) => strcmp($a['at'], $b['at']));
+        }
+        unset($list);
+        return $out;
+    }
+
+    /**
+     * Awards and booster payments already shown as paid, with when they were
+     * first paid. They keep their place in the queue ahead of anything newer,
+     * so money someone was told they earned doesn't move to someone else when
+     * an older sale is approved late. (Still dropped if the sale itself goes.)
+     *
+     * @param string[] $keys
+     * @return array<string,string> key → first paid at
+     */
+    private function committed(array $keys): array
+    {
+        if (!$keys) {
+            return [];
+        }
+        try {
+            $out = [];
+            foreach (array_chunk($keys, 500) as $chunk) {
+                $out += $this->db->table('kra_award_log')->whereIn('k', $chunk)->pluck('committed_at', 'k')->all();
+            }
+            return array_map('strval', $out);
+        } catch (\Throwable $e) {
+            return [];   // before the migration
+        }
+    }
+
+    /** @param string[] $keys */
+    private function commit(array $keys): void
+    {
+        if (!$keys) {
+            return;
+        }
+        try {
+            $now = date('Y-m-d H:i:s');
+            foreach (array_chunk($keys, 500) as $chunk) {
+                $this->db->table('kra_award_log')->insertOrIgnore(array_map(fn($k) => ['k' => $k, 'committed_at' => $now], $chunk));
+            }
+        } catch (\Throwable $e) {
+            error_log('[KRA] award log write failed: ' . $e->getMessage());
+        }
+    }
+
+    /** Already-paid first (in the order they were paid), then the rest in time order. */
+    private static function payOrder(array $held, string $ka, string $ta, string $kb, string $tb): int
+    {
+        $ha = $held[$ka] ?? null;
+        $hb = $held[$kb] ?? null;
+        if ($ha !== null && $hb !== null) {
+            return [$ha, $ta, $ka] <=> [$hb, $tb, $kb];
+        }
+        if ($ha !== null || $hb !== null) {
+            return $ha !== null ? -1 : 1;
+        }
+        return [$ta, $ka] <=> [$tb, $kb];
+    }
+
+    // =========================================================================
+    // DAILY BOOSTERS
+    // =========================================================================
+
+    /** Who a booster is for: every seller, or one team leader's agents. */
+    private function boosterEligible(string $scope, $users, array $sellerIds): array
+    {
+        if (preg_match('/^team:(\d+)$/', $scope, $m)) {
+            return array_values(array_intersect($this->below($users, (int) $m[1], false), $sellerIds));
+        }
+        return $sellerIds;
+    }
+
+    /**
+     * What every booster that touches [from, to] has paid, sale by sale, in
+     * the order the sales came in, until its budget ran out.
+     *
+     * @return array{by_user: array<int,int>, boosters: array}
+     */
+    public function boosterEarnings(string $from, string $to, $users, array $sellerIds): array
+    {
+        $out = ['by_user' => [], 'boosters' => []];
+        try {
+            $rows = $this->db->table('kra_boosters')->where('starts_at', '<=', $to)->where('ends_at', '>=', $from)
+                ->orderBy('starts_at')->get();
+        } catch (\Throwable $e) {
+            return $out;   // before the migration: no boosters
+        }
+        foreach ($rows as $b) {
+            $eligible = $this->boosterEligible((string) $b->scope, $users, $sellerIds);
+            $until = $b->stopped_at !== null && $b->stopped_at < $b->ends_at ? (string) $b->stopped_at : (string) $b->ends_at;
+            // After refunds: a refunded sale doesn't earn a booster.
+            $q = $this->db->table('transactions')->whereIn('agent_id', $eligible ?: [0])->where('status', 'approved')
+                ->whereBetween('created_at', [(string) $b->starts_at, $until])
+                ->selectRaw('id, agent_id, created_at, (profit_mco - refund_mco_impact) AS net');
+            if ($b->min_mco !== null) {
+                $q->whereRaw('(profit_mco - refund_mco_impact) >= ?', [(float) $b->min_mco]);
+            }
+            $sales = $q->get()->all();
+            $keyOf = fn($t) => 'boost:' . $b->id . ':' . $t->id;
+            $held = $this->committed(array_map($keyOf, $sales));
+            usort($sales, fn($x, $y) => self::payOrder($held, $keyOf($x), (string) $x->created_at . sprintf('%012d', $x->id), $keyOf($y), (string) $y->created_at . sprintf('%012d', $y->id)));
+            $spent = 0; $paidSales = 0; $mco = 0.0; $mine = []; $new = [];
+            foreach ($sales as $t) {
+                if ($spent + (int) $b->amount_inr > (int) $b->budget_inr) {
+                    break;
+                }
+                if (!isset($held[$keyOf($t)])) {
+                    $new[] = $keyOf($t);
+                }
+                $spent += (int) $b->amount_inr;
+                $paidSales++;
+                $mco += (float) $t->net;
+                // Credited to the month the sale belongs to.
+                if ((string) $t->created_at >= $from && (string) $t->created_at <= $to) {
+                    $out['by_user'][(int) $t->agent_id] = ($out['by_user'][(int) $t->agent_id] ?? 0) + (int) $b->amount_inr;
+                }
+                $mine[(int) $t->agent_id] = ($mine[(int) $t->agent_id] ?? 0) + (int) $b->amount_inr;
+            }
+            $this->commit($new);
+            $now = date('Y-m-d H:i:s');
+            $status = $b->stopped_at !== null ? 'stopped'
+                : ($spent + (int) $b->amount_inr > (int) $b->budget_inr ? 'budget_used'
+                : ($now < (string) $b->starts_at ? 'scheduled' : ($now > (string) $b->ends_at ? 'ended' : 'active')));
+            $out['boosters'][] = [
+                'id' => (int) $b->id, 'amount' => (int) $b->amount_inr, 'min_mco' => $b->min_mco === null ? null : (float) $b->min_mco,
+                'scope' => (string) $b->scope, 'budget' => (int) $b->budget_inr, 'starts_at' => (string) $b->starts_at,
+                'ends_at' => (string) $b->ends_at, 'stopped_at' => $b->stopped_at, 'status' => $status,
+                'spent' => $spent, 'sales' => $paidSales, 'mco' => round($mco, 2), 'eligible' => $eligible, 'by_user' => $mine,
+                'rule' => self::boosterRule((int) $b->amount_inr, $b->min_mco === null ? null : (float) $b->min_mco),
+            ];
+        }
+        return $out;
+    }
+
+    /** "6:00 AM" for tonight's; "Sat 25 Oct, 6:00 AM" when it runs past the next day. */
+    public static function endsLabel(string $endsAt): string
+    {
+        $t = strtotime($endsAt);
+        return $t - time() > 20 * 3600 ? date('D j M, g:i A', $t) : date('g:i A', $t);
+    }
+
+    public static function boosterRule(int $amount, ?float $minMco): string
+    {
+        return '₹' . number_format($amount) . ' for every approved sale' . ($minMco !== null ? ' of $' . number_format($minMco) . ' MCO or more' : '');
+    }
+
+    // =========================================================================
+    // THE CAP AND THE MONTH'S STATEMENT
+    // =========================================================================
+
+    /**
+     * Everyone's incentive for a month and the company-wide cap: all
+     * incentives together may not exceed cap_pct % of the profit above
+     * break-even. Over the cap, everyone's total is scaled down by the same
+     * factor. $projected = use month-end projections (for HR's forecast).
+     */
+    public function statement(?string $month = null, bool $projected = false): ?array
+    {
+        $snap = $this->snapshot($month);
+        return $snap === null ? null : self::statementFrom($snap, $projected);
+    }
+
+    /** The same statement from a snapshot already worked out (saves a second pass over the month). */
+    public static function statementFrom(array $snap, bool $projected = false): array
+    {
+        $cfg = $snap['config'];
+        $rate = (float) $cfg['usd_inr'];
+        $rows = [];
+        $total = 0; $floorMco = 0.0;
+        foreach ($snap['people'] as $p) {
+            if (in_array($p['role'], ['agent', 'supervisor'], true)) {
+                $floorMco += $projected ? $p['projected'] : $p['mco'];
+            }
+            $monthly = $p['incentive'];
+            if ($projected && $p['levels'] !== null) {
+                $monthly = self::incentive($p['projected'], $p['levels'], $cfg);
+                if ($p['quality_hit']) {
+                    $monthly = (int) round($monthly * (1 - (float) $cfg['quality_cut'] / 100));
+                }
+            }
+            $sum = $monthly + $p['team_inr'] + $p['spot_inr'] + $p['booster_inr'];
+            if ($sum <= 0 && $p['mco'] == 0) {
+                continue;
+            }
+            $rows[] = ['id' => $p['id'], 'name' => $p['name'], 'role' => $p['role'], 'net_mco' => $p['mco'],
+                       'monthly' => $monthly, 'team' => $p['team_inr'], 'spot' => $p['spot_inr'], 'booster' => $p['booster_inr'], 'sum' => $sum];
+            $total += $sum;
+        }
+        $profit = $floorMco * $rate - (float) $cfg['breakeven_inr'];
+        $cap = (int) round(max(0, $profit) * (float) $cfg['cap_pct'] / 100);
+        $scale = ($total > $cap && $total > 0) ? round($cap / $total, 4) : 1.0;
+        foreach ($rows as &$r) {
+            $r['total'] = (int) round($r['sum'] * $scale);
+        }
+        unset($r);
+        usort($rows, fn($a, $b) => $b['total'] <=> $a['total']);
+        return [
+            'month' => $snap['month'], 'projected' => $projected, 'rows' => $rows, 'before_cap' => $total,
+            'after_cap' => array_sum(array_column($rows, 'total')), 'cap' => $cap, 'scale' => $scale,
+            'floor_mco' => round($floorMco, 2), 'profit_inr' => (int) round($profit), 'breakeven_set' => (float) $cfg['breakeven_inr'] > 0,
+            'refund_cutoff' => (int) $cfg['refund_cutoff'],
+        ];
+    }
+
+    /** The shift rollover hour (system_config, default 18). */
+    private function rolloverHour(): int
+    {
+        try {
+            $v = $this->db->table('system_config')->where('key', 'business_day_start_hour')->value('value');
+            return $v === null ? 18 : max(0, min(23, (int) $v));
+        } catch (\Throwable $e) {
+            return 18;
+        }
+    }
+
     // =========================================================================
     // ONE PERSON (the CRM card and Aisha)
     // =========================================================================
@@ -474,7 +846,14 @@ final class KraEngine
             'nightly'   => ($me['next'] && $snap['days_left'] > 0) ? (int) ceil($me['next']['away'] / $snap['days_left']) : null,
             'bests'     => $this->bests($userId, $snap['month']),
             'feedback'  => $this->latestFeedback($userId),
+            'booster'   => null,
         ];
+        foreach ($snap['boosters'] as $b) {
+            if ($b['status'] === 'active' && in_array($userId, $b['eligible'], true)) {
+                $card['booster'] = ['rule' => $b['rule'], 'ends_at' => $b['ends_at'], 'earned' => (int) ($b['by_user'][$userId] ?? 0)];
+                break;
+            }
+        }
         if (isset($me['team'])) {
             $card['team'] = array_map(fn($id) => self::publicRow($snap['people'][$id]), $me['team']['ids']);
             if ($me['role'] === 'manager') {
@@ -556,13 +935,11 @@ final class KraEngine
         $out = ['best_month' => null, 'biggest' => null, 'streak' => 0];
         try {
             $from = date('Y-m-01 00:00:00', strtotime($month . '-01 -12 months'));
-            $rows = $this->db->table('transactions')->where('agent_id', $userId)->where('status', 'approved')
-                ->where('created_at', '>=', $from)->get(['created_at', 'profit_mco', 'refund_mco_impact']);
-            $byMonth = [];
-            foreach ($rows as $t) {
-                $m = substr((string) $t->created_at, 0, 7);
-                $byMonth[$m] = ($byMonth[$m] ?? 0) + (float) $t->profit_mco - (float) $t->refund_mco_impact;
-            }
+            $byMonth = $this->db->table('transactions')->where('agent_id', $userId)->where('status', 'approved')
+                ->where('created_at', '>=', $from)
+                ->groupBy($this->db->raw("DATE_FORMAT(created_at, '%Y-%m')"))
+                ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') AS m, SUM(profit_mco - refund_mco_impact) AS net")
+                ->pluck('net', 'm')->map(fn($v) => (float) $v)->all();
             unset($byMonth[$month]);
             if ($byMonth) {
                 arsort($byMonth);
@@ -575,7 +952,7 @@ final class KraEngine
             $out['biggest'] = $big === null ? null : round((float) $big);
 
             // Streak: shift days in a row (counting back from the latest one they worked) with a sale.
-            $h = (int) ($this->db->table('system_config')->where('key', 'business_day_start_hour')->value('value') ?? 18);
+            $h = $this->rolloverHour();
             $worked = $this->db->table('attendance_sessions')->where('user_id', $userId)
                 ->where('clock_in', '>=', date('Y-m-d H:i:s', time() - 45 * 86400))->orderByDesc('clock_in')
                 ->pluck('clock_in')->map(fn($c) => date('Y-m-d', strtotime((string) $c) - $h * 3600))->unique()->values()->all();

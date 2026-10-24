@@ -35,6 +35,9 @@ class BuddyPromptBuilder
      */
     public const HISTORY_MAX_MESSAGES = 20;
 
+    /** Prompt scaffolding between two of Aisha's own messages in a row. Never stored. */
+    public const LATER_MARKER = '[later — Aisha messaged again on her own]';
+
     // =========================================================================
     // HISTORY
     // =========================================================================
@@ -77,14 +80,22 @@ class BuddyPromptBuilder
         //
         // 1. Since P5, Aisha initiates — feed deliveries land as several model
         //    rows back to back. Consecutive same-role contents are exactly the
-        //    kind of proto-shape trap that 400'd us on 16 Aug (role-user rule),
-        //    so merge runs of the same role into one content instead of finding
-        //    out live.
+        //    kind of proto-shape trap that 400'd us on 16 Aug (role-user rule).
+        //    The agent's own run is merged (it's one thought typed in pieces).
+        //    Aisha's run is NOT: glued onto her last answer, a greeting and two
+        //    booster announcements read as part of that answer, and the model
+        //    learned to append them to the next one (found 24 Oct). A tiny
+        //    marker turn between her messages keeps each one separate.
         $merged = [];
         foreach ($kept as $m) {
             $last = count($merged) - 1;
             if ($last >= 0 && $merged[$last]['role'] === $m['role']) {
-                $merged[$last]['content'] .= "\n\n" . $m['content'];
+                if ($m['role'] === 'model') {
+                    $merged[] = ['role' => 'user', 'content' => self::LATER_MARKER];
+                    $merged[] = $m;
+                } else {
+                    $merged[$last]['content'] .= "\n\n" . $m['content'];
+                }
             } else {
                 $merged[] = $m;
             }

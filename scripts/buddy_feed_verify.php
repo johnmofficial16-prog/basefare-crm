@@ -676,7 +676,7 @@ check('leading nudges are KEPT, not dropped', str_contains($flat1, 'AAA111') && 
 check('first content is role user', ($h1[0]['role'] ?? '') === 'user');
 check('scaffold turn is the tiny resume marker', str_contains((string) ($h1[0]['parts'][0]['text'] ?? ''), 'conversation resumes'));
 
-// Consecutive same-role runs are merged — the proto-shape trap from 16 Aug.
+// No consecutive same-role contents — the proto-shape trap from 16 Aug.
 $roles1 = array_map(fn($c) => $c['role'], $h1);
 check('no consecutive same-role contents', $roles1 === array_values(array_filter($roles1, fn($r, $i) => $i === 0 || $roles1[$i-1] !== $r, ARRAY_FILTER_USE_BOTH)));
 $h2 = $bc([
@@ -687,10 +687,12 @@ $h2 = $bc([
     ['role' => 'user',  'content' => 'and also'],
 ]);
 $roles2 = array_map(fn($c) => $c['role'], $h2);
-check('model run merged into one turn', count(array_filter($roles2, fn($r) => $r === 'model')) === 1);
-check('user run merged too', $roles2 === ['user', 'model', 'user']);
-check('merged content keeps both halves in order',
-    str_contains((string) $h2[1]['parts'][0]['text'], "first\n\nsecond"));
+// Aisha's run stays as separate messages (glued together, the model learned to
+// append old nudges to its next answer — 24 Oct); the agent's run is merged.
+check('model run kept as separate turns, split by the marker', $roles2 === ['user', 'model', 'user', 'model', 'user']
+    && ($h2[2]['parts'][0]['text'] ?? '') === \App\Services\Buddy\BuddyPromptBuilder::LATER_MARKER);
+check('model messages keep their own text, in order', ($h2[1]['parts'][0]['text'] ?? '') === 'first' && ($h2[3]['parts'][0]['text'] ?? '') === 'second');
+check('user run merged', str_contains((string) $h2[4]['parts'][0]['text'], "ok\n\nand also"));
 
 // A history that is ALL Aisha (agent never replied) must still reach Gemini.
 $h3 = $bc([

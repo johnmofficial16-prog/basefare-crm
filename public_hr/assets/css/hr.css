@@ -1279,3 +1279,20 @@ a.attchip:hover { border-color: var(--ink-2); }
 .rtable.kra-people tbody tr:hover { background: transparent; }
 .rtable.kra-people .field { gap: 4px; }
 .rtable.kra-people .input { min-width: 140px; }
+.kra-kpis .kpi .d a { color: var(--gold-ink); font-weight: 600; }
+.kra-funnel { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.kra-funnel > div { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 12px; background: var(--paper); border: 1px solid var(--line); }
+.kra-funnel span { font-size: var(--fs-meta); color: var(--meta); font-weight: 600; }
+.kra-funnel b { font-size: 24px; }
+.kra-funnel em { font-style: normal; font-size: var(--fs-meta); color: var(--ink-2); }
+.kra-actions { margin: 0; padding-left: 22px; display: grid; gap: 10px; font-size: var(--fs-list); line-height: 1.5; }
+.rtable.kra-table tbody tr { cursor: default; }
+.rtable.kra-table tbody tr:hover { background: transparent; }
+.kra-prog { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.kra-prog span { width: 110px; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.kra-prog i { display: block; height: 100%; background: var(--navy); }
+.kra-fb p { margin: 0 0 6px; white-space: pre-line; }
+@media (max-width: 860px) { .kra-funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* On a phone the KRA tables scroll sideways inside their card instead of crushing each name onto three lines. */
+.rtable.kra-table { min-width: 760px; }
+.rtable.kra-table td:first-child b { white-space: nowrap; }

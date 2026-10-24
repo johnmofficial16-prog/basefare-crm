@@ -271,8 +271,8 @@ class AgentTools
         if (in_array($role, ['agent', 'supervisor', 'manager'], true)) {
             $r->register(
                 'get_my_kra',
-                "The agent's OWN KRA this month: target, levels, progress, how far to the next level, their projected "
-                . 'incentive (₹), their weakest lever (calls, closing, profit per sale) with what fixing it is worth, and '
+                "The agent's OWN KRA this month: target, levels, progress, how far to the next level, the incentive "
+                . 'earned so far (₹), their weakest lever (calls, closing, profit per sale) with what fixing it is worth, and '
                 . 'two steps to try. Team leaders and managers also get their team\'s progress (never anyone else\'s money). '
                 . 'Use for "my target", "my incentive", "how much will I earn", "what should I improve".',
                 [],
@@ -992,6 +992,7 @@ class AgentTools
             'month'      => date('F Y', strtotime($card['month'] . '-01')),
             'days_left'  => $card['days_left'],
             'confidential' => 'This incentive is private to the person you are talking to. Never mention anyone else\'s.',
+            'amounts_note' => 'Incentive amounts are what is earned SO FAR from approved sales, not a month-end forecast. They are paid with next month\'s salary after late refunds; if all incentives together pass the company\'s monthly budget, everyone\'s is reduced by the same share. Say "so far", never "projected".',
         ];
         if ($me['role'] !== 'manager') {
             $out['net_mco'] = $me['mco'];
@@ -1005,7 +1006,10 @@ class AgentTools
                     'current_level'   => $me['level'],
                     'next_level'      => $me['next'],
                     'per_night_needed'=> $card['nightly'],
-                    'incentive_inr_projected' => $me['incentive'],
+                    'monthly_incentive_inr_so_far' => $me['incentive'],
+                    'spot_rewards_inr_so_far' => $me['spot_inr'],
+                    'booster_inr_so_far'      => $me['booster_inr'],
+                    'total_incentive_inr_so_far' => $me['incentive_total'],
                     'quality_gate_hit'=> $me['quality_hit'],
                     'levers'          => array_map(fn($l) => ['lever' => $l['label'], 'now' => $l['text'], 'target' => $l['target_text'], 'on_target' => $l['ok']], $me['levers']),
                     'weakest'         => $me['gap'],
@@ -1014,19 +1018,22 @@ class AgentTools
                 $out['target'] = 'not set yet — HR still has to set it';
             }
         }
+        if (!empty($card['booster'])) {
+            $out['booster_tonight'] = $card['booster'];
+        }
         if (isset($me['team'])) {
             $out['team'] = [
                 'net_mco'   => $me['team']['mco'],
                 'target'    => $me['team']['target'],
                 'progress_pct' => $me['team']['progress'],
                 'past_level_1' => $me['team']['past_l1'] . ' of ' . $me['team']['set_up'],
-                'my_share_inr_projected' => $me['team']['share_inr'],
+                'my_team_share_inr_so_far' => $me['team']['share_inr'],
                 'members'   => array_map(fn($m) => ['name' => $m['name'], 'progress_pct' => $m['progress'], 'weakest' => $m['weakest']], $card['team']),
             ];
             if ($me['role'] === 'supervisor') {
                 $out['team']['bonus'] = $me['team']['bonus_unlocked'] ? 'unlocked' : ('needs ' . $me['team']['bonus_need'] . ' agents past Level 1');
             }
-            $out['incentive_inr_total_projected'] = $me['incentive_total'];
+            $out['total_incentive_inr_so_far'] = $me['incentive_total'];
         }
         return $out;
     }
