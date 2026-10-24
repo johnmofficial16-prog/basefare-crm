@@ -7,6 +7,9 @@
  * @var array  $old          Repopulation after failed submit
  */
 $old = $old ?? [];
+// Managers add new hires to their own team only: agents or team leaders.
+$isManager = ($_SESSION['role'] ?? '') === 'manager';
+$myId      = (int) ($_SESSION['user_id'] ?? 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -49,12 +52,12 @@ tailwind.config = {
   <div class="flex items-center justify-between mb-6">
     <div>
       <h1 class="text-2xl font-extrabold text-primary tracking-tight flex items-center gap-2" style="font-family:Manrope">
-        <span class="material-symbols-outlined text-2xl">person_add</span> Add User
+        <span class="material-symbols-outlined text-2xl">person_add</span> <?= $isManager ? 'Add a new hire' : 'Add User' ?>
       </h1>
-      <p class="text-sm text-slate-500 mt-0.5">Create a new agent, manager, or admin account.</p>
+      <p class="text-sm text-slate-500 mt-0.5"><?= $isManager ? 'They join your team and can log in straight away.' : 'Create a new agent, manager, or admin account.' ?></p>
     </div>
     <a href="/users" class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-primary transition-colors">
-      <span class="material-symbols-outlined text-sm">arrow_back</span> Back to Users
+      <span class="material-symbols-outlined text-sm">arrow_back</span> <?= $isManager ? 'Back to My Team' : 'Back to Users' ?>
     </a>
   </div>
 
@@ -97,15 +100,22 @@ tailwind.config = {
               <label class="field-label" for="role">Role <span class="text-rose-500">*</span></label>
               <select class="field-input" id="role" name="role" required onchange="handleRoleChange(this.value)">
                 <option value="agent"      <?= ($old['role'] ?? 'agent') === 'agent'      ? 'selected' : '' ?>>Agent</option>
+                <?php if (!$isManager): ?>
                 <option value="csa"        <?= ($old['role'] ?? '') === 'csa'             ? 'selected' : '' ?>>Customer Service Agent (CSA)</option>
+                <?php endif; ?>
                 <option value="supervisor" <?= ($old['role'] ?? '') === 'supervisor' ? 'selected' : '' ?>>Team leader</option>
                 <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
                 <option value="manager"    <?= ($old['role'] ?? '') === 'manager' ? 'selected' : '' ?>>Manager</option>
                 <option value="admin"      <?= ($old['role'] ?? '') === 'admin'   ? 'selected' : '' ?>>Admin</option>
                 <?php endif; ?>
               </select>
+              <?php if ($isManager): ?>
+              <p class="text-xs text-slate-500 mt-1">Agents sell and record bookings. Team leaders sell too and look after their own agents; they report to you.</p>
+              <?php else: ?>
               <p class="text-[10px] text-slate-400 mt-1">Agents record txns. CSAs have global view. Team leaders sell like agents and look after their own agents. Managers see all team data.</p>
+              <?php endif; ?>
             </div>
+            <?php if (!$isManager): /* a manager's new hires clock in on their team's grace period */ ?>
             <div>
               <label class="field-label" for="grace_period_mins">Late Login Grace Period (minutes)</label>
               <input class="field-input" type="number" id="grace_period_mins" name="grace_period_mins"
@@ -113,9 +123,23 @@ tailwind.config = {
                      min="0" max="120" placeholder="30">
               <p class="text-[10px] text-slate-400 mt-1">How many minutes late before clock-in is blocked. Default: 30.</p>
             </div>
+            <?php endif; ?>
           </div>
 
           <!-- Reports To (required for agent/supervisor) -->
+          <?php if ($isManager): ?>
+          <div id="reports-to-wrap" class="<?= ($old['role'] ?? 'agent') === 'supervisor' || count($superiors) < 2 ? 'hidden' : '' ?>">
+            <label class="field-label" for="reports_to_id">Reports To <span class="text-rose-500">*</span></label>
+            <select class="field-input" id="reports_to_id" name="reports_to_id">
+              <?php foreach ($superiors as $sup): ?>
+              <option value="<?= $sup->id ?>" <?= (int)($old['reports_to_id'] ?? $myId) === (int) $sup->id ? 'selected' : '' ?>>
+                <?= (int) $sup->id === $myId ? 'You (' . htmlspecialchars($sup->name) . ')' : htmlspecialchars($sup->name) . ' (Team leader)' ?>
+              </option>
+              <?php endforeach; ?>
+            </select>
+            <p class="text-xs text-slate-500 mt-1">You, or one of your team leaders.</p>
+          </div>
+          <?php else: ?>
           <div id="reports-to-wrap" class="<?= in_array($old['role'] ?? 'agent', ['admin','manager']) ? 'hidden' : '' ?>">
             <label class="field-label" for="reports_to_id">Reports To <span class="text-rose-500">*</span></label>
             <select class="field-input" id="reports_to_id" name="reports_to_id">
@@ -128,6 +152,7 @@ tailwind.config = {
             </select>
             <p class="text-[10px] text-slate-400 mt-1">Agents and supervisors must report to a manager or supervisor.</p>
           </div>
+          <?php endif; ?>
 
         </div>
       </div>
@@ -190,7 +215,7 @@ tailwind.config = {
         <a href="/users" class="px-5 py-2.5 border border-slate-200 text-slate-600 font-semibold text-sm rounded-lg hover:bg-slate-50 transition-colors">Cancel</a>
         <button type="submit" id="submit-btn"
                 class="inline-flex items-center gap-2 bg-primary text-white font-bold py-2.5 px-6 rounded-lg text-sm hover:bg-primary/90 transition-colors shadow-sm">
-          <span class="material-symbols-outlined text-base">person_add</span> Create User
+          <span class="material-symbols-outlined text-base">person_add</span> <?= $isManager ? 'Add to my team' : 'Create User' ?>
         </button>
       </div>
 
@@ -215,6 +240,11 @@ function togglePw(fieldId, btn) {
 function handleRoleChange(role) {
   var wrap = document.getElementById('reports-to-wrap');
   if (!wrap) return;
+  <?php if ($isManager): ?>
+  // A manager's team leaders always report to the manager; with no team leaders there's nothing to pick
+  wrap.classList.toggle('hidden', role === 'supervisor' || <?= count($superiors) < 2 ? 'true' : 'false' ?>);
+  return;
+  <?php endif; ?>
   if (role === 'admin' || role === 'manager') {
     wrap.classList.add('hidden');
   } else {

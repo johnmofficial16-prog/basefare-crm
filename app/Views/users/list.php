@@ -14,6 +14,10 @@ $total      = $data['total'];
 $page       = $data['page'];
 $totalPages = $data['total_pages'];
 $filters    = $filters ?? [];
+// Managers see only their own team: add new hires, mark leavers, move agents between themselves and their team leaders
+$isManager     = $actorRole === 'manager';
+$teamSuperiors = $teamSuperiors ?? collect();
+$canMove       = $isManager && count($teamSuperiors) > 1;
 
 // Build base query string for pagination (preserving filters)
 $queryBase = http_build_query(array_filter([
@@ -77,11 +81,18 @@ tailwind.config = {
     <!-- Page Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <p class="text-[10px] font-bold text-primary uppercase tracking-wider mb-1">Admin</p>
-        <h1 class="text-2xl font-bold text-slate-900" style="font-family:Manrope">User Management</h1>
-        <p class="text-slate-500 text-sm mt-1"><?= number_format($total) ?> user<?= $total !== 1 ? 's' : '' ?> total</p>
+        <p class="text-[10px] font-bold text-primary uppercase tracking-wider mb-1"><?= $isManager ? 'Manager' : 'Admin' ?></p>
+        <h1 class="text-2xl font-bold text-slate-900" style="font-family:Manrope"><?= $isManager ? 'My Team' : 'User Management' ?></h1>
+        <p class="text-slate-500 text-sm mt-1"><?= number_format($total) ?> <?= $isManager ? 'on your team' : ('user' . ($total !== 1 ? 's' : '') . ' total') ?></p>
       </div>
       <div class="flex items-center gap-2">
+        <?php if ($isManager): ?>
+        <a href="/users/create"
+           class="inline-flex items-center gap-2 bg-primary text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm hover:bg-primary/90">
+          <span class="material-symbols-outlined text-base">person_add</span>
+          Add new hire
+        </a>
+        <?php endif; ?>
         <?php if ($actorRole === 'admin'): ?>
         <a id="btn-csv-users"
            href="/users/export?<?= http_build_query(array_filter($filters)) ?>"
@@ -166,21 +177,21 @@ tailwind.config = {
         <table class="w-full text-left text-sm">
           <thead class="bg-slate-50 border-b border-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
             <tr>
-              <th class="px-5 py-3">#</th>
+              <?php if (!$isManager): ?><th class="px-5 py-3">#</th><?php endif; ?>
               <th class="px-5 py-3">Name</th>
-              <th class="px-5 py-3">Email</th>
+              <?php if (!$isManager): ?><th class="px-5 py-3">Email</th><?php endif; ?>
               <th class="px-5 py-3">Role</th>
               <th class="px-5 py-3">Reports To</th>
               <th class="px-5 py-3">Status</th>
-              <th class="px-5 py-3">Grace Period</th>
-              <th class="px-5 py-3">Created</th>
+              <th class="px-5 py-3 <?= $isManager ? 'hidden xl:table-cell' : '' ?>">Grace Period</th>
+              <?php if (!$isManager): ?><th class="px-5 py-3">Created</th><?php endif; ?>
               <th class="px-5 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
             <?php if ($records->isEmpty()): ?>
             <tr>
-              <td colspan="9" class="py-20 text-center">
+              <td colspan="<?= $isManager ? 6 : 9 ?>" class="py-20 text-center">
                 <div class="flex flex-col items-center gap-3 text-slate-400">
                   <span class="material-symbols-outlined text-5xl opacity-30">group</span>
                   <p class="font-semibold text-slate-500">No users found.</p>
@@ -196,7 +207,7 @@ tailwind.config = {
               $displayRole = $u->role;
             ?>
             <tr class="hover:bg-slate-50/50 transition-colors <?= $u->status === 'suspended' ? 'opacity-60' : '' ?>">
-              <td class="px-5 py-3.5 text-slate-400 text-xs font-mono"><?= $u->id ?></td>
+              <?php if (!$isManager): ?><td class="px-5 py-3.5 text-slate-400 text-xs font-mono"><?= $u->id ?></td><?php endif; ?>
               <td class="px-5 py-3.5">
                 <div class="flex items-center gap-2.5">
                   <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs flex-shrink-0">
@@ -209,10 +220,13 @@ tailwind.config = {
                       <span class="ml-1 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold">You</span>
                       <?php endif; ?>
                     </div>
+                    <?php if ($isManager): ?>
+                    <div class="text-slate-500 text-xs"><?= htmlspecialchars($u->email) ?></div>
+                    <?php endif; ?>
                   </div>
                 </div>
               </td>
-              <td class="px-5 py-3.5 text-slate-500 text-xs"><?= htmlspecialchars($u->email) ?></td>
+              <?php if (!$isManager): ?><td class="px-5 py-3.5 text-slate-500 text-xs"><?= htmlspecialchars($u->email) ?></td><?php endif; ?>
               <td class="px-5 py-3.5"><?= userRoleBadge($displayRole) ?></td>
               <td class="px-5 py-3.5 text-xs text-slate-600 font-medium">
                 <?php if ($u->reportsTo): ?>
@@ -225,10 +239,29 @@ tailwind.config = {
                 <?php endif; ?>
               </td>
               <td class="px-5 py-3.5"><?= userStatusBadge($u->status) ?></td>
-              <td class="px-5 py-3.5 text-xs text-slate-500"><?= $u->grace_period_mins ?> min</td>
-              <td class="px-5 py-3.5 text-xs text-slate-400 whitespace-nowrap"><?= $createdAt ?></td>
+              <td class="px-5 py-3.5 text-xs text-slate-500 <?= $isManager ? 'hidden xl:table-cell' : '' ?>"><?= $u->grace_period_mins ?> min</td>
+              <?php if (!$isManager): ?><td class="px-5 py-3.5 text-xs text-slate-400 whitespace-nowrap"><?= $createdAt ?></td><?php endif; ?>
               <td class="px-5 py-3.5">
-                <div class="flex items-center gap-1.5 justify-end">
+                <div class="flex items-center gap-1.5 justify-end <?= $isManager ? 'flex-wrap [&>button]:whitespace-nowrap' : '' ?>">
+                  <?php if ($isManager): ?>
+                  <!-- Manager: own team only — move within the team, reset password, mark as left -->
+                  <?php if ($canMove && $u->role === 'agent'): ?>
+                  <button onclick="openMoveModal(<?= $u->id ?>, '<?= htmlspecialchars(addslashes($u->name)) ?>', <?= (int) $u->reports_to_id ?>)"
+                          class="inline-flex items-center gap-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors">
+                    <span class="material-symbols-outlined text-sm">swap_horiz</span> Move
+                  </button>
+                  <?php endif; ?>
+                  <?php if (!$isSelf): ?>
+                  <button onclick="openResetModal(<?= $u->id ?>, '<?= htmlspecialchars(addslashes($u->name)) ?>')"
+                          class="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors">
+                    <span class="material-symbols-outlined text-sm">lock_reset</span> Reset
+                  </button>
+                  <button onclick="markLeft(<?= $u->id ?>, '<?= htmlspecialchars(addslashes($u->name)) ?>', <?= $u->role === 'supervisor' ? 'true' : 'false' ?>)"
+                          class="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors">
+                    <span class="material-symbols-outlined text-sm">person_remove</span> Mark as left
+                  </button>
+                  <?php endif; ?>
+                  <?php else: ?>
                   <!-- Edit — hidden for managers viewing admin/manager rows -->
                   <?php if (!($actorRole === 'manager' && in_array($u->role, ['admin', 'manager']))): ?>
                   <a href="/users/<?= $u->id ?>/edit"
@@ -255,6 +288,7 @@ tailwind.config = {
                           class="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold py-1.5 px-2.5 rounded-lg text-xs transition-colors">
                     <span class="material-symbols-outlined text-sm">check_circle</span>
                   </button>
+                  <?php endif; ?>
                   <?php endif; ?>
                   <?php endif; ?>
                 </div>
@@ -341,7 +375,95 @@ tailwind.config = {
   </div>
 </div>
 
+<?php if ($canMove): ?>
+<!-- ── Move Within Team Modal (manager) ───────────────────────────────── -->
+<div id="move-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeMoveModal()"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
+        <span class="material-symbols-outlined text-slate-600">swap_horiz</span>
+      </div>
+      <div>
+        <h3 class="font-bold text-slate-900 text-sm" style="font-family:Manrope">Move within your team</h3>
+        <p id="move-modal-name" class="text-xs text-slate-500"></p>
+      </div>
+    </div>
+    <label class="block text-[12px] font-bold text-slate-500 uppercase tracking-wider mb-1" for="move-to">Reports to</label>
+    <select id="move-to" class="w-full text-sm border-slate-200 rounded-lg focus:ring-primary focus:border-primary">
+      <?php foreach ($teamSuperiors as $sup): ?>
+      <option value="<?= (int) $sup->id ?>"><?= (int) $sup->id === (int) ($_SESSION['user_id'] ?? 0) ? 'You (' . htmlspecialchars($sup->name) . ')' : htmlspecialchars($sup->name) . ' (Team leader)' ?></option>
+      <?php endforeach; ?>
+    </select>
+    <p id="move-error" class="hidden text-rose-600 text-xs font-medium mt-3"></p>
+    <div class="flex gap-2 mt-6">
+      <button onclick="closeMoveModal()" class="flex-1 border border-slate-200 text-slate-600 font-semibold py-2.5 rounded-lg text-sm hover:bg-slate-50 transition-colors">Cancel</button>
+      <button onclick="submitMove()" id="move-submit-btn"
+              class="flex-1 bg-primary text-white font-bold py-2.5 rounded-lg text-sm hover:bg-primary/90 transition-colors flex items-center justify-center gap-1">
+        <span class="material-symbols-outlined text-base">swap_horiz</span> Move
+      </button>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
 <script>
+var _moveUserId = null;
+
+function openMoveModal(userId, name, currentId) {
+  _moveUserId = userId;
+  document.getElementById('move-modal-name').textContent = name;
+  document.getElementById('move-to').value = String(currentId);
+  document.getElementById('move-error').classList.add('hidden');
+  document.getElementById('move-modal').classList.remove('hidden');
+}
+
+function closeMoveModal() {
+  document.getElementById('move-modal').classList.add('hidden');
+  _moveUserId = null;
+}
+
+function submitMove() {
+  var btn = document.getElementById('move-submit-btn');
+  var err = document.getElementById('move-error');
+  btn.disabled = true;
+  var body = new URLSearchParams();
+  body.append('reports_to_id', document.getElementById('move-to').value);
+  fetch('/users/' + _moveUserId + '/move', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>' },
+    body: body.toString()
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (data.success) { location.reload(); return; }
+    err.textContent = data.error || 'Could not move them.';
+    err.classList.remove('hidden');
+    btn.disabled = false;
+  })
+  .catch(function() {
+    err.textContent = 'Network error. Please try again.';
+    err.classList.remove('hidden');
+    btn.disabled = false;
+  });
+}
+
+function markLeft(userId, name, isLeader) {
+  var msg = 'Mark ' + name + ' as having left the company?\n\nThey will no longer be able to log in and will drop off your team.'
+    + (isLeader ? '\n\nTheir agents will move to you.' : '');
+  if (!confirm(msg)) return;
+  fetch('/users/' + userId + '/left', {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': '<?= $_SESSION['csrf_token'] ?? '' ?>' }
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (data.success) { location.reload(); return; }
+    alert(data.error || 'Could not remove them.');
+  })
+  .catch(function() { alert('Network error. Please try again.'); });
+}
+
 var _resetUserId = null;
 
 function openResetModal(userId, name) {

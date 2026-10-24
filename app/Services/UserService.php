@@ -104,11 +104,14 @@ class UserService
             return ['success' => false, 'error' => 'Invalid role.'];
         }
 
-        // Rank protection: managers cannot create manager or admin accounts
+        // Rank protection: managers add agents and team leaders, onto their own team only
         $actor = User::find($adminId);
         if ($actor && $actor->role === User::ROLE_MANAGER) {
-            if (in_array($role, [User::ROLE_MANAGER, User::ROLE_ADMIN])) {
-                return ['success' => false, 'error' => 'Managers can only create agent and supervisor accounts.'];
+            if (!in_array($role, [User::ROLE_AGENT, User::ROLE_SUPERVISOR], true)) {
+                return ['success' => false, 'error' => 'Managers can only add agents and team leaders.'];
+            }
+            if (!$this->teamSuperiors($actor)->firstWhere('id', $reportsToId)) {
+                return ['success' => false, 'error' => 'New people must report to you or one of your team leaders.'];
             }
         }
         if (strlen($pass) < 8) {
@@ -386,6 +389,112 @@ class UserService
         ]);
 
         return ['success' => true];
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // MANAGER: OWN TEAM ONLY
+    // A manager adds new hires to their own team, marks their own people as
+    // having left, and moves agents between themselves and their own team
+    // leaders. They never see or touch anyone outside their team. (John, 25 Oct.)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Who a manager's people can report to: the manager and their active team leaders. */
+    public function teamSuperiors(User $manager)
+    {
+        $leaders = User::where('role', User::ROLE_SUPERVISOR)
+            ->where('reports_to_id', $manager->id)
+            ->where('status', User::STATUS_ACTIVE)
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get(['id', 'name', 'role']);
+        return collect([$manager])->concat($leaders);
+    }
+
+    /** The grace period most of the manager's team works under, so a new hire clocks in on the same rules. */
+    public function teamGrace(User $manager): int
+    {
+        $ids = $manager->getTeamAgentIds();
+        $counts = $ids
+            ? User::whereIn('id', $ids)->whereNotNull('grace_period_mins')->pluck('grace_period_mins')->countBy()->sortDesc()
+            : collect();
+        return $counts->isEmpty() ? 30 : (int) $counts->keys()->first();
+    }
+
+    /**
+     * A manager marks someone on their own team as having left the company.
+     * The account is set inactive, not deleted, so an admin can bring it back.
+     * A leaving team leader's agents move up to the manager.
+     */
+    public function markLeft(int $userId, int $managerId): array
+    {
+        $manager = User::whereNull('deleted_at')->find($managerId);
+        if (!$manager || $manager->role !== User::ROLE_MANAGER) {
+            return ['success' => false, 'error' => 'Access denied.'];
+        }
+        if ($userId === $managerId) {
+            return ['success' => false, 'error' => 'You cannot remove yourself.'];
+        }
+        if (!in_array($userId, $manager->getTeamAgentIds(), true)) {
+            return ['success' => false, 'error' => 'You can only remove people on your own team.'];
+        }
+        $user = User::whereNull('deleted_at')->find($userId);
+        if (!$user || !in_array($user->role, [User::ROLE_AGENT, User::ROLE_SUPERVISOR, User::ROLE_CSA], true)) {
+            return ['success' => false, 'error' => 'Only agents, team leaders and CSAs can be removed here.'];
+        }
+
+        $movedUp = [];
+        DB::connection()->transaction(function () use ($user, $managerId, &$movedUp) {
+            if ($user->role === User::ROLE_SUPERVISOR) {
+                $movedUp = User::where('reports_to_id', $user->id)->whereNull('deleted_at')->pluck('id')->all();
+                if ($movedUp) {
+                    User::whereIn('id', $movedUp)->update(['reports_to_id' => $managerId]);
+                }
+            }
+            $user->update(['status' => User::STATUS_INACTIVE]);
+        });
+
+        $this->log($managerId, 'user_left', 'users', $userId, [
+            'name'            => $user->name,
+            'email'           => $user->email,
+            'role'            => $user->role,
+            'moved_to_manager'=> $movedUp,
+        ]);
+
+        return ['success' => true, 'name' => $user->name, 'moved_up' => count($movedUp)];
+    }
+
+    /** A manager moves one of their agents to themselves or to one of their own team leaders. */
+    public function moveWithinTeam(int $userId, int $newSuperiorId, int $managerId): array
+    {
+        $manager = User::whereNull('deleted_at')->find($managerId);
+        if (!$manager || $manager->role !== User::ROLE_MANAGER) {
+            return ['success' => false, 'error' => 'Access denied.'];
+        }
+        if (!in_array($userId, $manager->getTeamAgentIds(), true)) {
+            return ['success' => false, 'error' => 'You can only move people on your own team.'];
+        }
+        $user = User::whereNull('deleted_at')->find($userId);
+        if (!$user || $user->role !== User::ROLE_AGENT) {
+            return ['success' => false, 'error' => 'Only agents can be moved. Team leaders always report to you.'];
+        }
+        $superior = $this->teamSuperiors($manager)->firstWhere('id', $newSuperiorId);
+        if (!$superior) {
+            return ['success' => false, 'error' => 'Pick yourself or one of your own team leaders.'];
+        }
+        if ((int) $user->reports_to_id === $newSuperiorId) {
+            return ['success' => true, 'name' => $superior->name];
+        }
+
+        $before = $user->reports_to_id;
+        $user->update(['reports_to_id' => $newSuperiorId]);
+
+        $this->log($managerId, 'user_moved', 'users', $userId, [
+            'name'               => $user->name,
+            'from_reports_to_id' => $before,
+            'to_reports_to_id'   => $newSuperiorId,
+        ]);
+
+        return ['success' => true, 'name' => $superior->name];
     }
 
     // ─────────────────────────────────────────────────────────────────────────

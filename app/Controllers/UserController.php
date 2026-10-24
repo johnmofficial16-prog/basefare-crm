@@ -45,6 +45,11 @@ class UserController
 
         $data = $this->svc->list($filters, $page, 20);
 
+        // Managers can move agents between themselves and their own team leaders
+        $teamSuperiors = $actorRole === User::ROLE_MANAGER
+            ? $this->svc->teamSuperiors(User::find($actorId))
+            : collect();
+
         $activePage   = 'users';
         $flashSuccess = $_SESSION['flash_success'] ?? null;
         $flashError   = $_SESSION['flash_error'] ?? null;
@@ -66,24 +71,21 @@ class UserController
     {
         $this->requireAdminOrManager($response);
 
-        // Managers cannot create users
-        if (($_SESSION['role'] ?? '') === User::ROLE_MANAGER) {
-            $_SESSION['flash_error'] = 'Managers cannot create users.';
-            return $response->withHeader('Location', '/users')->withStatus(302);
-        }
-
         $activePage = 'users';
         $actorRole  = $_SESSION['role'] ?? 'agent';
         $flashError = $_SESSION['flash_error'] ?? null;
         $old        = $_SESSION['form_old'] ?? [];
         unset($_SESSION['flash_error'], $_SESSION['form_old']);
 
-        // Load managers + supervisors for the reports_to_id dropdown
-        $superiors = User::whereIn('role', [User::ROLE_MANAGER, User::ROLE_SUPERVISOR])
-            ->where('status', User::STATUS_ACTIVE)
-            ->whereNull('deleted_at')
-            ->orderBy('name')
-            ->get(['id', 'name', 'role']);
+        // Load managers + supervisors for the reports_to_id dropdown.
+        // A manager's new hires join their own team: them or their team leaders.
+        $superiors = $actorRole === User::ROLE_MANAGER
+            ? $this->svc->teamSuperiors(User::find((int) $_SESSION['user_id']))
+            : User::whereIn('role', [User::ROLE_MANAGER, User::ROLE_SUPERVISOR])
+                ->where('status', User::STATUS_ACTIVE)
+                ->whereNull('deleted_at')
+                ->orderBy('name')
+                ->get(['id', 'name', 'role']);
 
         ob_start();
         require __DIR__ . '/../Views/users/create.php';
@@ -101,19 +103,38 @@ class UserController
     {
         $this->requireAdminOrManager($response);
 
-        // Managers cannot create users
+        $body    = $request->getParsedBody() ?? [];
+        $actorId = (int) $_SESSION['user_id'];
+        $grace   = null;
+
+        // Managers: the new hire joins their own team (them, or one of their
+        // team leaders for an agent) and clocks in on the team's grace period.
         if (($_SESSION['role'] ?? '') === User::ROLE_MANAGER) {
-            $_SESSION['flash_error'] = 'Managers cannot create users.';
-            return $response->withHeader('Location', '/users')->withStatus(302);
+            $manager = User::find($actorId);
+            $role    = ($body['role'] ?? '') === User::ROLE_SUPERVISOR ? User::ROLE_SUPERVISOR : User::ROLE_AGENT;
+            $to      = (int) ($body['reports_to_id'] ?? 0);
+            if ($role === User::ROLE_SUPERVISOR || !$this->svc->teamSuperiors($manager)->firstWhere('id', $to)) {
+                $to = $actorId;
+            }
+            $grace = $this->svc->teamGrace($manager);
+            $body  = array_merge($body, [
+                'role'              => $role,
+                'reports_to_id'     => $to,
+                'grace_period_mins' => min($grace, 120),
+            ]);
         }
 
-        $body   = $request->getParsedBody() ?? [];
-        $result = $this->svc->create($body, (int) $_SESSION['user_id']);
+        $result = $this->svc->create($body, $actorId);
 
         if (!$result['success']) {
             $_SESSION['flash_error'] = $result['error'];
             $_SESSION['form_old']    = $body;
             return $response->withHeader('Location', '/users/create')->withStatus(302);
+        }
+
+        // The team may be on the 24/7 roster's long grace, which the form's 0–120 check doesn't allow
+        if ($grace !== null && $grace > 120) {
+            $result['user']->update(['grace_period_mins' => $grace]);
         }
 
         $_SESSION['flash_success'] = 'User "' . htmlspecialchars($body['name'] ?? '') . '" created successfully.';
@@ -287,6 +308,46 @@ class UserController
         }
 
         return $response->withHeader('Location', '/users')->withStatus(302);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // LEFT THE COMPANY — POST (manager, own team only; account set inactive)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function markLeft(Request $request, Response $response, array $args): Response
+    {
+        if (($_SESSION['role'] ?? '') !== User::ROLE_MANAGER) {
+            return $this->json($response, ['success' => false, 'error' => 'Access denied.'], 403);
+        }
+        $result = $this->svc->markLeft((int) ($args['id'] ?? 0), (int) $_SESSION['user_id']);
+        if ($result['success']) {
+            $_SESSION['flash_success'] = $result['name'] . ' has been marked as left and removed from your team.'
+                . ($result['moved_up'] ? ' Their ' . $result['moved_up'] . ' agent' . ($result['moved_up'] === 1 ? '' : 's') . ' now report to you.' : '');
+        }
+        return $this->json($response, $result, $result['success'] ? 200 : 422);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // MOVE WITHIN TEAM — POST (manager: agent to self or own team leader)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function moveWithinTeam(Request $request, Response $response, array $args): Response
+    {
+        if (($_SESSION['role'] ?? '') !== User::ROLE_MANAGER) {
+            return $this->json($response, ['success' => false, 'error' => 'Access denied.'], 403);
+        }
+        $body   = $request->getParsedBody() ?? [];
+        $result = $this->svc->moveWithinTeam((int) ($args['id'] ?? 0), (int) ($body['reports_to_id'] ?? 0), (int) $_SESSION['user_id']);
+        if ($result['success']) {
+            $_SESSION['flash_success'] = 'Moved. They now report to ' . $result['name'] . '.';
+        }
+        return $this->json($response, $result, $result['success'] ? 200 : 422);
+    }
+
+    private function json(Response $response, array $data, int $status = 200): Response
+    {
+        $response->getBody()->write(json_encode($data));
+        return $response->withHeader('Content-Type', 'application/json')->withStatus($status);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

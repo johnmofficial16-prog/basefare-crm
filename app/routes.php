@@ -140,6 +140,8 @@ $app->group('/users', function ($group) {
     $group->post('/{id:[0-9]+}/toggle-status', [UserController::class, 'toggleStatus']);
     $group->post('/{id:[0-9]+}/reset-password', [UserController::class, 'resetPassword']);
     $group->post('/{id:[0-9]+}/delete', [UserController::class, 'delete']);
+    $group->post('/{id:[0-9]+}/left', [UserController::class, 'markLeft']);        // manager, own team only
+    $group->post('/{id:[0-9]+}/move', [UserController::class, 'moveWithinTeam']);  // manager, within own team only
 })
 ->add(new AttendanceGateMiddleware())
 ->add(new IpRestrictionMiddleware())
