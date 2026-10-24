@@ -77,6 +77,26 @@ class Theme
         }, $html, 1) ?? $html;
     }
 
+    /** "Hide the menu" button for the sidebar header (Alt+B does the same). */
+    public static function sidebarHideButton(): string
+    {
+        return '<button type="button" class="bf-side-btn" data-bf-side-toggle aria-label="Hide the menu (Alt+B)" title="Hide the menu (Alt+B)">'
+            . '<span class="material-symbols-outlined" aria-hidden="true">left_panel_close</span></button>';
+    }
+
+    /**
+     * The slim rail shown while the sidebar is hidden: the logo and a button to
+     * bring the menu back. Each browser remembers the choice (theme.js).
+     */
+    public static function sidebarRail(string $home = '/dashboard'): string
+    {
+        return '<div class="bf-rail" data-theme="dark" aria-label="Menu hidden">'
+            . '<a href="' . htmlspecialchars($home, ENT_QUOTES) . '" class="bf-rail-logo" aria-label="Base Fare home">'
+            . '<img src="/assets/img/basefare-logo-email.png" alt=""></a>'
+            . '<button type="button" class="bf-side-btn" data-bf-side-toggle aria-label="Show the menu (Alt+B)" title="Show the menu (Alt+B)">'
+            . '<span class="material-symbols-outlined" aria-hidden="true">left_panel_open</span></button></div>';
+    }
+
     /** The switch shown in every sidebar footer. */
     public static function toggleButton(bool $full = false): string
     {

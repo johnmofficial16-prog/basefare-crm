@@ -50,6 +50,36 @@
     tw.config = cfg;
   }
 
+  // Sidebar hidden? Each browser remembers it. Applied here, before the page
+  // draws, so a hidden sidebar never flashes open on the next page.
+  var SIDE_KEY = 'bf-side-hidden';
+  var root = document.documentElement;
+  try {
+    if (localStorage.getItem(SIDE_KEY) === '1') {
+      root.classList.add('bf-side-hidden', 'bf-no-anim');
+      window.addEventListener('load', function () {
+        requestAnimationFrame(function () { root.classList.remove('bf-no-anim'); });
+      });
+    }
+  } catch (e) { /* storage blocked: sidebar simply starts open */ }
+  function toggleSide() {
+    var hidden = root.classList.toggle('bf-side-hidden');
+    try { localStorage.setItem(SIDE_KEY, hidden ? '1' : '0'); } catch (e) { /* ignore */ }
+  }
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest ? e.target.closest('[data-bf-side-toggle]') : null;
+    if (!t) return;
+    e.preventDefault();
+    toggleSide();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'b' || e.key === 'B')) {
+      if (!document.querySelector('.bf-side')) return;   // pages without a sidebar
+      e.preventDefault();
+      toggleSide();
+    }
+  });
+
   // Chart.js: axis text and grid lines follow the theme. Chart.js loads after
   // this file, so catch the moment it lands on window.
   function chartDefaults(Chart) {
@@ -98,7 +128,9 @@
       return r.json();
     }).then(function (j) {
       var t = j && j.theme === 'dark' ? 'dark' : 'light';
+      root.classList.add('bf-theming');
       root.setAttribute('data-theme', t);
+      setTimeout(function () { root.classList.remove('bf-theming'); }, 450);
       document.querySelectorAll('[data-bf-theme-toggle]').forEach(function (b) {
         var label = b.querySelector('[data-bf-theme-label]');
         var icon = b.querySelector('.material-symbols-outlined');

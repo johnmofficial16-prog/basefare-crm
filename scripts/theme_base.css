@@ -48,3 +48,62 @@ html[data-theme="light"] [class*="text-white/"]:not(.bf-side *) { color: rgb(255
 /* Documents (invoices, letters, vouchers, payslips) stay paper-white: an element
  * marked data-theme="light" gets the light tokens back, whatever the page is. */
 [data-theme="light"] { color-scheme: light; }
+
+/* ===================== Glass + polish (25 Oct 2026) ===================== */
+
+/* Soft colour behind the page, so the frosted cards have something to frost. */
+html[data-theme] body {
+  background-image:
+    radial-gradient(64rem 44rem at 88% -12%, rgb(var(--bf-glow-1) / var(--bf-glow-a)), transparent 62%),
+    radial-gradient(56rem 40rem at 6% 112%, rgb(var(--bf-glow-2) / var(--bf-glow-a)), transparent 60%),
+    radial-gradient(44rem 32rem at 55% 48%, rgb(var(--bf-glow-3) / calc(var(--bf-glow-a) * .45)), transparent 70%);
+  background-attachment: fixed;
+}
+
+/* Frosted cards: the white (or dark-surface) panels with rounded corners.
+ * Never inside a document (data-theme="light" island), never form fields. */
+html[data-theme] body :is(.bg-white, .bg-surface-container-lowest, .k-card):is(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .k-card):not(input, select, textarea, button, [data-theme="light"]):not(body [data-theme="light"] *) {
+  background-color: rgb(var(--bf-white) / var(--bf-glass-a));
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+}
+
+/* Frosted sidebar. */
+html .bf-side { background-color: rgb(var(--bf-side) / .94) !important; -webkit-backdrop-filter: blur(22px) saturate(140%); backdrop-filter: blur(22px) saturate(140%); }
+
+@media (prefers-reduced-transparency: reduce), print {
+  html[data-theme] body :is(.bg-white, .bg-surface-container-lowest, .k-card) { background-color: rgb(var(--bf-white)) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+  html .bf-side { background-color: rgb(var(--bf-side)) !important; backdrop-filter: none !important; }
+}
+@media print { html[data-theme] body { background-image: none; } }
+
+/* ---- Hide / show the sidebar (Alt+B). html.bf-side-hidden is set by theme.js. ---- */
+.bf-side { transition: transform .28s cubic-bezier(.2, .8, .2, 1); }
+html .ml-60 { transition: margin-left .28s cubic-bezier(.2, .8, .2, 1); }
+html .left-60 { transition: left .28s cubic-bezier(.2, .8, .2, 1); }
+html.bf-side-hidden .bf-side { transform: translateX(-105%); }
+html.bf-side-hidden .ml-60 { margin-left: 72px; }
+html.bf-side-hidden .left-60 { left: 72px; }
+.bf-side-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0;
+  border: 0; border-radius: 10px; background: transparent; color: rgb(var(--bf-on-surface-variant)); cursor: pointer; }
+.bf-side-btn:hover { background: rgb(var(--bf-slate-100)); color: rgb(var(--bf-on-surface)); }
+.bf-side-btn .material-symbols-outlined { font-size: 22px; }
+.bf-rail { display: none; position: fixed; left: 12px; top: 12px; bottom: 12px; width: 52px; z-index: 30;
+  flex-direction: column; align-items: center; gap: 10px; padding: 10px 0; border-radius: 16px;
+  background-color: rgb(var(--bf-side) / .94); border: 1px solid rgb(var(--bf-side-line));
+  -webkit-backdrop-filter: blur(22px) saturate(140%); backdrop-filter: blur(22px) saturate(140%);
+  box-shadow: 0 18px 40px -18px rgb(0 0 0 / .45); }
+html.bf-side-hidden .bf-rail { display: flex; }
+.bf-rail-logo img { width: 34px; height: 34px; border-radius: 9px; display: block; }
+html.bf-no-anim .bf-side, html.bf-no-anim .ml-60, html.bf-no-anim .left-60 { transition: none !important; }
+
+/* ---- Small aesthetic touches ---- */
+::selection { background: rgb(var(--bf-primary) / .22); }
+html[data-theme] :focus-visible { outline: 2px solid rgb(var(--bf-primary)); outline-offset: 2px; }
+html[data-theme] * { scrollbar-width: thin; scrollbar-color: rgb(var(--bf-slate-300)) transparent; }
+html[data-theme] ::-webkit-scrollbar { width: 10px; height: 10px; }
+html[data-theme] ::-webkit-scrollbar-thumb { background: rgb(var(--bf-slate-300)); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+html[data-theme] ::-webkit-scrollbar-track { background: transparent; }
+/* Theme switch fades instead of snapping. */
+html.bf-theming, html.bf-theming *, html.bf-theming *::before, html.bf-theming *::after {
+  transition: background-color .35s ease, border-color .35s ease, color .35s ease, fill .35s ease !important; }

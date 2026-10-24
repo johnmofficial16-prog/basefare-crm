@@ -43,11 +43,12 @@ array_splice($navItems, 2, 0, [['href' => '#notepad', 'icon' => 'edit_note', 'la
 ?>
 <aside class="bf-side fixed left-0 top-0 h-full w-60 bg-white border-r border-slate-200 flex flex-col z-30" data-theme="dark">
   <!-- Logo -->
-  <div class="px-5 py-5 border-b border-slate-200">
+  <div class="pl-5 pr-3 py-5 border-b border-slate-200 flex items-center justify-between gap-2">
     <a href="/dashboard" class="flex items-center gap-3 no-underline">
       <img src="/assets/img/basefare-logo-email.png" alt="" class="bf-logo">
       <span class="bf-brand">Base Fare<small>CRM <?= ucfirst(htmlspecialchars($actorRole)) ?></small></span>
     </a>
+    <?= \App\Services\Theme::sidebarHideButton() ?>
   </div>
 
   <!-- Navigation -->
@@ -109,5 +110,6 @@ array_splice($navItems, 2, 0, [['href' => '#notepad', 'icon' => 'edit_note', 'la
     </div>
   </div>
 </aside>
+<?= \App\Services\Theme::sidebarRail('/dashboard') ?>
 <?php require __DIR__ . '/notepad_quick.php'; ?>
 <?php require __DIR__ . "/notification_bell.php"; ?>

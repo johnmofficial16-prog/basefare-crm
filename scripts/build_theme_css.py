@@ -137,6 +137,9 @@ TOKENS = {
     'white':                   ('#FFFFFF', SURFACE),
     'black':                   ('#000000', '#000000'),
     'side':                    ('#0A0F1C', '#060A14'),   # the sidebar, dark in both
+    'glow-1':                  ('#1F6FEB', '#1F6FEB'),   # backdrop colour behind the glass
+    'glow-2':                  ('#0F9D8A', '#0F9D8A'),
+    'glow-3':                  ('#6D4AFF', '#6D4AFF'),
     'side-line':               ('#141D33', '#141D33'),
 }
 
@@ -148,6 +151,8 @@ def block(dark):
             LIGHT_TEXT_GREYS.get(s, v) if name in ('slate', 'gray') else v for s, v in zip(SHADES, TW[name])]
         lines.append('  ' + ' '.join('--bf-%s-%s:%s;' % (name, s, trip(v)) for s, v in zip(SHADES, vals)))
     lines.append('  ' + ' '.join('--bf-%s:%s;' % (k, trip(v[1] if dark else v[0])) for k, v in TOKENS.items()))
+    # Glass: how strong the backdrop colour is, and how opaque the frosted cards are.
+    lines.append('  --bf-glow-a:%s; --bf-glass-a:%s;' % (('.30', '.60') if dark else ('.16', '.78')))
     return '\n'.join(lines)
 
 

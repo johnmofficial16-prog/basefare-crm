@@ -32,10 +32,13 @@ $__simpleName = $_SESSION['user_name'] ?? '';
 ?>
 <meta name="simple-csrf" content="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
 <aside class="bf-side fixed left-0 top-0 h-full w-60 bg-white border-r border-slate-200 flex flex-col z-30" data-theme="dark">
-  <a href="/simple" class="flex items-center gap-3 px-5 py-6 no-underline">
+  <div class="flex items-center justify-between gap-2 pl-5 pr-3 py-6">
+  <a href="/simple" class="flex items-center gap-3 no-underline">
     <img src="/assets/img/basefare-logo-email.png" alt="" class="bf-logo">
     <span class="bf-brand">Base Fare<small>Owner's view</small></span>
   </a>
+  <?= \App\Services\Theme::sidebarHideButton() ?>
+  </div>
 
   <nav class="flex-1 px-3 space-y-1 overflow-y-auto" aria-label="Main">
     <?php foreach ($__simpleNav as [$__sHref, $__sIcon, $__sLabel, $__sKey, $__sHint]): $__sOn = $activePage === $__sKey; ?>
@@ -84,6 +87,7 @@ $__simpleName = $_SESSION['user_name'] ?? '';
     <?= \App\Services\Theme::toggleButton(true) ?>
   </div>
 </aside>
+<?= \App\Services\Theme::sidebarRail('/simple') ?>
 <?php require __DIR__ . '/notepad_quick.php'; ?>
 <script>window.SIMPLE_CSRF = <?= json_encode($_SESSION['csrf_token'] ?? '') ?>;</script>
 <script src="<?= \App\Services\Asset::url('assets/js/simple-ui.js') ?>"></script>
