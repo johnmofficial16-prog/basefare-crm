@@ -41,7 +41,7 @@
     colors.primary = primary;
     colors.gold = { DEFAULT: v('gold'), light: v('gold-light') };
     ext.colors = colors;
-    var sans = ['"Hanken Grotesk"', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'];
+    var sans = ['Inter', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'];
     var fonts = {};
     var ownFonts = ext.fontFamily || {};
     for (var f in ownFonts) { if (Object.prototype.hasOwnProperty.call(ownFonts, f)) fonts[f] = ownFonts[f]; }
@@ -85,9 +85,9 @@
   function chartDefaults(Chart) {
     try {
       var dark = document.documentElement.getAttribute('data-theme') === 'dark';
-      Chart.defaults.color = dark ? '#9AA8C2' : '#4A556B';
-      Chart.defaults.borderColor = dark ? 'rgba(154,168,194,0.16)' : 'rgba(14,21,38,0.08)';
-      Chart.defaults.font.family = "'Hanken Grotesk', system-ui, sans-serif";
+      Chart.defaults.color = dark ? '#ADA99F' : '#625D54';
+      Chart.defaults.borderColor = dark ? 'rgba(173,169,159,0.16)' : 'rgba(31,30,27,0.08)';
+      Chart.defaults.font.family = "Inter, system-ui, sans-serif";
     } catch (e) { /* never break a page over chart colours */ }
   }
   if (window.Chart) {

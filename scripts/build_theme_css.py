@@ -2,9 +2,12 @@
 
 Every Tailwind colour the CRM uses is pointed at a CSS variable (see
 public/assets/js/theme.js), so one stylesheet decides what "slate-100" or
-"white" means. Light = Peacock (Tailwind's own palette plus the new brand
-tokens); dark = Night Shift, where the scales are mirrored so a pale badge
-becomes a deep tinted one and dark text becomes light text.
+"white" means.
+
+Design "Ivory" (John's pick, 25 Oct 2026 — concept D with Peacock accents):
+light = warm ivory, warm greys, muted status colours, deep peacock accent;
+dark = warm charcoal, where the scales are mirrored so a pale badge becomes a
+deep tinted one and dark text becomes light text.
 
 Run after changing a value here:  python scripts/build_theme_css.py
 """
@@ -42,14 +45,19 @@ TW = {
 }
 NEUTRALS = {'slate', 'gray', 'zinc', 'neutral', 'stone'}
 
-# Night Shift surfaces.
-SURFACE = '#111A2E'      # cards ("white" in dark)
-PAGE = '#0A1020'         # page background
-NEUTRAL_DARK = ['#142038', '#182540', '#22304D', '#33425F', '#8A98B4', '#97A5BF', '#A9B6CC', '#BCC7DA', '#D3DBE8', '#E8EDF7', '#F3F6FB']
+# Warm greys replace every Tailwind grey family (slate, gray, zinc, neutral,
+# stone). 400/500 are dark enough to read as text on white (the CRM uses them
+# for secondary text; Tailwind's slate-400 was 2.6:1).
+NEUTRAL_LIGHT = ['#FAF9F6', '#F4F2EC', '#E8E4DA', '#D7D2C6', '#68635A', '#625D54', '#4F4B44', '#3D3A35', '#2B2926', '#1F1E1B', '#141311']
 
-# Light-mode greys 400/500 are darker than Tailwind's: the CRM uses them for
-# secondary text, and Tailwind's slate-400 is only 2.6:1 on white (audit, 24 Oct).
-LIGHT_TEXT_GREYS = {'400': '#5F6E84', '500': '#55647B'}
+# Dark (warm charcoal) surfaces.
+SURFACE = '#2A2926'      # cards ("white" in dark)
+PAGE = '#1F1E1C'         # page background
+NEUTRAL_DARK = ['#2F2E2B', '#353430', '#403E3A', '#4E4C47', '#B2AEA4', '#BAB6AC', '#C4C0B6', '#CFCBC2', '#E1DDD5', '#ECEAE4', '#F6F4EF']
+
+# Status colours keep their hue but lean toward the warm greys, so pills and
+# badges read calm instead of "paint box".
+MUTE = 0.80
 
 
 def rgb(h):
@@ -67,10 +75,17 @@ def trip(h):
     return '%d %d %d' % rgb(h)
 
 
+def light_scale(name):
+    if name in NEUTRALS:
+        return NEUTRAL_LIGHT
+    # Deep shades (600+) carry white text on buttons: mute them less so they stay dark enough.
+    return [mix(v, n, MUTE if int(s) < 600 else 0.94) for s, v, n in zip(SHADES, TW[name], NEUTRAL_LIGHT)]
+
+
 def dark_scale(name):
     if name in NEUTRALS:
         return NEUTRAL_DARK
-    c = dict(zip(SHADES, TW[name]))
+    c = dict(zip(SHADES, light_scale(name)))
     return [
         mix(c['500'], SURFACE, .14), mix(c['500'], SURFACE, .20), mix(c['500'], SURFACE, .32),
         mix(c['400'], SURFACE, .60), c['400'], c['400'], c['300'], mix(c['300'], c['200'], .5),
@@ -80,79 +95,79 @@ def dark_scale(name):
 
 # Brand tokens used by the views' own tailwind.config names.
 TOKENS = {
-    #                          Peacock (light)  Night Shift (dark)
-    'primary':                 ('#1A5CC8', '#4DA3FF'),
-    'primary-container':       ('#2F74E8', '#7FB4FF'),
-    'on-primary':              ('#FFFFFF', '#06101F'),
-    'background':              ('#F3F5F9', PAGE),
-    'surface':                 ('#F3F5F9', PAGE),
+    #                          Ivory (light)    Ivory (dark)
+    'primary':                 ('#155E7D', '#71B9D8'),   # deep peacock blue-teal
+    'primary-container':       ('#1C7398', '#9BCEE4'),
+    'on-primary':              ('#FFFFFF', '#0E1A20'),
+    'background':              ('#FAF9F5', PAGE),
+    'surface':                 ('#FAF9F5', PAGE),
     'surface-container-lowest': ('#FFFFFF', SURFACE),
-    'surface-container-low':   ('#EEF1F6', '#142038'),
-    'surface-container':       ('#E7EBF2', '#182540'),
-    'surface-container-high':  ('#DFE4EC', '#1F2C49'),
-    'on-surface':              ('#0E1526', '#E8EDF7'),
-    'on-surface-variant':      ('#4A556B', '#9AA8C2'),
-    'outline-variant':         ('#C8D0DD', '#2C3956'),
-    'error':                   ('#B42318', '#FCA5A5'),
-    'error-container':         ('#FDE8EC', '#3A1620'),
-    'secondary':               ('#4A6774', '#9FC2D2'),
-    'secondary-container':     ('#DCEBFF', '#16264A'),
-    'on-secondary-container':  ('#23466F', '#9CC3FF'),
-    'gold':                    ('#C9A84C', '#E2C877'),
-    'gold-light':              ('#F5E6C0', '#3A3220'),
-    'on-gold':                 ('#14213D', '#1A1405'),
-    'placeholder':             ('#6B7280', '#7D8BA8'),
-    'faint':                   ('#7F8CA1', '#74839F'),   # text-slate-300: dashes, empty values
-    'ink':                     ('#0E1526', '#E8EDF7'),
-    'on-background':           ('#0E1526', '#E8EDF7'),
-    'outline':                 ('#737784', '#7D8BA8'),
-    'surface-variant':         ('#E1E3E4', '#1F2C49'),
-    'surface-tint':            ('#435B9F', '#7FB4FF'),
-    'surface-dim':             ('#D9DADB', '#0A1020'),
-    'surface-bright':          ('#F8F9FA', '#1F2C49'),
-    'surface-container-highest': ('#E1E3E4', '#24324F'),
-    'primary-fixed':           ('#DCE8FD', '#16264A'),
-    'primary-fixed-dim':       ('#B3C5FF', '#2C4A80'),
-    'on-primary-fixed':        ('#00174A', '#DCE8FD'),
-    'on-primary-fixed-variant': ('#2A4386', '#9CC3FF'),
-    'on-primary-container':    ('#DCE8FD', '#0A1A38'),
-    'secondary-fixed':         ('#C9E7F7', '#16304A'),
-    'secondary-fixed-dim':     ('#ADCBDA', '#2A4A60'),
-    'on-secondary':            ('#FFFFFF', '#0A1020'),
-    'on-secondary-fixed':      ('#001F2A', '#C9E7F7'),
-    'on-secondary-fixed-variant': ('#2E4B57', '#ADCBDA'),
-    'tertiary':                ('#651F00', '#FFB59A'),
-    'tertiary-container':      ('#8B2E01', '#FFB59A'),
-    'tertiary-fixed':          ('#FFDBCF', '#3A2016'),
-    'tertiary-fixed-dim':      ('#FFB59A', '#8A4A30'),
-    'on-tertiary':             ('#FFFFFF', '#2A1000'),
-    'on-tertiary-container':   ('#FFAA8A', '#380D00'),
-    'on-tertiary-fixed':       ('#380D00', '#FFDBCF'),
-    'on-tertiary-fixed-variant': ('#802900', '#FFB59A'),
-    'on-error':                ('#FFFFFF', '#3A1620'),
-    'on-error-container':      ('#93000A', '#FECDD3'),
-    'inverse-surface':         ('#2E3132', '#E8EDF7'),
-    'inverse-on-surface':      ('#F0F1F2', '#111A2E'),
-    'inverse-primary':         ('#B3C5FF', '#1A5CC8'),
+    'surface-container-low':   ('#F4F2EC', '#2F2E2B'),
+    'surface-container':       ('#EDEAE2', '#353430'),
+    'surface-container-high':  ('#E5E1D7', '#3C3A36'),
+    'surface-container-highest': ('#DEDAD0', '#43413C'),
+    'on-surface':              ('#1F1E1B', '#ECEAE4'),
+    'on-surface-variant':      ('#625D54', '#ADA99F'),
+    'outline-variant':         ('#D7D2C6', '#4A4844'),
+    'outline':                 ('#8A857A', '#8F8B82'),
+    'error':                   ('#A8321E', '#F2A391'),
+    'error-container':         ('#F8E4DE', '#3D2621'),
+    'on-error':                ('#FFFFFF', '#3D2621'),
+    'on-error-container':      ('#7A1F10', '#F8D2C8'),
+    'secondary':               ('#4F6B66', '#A9C7C1'),
+    'secondary-container':     ('#E3EEEC', '#2B3A38'),
+    'on-secondary-container':  ('#2F4A45', '#BFD9D3'),
+    'secondary-fixed':         ('#DCEAE7', '#2B3A38'),
+    'secondary-fixed-dim':     ('#BCD4CF', '#3B4E4B'),
+    'on-secondary':            ('#FFFFFF', '#1F1E1C'),
+    'on-secondary-fixed':      ('#16302C', '#DCEAE7'),
+    'on-secondary-fixed-variant': ('#2F4A45', '#BCD4CF'),
+    'gold':                    ('#B8913A', '#D9B866'),
+    'gold-light':              ('#F4E9CF', '#3A3324'),
+    'on-gold':                 ('#1F1A10', '#1A1405'),
+    'placeholder':             ('#8A857A', '#8F8B82'),
+    'faint':                   ('#8F8A7F', '#7C786F'),   # text-slate-300: dashes, empty values
+    'ink':                     ('#1F1E1B', '#ECEAE4'),
+    'on-background':           ('#1F1E1B', '#ECEAE4'),
+    'surface-variant':         ('#E8E4DA', '#3A3835'),
+    'surface-tint':            ('#1C7398', '#9BCEE4'),
+    'surface-dim':             ('#E5E1D7', '#1A1918'),
+    'surface-bright':          ('#FFFFFF', '#353430'),
+    'primary-fixed':           ('#E1EEF3', '#203640'),
+    'primary-fixed-dim':       ('#B9D8E5', '#2E4B58'),
+    'on-primary-fixed':        ('#082A38', '#E1EEF3'),
+    'on-primary-fixed-variant': ('#155E7D', '#9BCEE4'),
+    'on-primary-container':    ('#E1EEF3', '#0E1A20'),
+    'tertiary':                ('#7A3417', '#F0B89C'),
+    'tertiary-container':      ('#94451F', '#F0B89C'),
+    'tertiary-fixed':          ('#F8E0D3', '#3D2A20'),
+    'tertiary-fixed-dim':      ('#F0B89C', '#7A4A33'),
+    'on-tertiary':             ('#FFFFFF', '#2A1308'),
+    'on-tertiary-container':   ('#FBD9C6', '#2A1308'),
+    'on-tertiary-fixed':       ('#3A1606', '#F8E0D3'),
+    'on-tertiary-fixed-variant': ('#7A3417', '#F0B89C'),
+    'inverse-surface':         ('#2F2E2B', '#ECEAE4'),
+    'inverse-on-surface':      ('#F4F2EC', '#2A2926'),
+    'inverse-primary':         ('#9BCEE4', '#155E7D'),
     'white':                   ('#FFFFFF', SURFACE),
     'black':                   ('#000000', '#000000'),
-    'side':                    ('#0A0F1C', '#060A14'),   # the sidebar, dark in both
-    'glow-1':                  ('#1F6FEB', '#1F6FEB'),   # backdrop colour behind the glass
-    'glow-2':                  ('#0F9D8A', '#0F9D8A'),
-    'glow-3':                  ('#6D4AFF', '#6D4AFF'),
-    'side-line':               ('#141D33', '#141D33'),
+    'side':                    ('#F4F2EC', '#1A1918'),   # the sidebar: a shade deeper than the page
+    'side-line':               ('#E8E4DA', '#2E2D2A'),
+    'side-active':             ('#FFFFFF', '#33322F'),
+    'glow-1':                  ('#1C7398', '#1C7398'),   # faint peacock light in the corner
+    'glow-2':                  ('#2A9D8F', '#2A9D8F'),
+    'glow-3':                  ('#C9A84C', '#C9A84C'),
 }
 
 
 def block(dark):
     lines = []
     for name in TW:
-        vals = dark_scale(name) if dark else [
-            LIGHT_TEXT_GREYS.get(s, v) if name in ('slate', 'gray') else v for s, v in zip(SHADES, TW[name])]
+        vals = dark_scale(name) if dark else light_scale(name)
         lines.append('  ' + ' '.join('--bf-%s-%s:%s;' % (name, s, trip(v)) for s, v in zip(SHADES, vals)))
     lines.append('  ' + ' '.join('--bf-%s:%s;' % (k, trip(v[1] if dark else v[0])) for k, v in TOKENS.items()))
     # Glass: how strong the backdrop colour is, and how opaque the frosted cards are.
-    lines.append('  --bf-glow-a:%s; --bf-glass-a:%s;' % (('.30', '.60') if dark else ('.16', '.78')))
+    lines.append('  --bf-glow-a:%s; --bf-glass-a:%s;' % (('.10', '.94') if dark else ('.07', '.96')))
     return '\n'.join(lines)
 
 
@@ -192,7 +207,7 @@ def arbitrary_rules():
 
 
 css = """/* Base Fare CRM theme — GENERATED by scripts/build_theme_css.py. Edit that, not this.
- * Light = Peacock, dark = Night Shift. <html data-theme> picks one; an element
+ * Design "Ivory": warm light + warm dark. <html data-theme> picks one; an element
  * with its own data-theme (the sidebar, document previews) is an island. */
 :root, [data-theme="light"] {
 %s
@@ -201,6 +216,12 @@ css = """/* Base Fare CRM theme — GENERATED by scripts/build_theme_css.py. Edi
 [data-theme="dark"] {
 %s
   color-scheme: dark;
+}
+/* html2pdf renders a clone of the document in a container appended to <body>,
+ * outside the light island: that container always gets the light colours. */
+.html2pdf__container, .html2pdf__overlay {
+%s
+  color-scheme: light;
 }
 /* Paper is white: anything printed uses the light colours, even from dark mode. */
 @media print {
@@ -212,16 +233,26 @@ css = """/* Base Fare CRM theme — GENERATED by scripts/build_theme_css.py. Edi
 
 /* Hard-coded colours in older views, routed through the tokens. */
 %s
-""" % (block(False), block(True), block(False).replace('\n', '\n  '), arbitrary_rules())
+""" % (block(False), block(True), block(False), block(False).replace('\n', '\n  '), arbitrary_rules())
 
 # Coloured TEXT in mid shades (text-rose-500, text-emerald-500…) is too pale on
 # white to read; send text-only classes to the first shade that passes 4.5:1.
 # Backgrounds, borders and dots keep their shade. Dark mode follows the tokens.
-TEXT_SHADE = {'red': '600', 'rose': '600', 'pink': '600', 'fuchsia': '600', 'purple': '600', 'violet': '600',
-              'indigo': '600', 'blue': '600', 'sky': '700', 'cyan': '700', 'teal': '700', 'emerald': '700',
-              'green': '700', 'lime': '700', 'yellow': '700', 'amber': '700', 'orange': '700'}
+def _contrast(h1, h2):
+    def lum(h):
+        c = [x / 255 for x in rgb(h)]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    x, y = lum(h1), lum(h2)
+    return (max(x, y) + .05) / (min(x, y) + .05)
+
+
 rules = []
-for pal, target in TEXT_SHADE.items():
+for pal in TW:
+    if pal in NEUTRALS:
+        continue
+    shade_of = dict(zip(SHADES, light_scale(pal)))
+    target = next(x for x in ('400', '500', '600', '700', '800') if min(_contrast(shade_of[x], '#FFFFFF'), _contrast(shade_of[x], '#F4F2EC')) >= 4.5)
     for shade in ('400', '500', '600'):
         if int(shade) >= int(target):
             continue
@@ -242,10 +273,10 @@ def contrast(h1, h2):
 # Tailwind's palette. In light mode, when an element has both, deepen the fill to
 # the first shade that passes. (Dark mode inverts these and is fine.)
 fills = []
-for pal, vals in TW.items():
+for pal in TW:
     if pal in NEUTRALS:
         continue
-    shade_of = dict(zip(SHADES, vals))
+    shade_of = dict(zip(SHADES, light_scale(pal)))
     for sh in ('400', '500', '600'):
         if contrast(shade_of[sh], '#ffffff') >= 4.5:
             continue

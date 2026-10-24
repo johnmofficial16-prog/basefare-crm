@@ -5,7 +5,7 @@
  * $_SESSION['simple_mode'] is on, so it also appears on full-CRM pages she
  * opens from here (booking details, invoices…), keeping her in one interface.
  *
- * Dark in both themes (a data-theme="dark" island, see App\Services\Theme).
+ * Follows the page theme (see App\Services\Theme).
  * Loads simple-ui.js (confirmation box + guard on approval forms).
  *
  * @var string $activePage
@@ -31,7 +31,7 @@ if (\App\Services\HrLink::enabled()) { $__simpleNav[] = ['/hr', 'badge', 'Trio H
 $__simpleName = $_SESSION['user_name'] ?? '';
 ?>
 <meta name="simple-csrf" content="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
-<aside class="bf-side fixed left-0 top-0 h-full w-60 bg-white border-r border-slate-200 flex flex-col z-30" data-theme="dark">
+<aside class="bf-side fixed left-0 top-0 h-full w-60 bg-white border-r border-slate-200 flex flex-col z-30">
   <div class="flex items-center justify-between gap-2 pl-5 pr-3 py-6">
   <a href="/simple" class="flex items-center gap-3 no-underline">
     <img src="/assets/img/basefare-logo-email.png" alt="" class="bf-logo">

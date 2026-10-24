@@ -45,7 +45,7 @@ if ($_clq === null) {
     class="w-full flex items-center justify-between gap-2 rounded-xl bg-primary px-4 py-3 text-white shadow-md shadow-primary/20 hover:bg-primary-container transition-colors">
     <span class="flex items-center gap-2 text-sm font-bold"><span class="material-symbols-outlined text-[20px]">add_call</span>Log a call</span>
     <span class="flex items-center gap-1">
-      <span id="clq-count" class="min-w-[26px] rounded-full bg-white/20 px-2 py-0.5 text-center text-xs font-extrabold" title="Calls logged this shift"><?= (int) $_clq['count'] ?></span>
+      <span id="clq-count" class="min-w-[26px] rounded-full bg-black/20 px-2 py-0.5 text-center text-xs font-extrabold" title="Calls logged this shift"><?= (int) $_clq['count'] ?></span>
     </span>
   </button>
   <div class="mt-1 text-center text-[10px] font-semibold text-slate-400">Alt + L from anywhere</div>

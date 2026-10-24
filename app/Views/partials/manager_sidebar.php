@@ -32,7 +32,7 @@ if ($__hr = \App\Services\HrLink::navItem()) { $navItems[] = $__hr; } // Trio HR
 array_splice($navItems, 1, 0, [\App\Services\ChatService::navItem()]); // Messages, right after Dashboard
 array_splice($navItems, 2, 0, [['href' => '#notepad', 'icon' => 'edit_note', 'label' => 'Notepad', 'key' => 'notepad']]); // Notepad (opens the slide-in panel)
 ?>
-<aside class="bf-side fixed left-0 top-0 h-full w-60 bg-white border-r border-slate-200 flex flex-col z-30" data-theme="dark">
+<aside class="bf-side fixed left-0 top-0 h-full w-60 bg-white border-r border-slate-200 flex flex-col z-30">
   <!-- Logo -->
   <div class="pl-5 pr-3 py-5 border-b border-slate-200 flex items-center justify-between gap-2">
     <a href="/dashboard" class="flex items-center gap-3 no-underline">

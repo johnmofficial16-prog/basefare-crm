@@ -90,7 +90,7 @@ tailwind.config = {
       </a>
     </div>
     <div class="flex items-center gap-3">
-      <button id="bulkAssignBtn" class="bg-gradient-to-r from-secondary to-secondary-container text-white px-6 py-3 rounded-lg font-headline font-bold text-sm shadow-xl shadow-secondary/20 hover:opacity-90 transition-all active:scale-95 flex items-center gap-2">
+      <button id="bulkAssignBtn" class="bg-gradient-to-r from-secondary to-primary text-white px-6 py-3 rounded-lg font-headline font-bold text-sm shadow-xl shadow-secondary/20 hover:opacity-90 transition-all active:scale-95 flex items-center gap-2">
         <span class="material-symbols-outlined text-lg">group_add</span> Bulk Assign
       </button>
       <button id="publishWeekBtn" class="bg-gradient-to-r from-primary to-primary-container text-white px-8 py-3 rounded-lg font-headline font-bold text-sm shadow-xl shadow-primary/20 hover:opacity-90 transition-all active:scale-95 flex items-center gap-2">

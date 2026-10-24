@@ -65,7 +65,7 @@ class Theme
         $theme = self::current();
         $tags = "\n" . '<link rel="preconnect" href="https://fonts.googleapis.com">'
             . '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-            . '<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">'
+            . '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&amp;display=swap" rel="stylesheet">'
             . '<link rel="stylesheet" href="' . Asset::url('assets/css/theme.css') . '">'
             . '<script src="' . Asset::url('assets/js/theme.js') . '"></script>' . "\n";
         $html = substr_replace($html, $tags, $closeHead, 0);
@@ -90,7 +90,7 @@ class Theme
      */
     public static function sidebarRail(string $home = '/dashboard'): string
     {
-        return '<div class="bf-rail" data-theme="dark" aria-label="Menu hidden">'
+        return '<div class="bf-rail" aria-label="Menu hidden">'
             . '<a href="' . htmlspecialchars($home, ENT_QUOTES) . '" class="bf-rail-logo" aria-label="Base Fare home">'
             . '<img src="/assets/img/basefare-logo-email.png" alt=""></a>'
             . '<button type="button" class="bf-side-btn" data-bf-side-toggle aria-label="Show the menu (Alt+B)" title="Show the menu (Alt+B)">'

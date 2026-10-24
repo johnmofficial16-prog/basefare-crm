@@ -19,7 +19,7 @@
     <div id="sb-att" class="<?= in_array($_sb_state, ['clocked_in','on_break']) ? '' : 'hidden' ?> rounded-xl overflow-hidden border border-primary/20">
       <!-- Dark header: status + timer -->
       <div class="px-3 py-2.5 flex items-center justify-between bg-slate-50">
-        <span id="sb-state-label" class="text-xs font-bold <?= $_sb_state === 'on_break' ? 'text-amber-300' : 'text-green-300' ?>">
+        <span id="sb-state-label" class="text-xs font-bold <?= $_sb_state === 'on_break' ? 'text-amber-600' : 'text-green-600' ?>">
           <?= $_sb_state === 'on_break' ? '☕ On Break' : '● Clocked In' ?>
         </span>
         <span id="sb-timer" class="font-mono font-bold text-slate-900 text-[15px] tracking-widest">00:00:00</span>
