@@ -1028,7 +1028,8 @@ class AgentTools
                 'progress_pct' => $me['team']['progress'],
                 'past_level_1' => $me['team']['past_l1'] . ' of ' . $me['team']['set_up'],
                 'my_team_share_inr_so_far' => $me['team']['share_inr'],
-                'members'   => array_map(fn($m) => ['name' => $m['name'], 'progress_pct' => $m['progress'], 'weakest' => $m['weakest']], $card['team']),
+                'revenue_per_call' => $me['team']['rpc'],
+                'members'   => array_map(fn($m) => ['name' => $m['name'], 'progress_pct' => $m['progress'], 'weakest' => $m['weakest'], 'revenue_per_call' => $m['rpc']], $card['team']),
             ];
             if ($me['role'] === 'supervisor') {
                 $out['team']['bonus'] = $me['team']['bonus_unlocked'] ? 'unlocked' : ('needs ' . $me['team']['bonus_need'] . ' agents past Level 1');

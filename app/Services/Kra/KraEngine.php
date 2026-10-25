@@ -56,6 +56,7 @@ final class KraEngine
         'calls_target'    => 40,     // calls a shift
         'conv_target'     => 16,     // one sale in this many calls
         'pps_target'      => 130,    // $ profit per sale
+        'rpc_target'      => 8,      // $ Net MCO per logged call — the client's "RPC" (revenue per call)
         'spot_first_sale' => 500,    // ₹ for the first sale on the floor each shift (0 = off)
         'spot_best_week'  => 1000,   // ₹ for the floor's best single sale of the week
         'spot_best_month' => 500,    // ₹ for beating your own best month
@@ -83,6 +84,7 @@ final class KraEngine
         'calls_target'    => ['Calls a shift (target)', 'number', 1, 300, 'calls'],
         'conv_target'     => ['One sale in every … calls (target)', 'number', 2, 500, 'calls'],
         'pps_target'      => ['Profit per sale (target)', 'number', 1, 10000, '$'],
+        'rpc_target'      => ['Revenue per call — Net MCO per logged call (target)', 'number', 0.5, 1000, '$'],
         'spot_first_sale' => ['First sale of each shift', 'number', 0, 100000, '₹'],
         'spot_best_week'  => ['Best single sale of the week (whole floor)', 'number', 0, 1000000, '₹'],
         'spot_best_month' => ['New personal best month', 'number', 0, 1000000, '₹'],
@@ -337,12 +339,18 @@ final class KraEngine
         return $r['bad'] / $r['sales'] * 100 > (float) $cfg['quality_limit'];
     }
 
-    /** The three levers (calls, conversion, profit per sale) against their targets. */
+    /**
+     * The three levers (calls, conversion, profit per sale) against their
+     * targets, then revenue per call — the client's "RPC". RPC is conversion ×
+     * profit per sale, so it is shown and tracked but never picked as the
+     * weakest area (that would count the same gap twice).
+     */
     private static function levers(array $r, array $cfg): array
     {
         $cps  = $r['shifts'] > 0 ? $r['calls'] / $r['shifts'] : null;
         $conv = ($r['calls'] > 0) ? $r['sales'] / $r['calls'] : null;        // sales per call
         $pps  = $r['sales'] > 0 ? $r['mco'] / $r['sales'] : null;
+        $rpc  = $r['calls'] > 0 ? $r['mco'] / $r['calls'] : null;
         $convTarget = 1 / max(1, (float) $cfg['conv_target']);
         $mk = fn($key, $label, $value, $text, $target, $targetText) => [
             'key' => $key, 'label' => $label, 'value' => $value, 'text' => $text, 'target_text' => $targetText,
@@ -357,7 +365,16 @@ final class KraEngine
                 $convTarget, '1 in ' . (int) $cfg['conv_target']),
             $mk('profit', 'Profit per sale', $pps, $pps === null ? '—' : '$' . number_format($pps),
                 (float) $cfg['pps_target'], '$' . number_format((float) $cfg['pps_target'])),
+            $mk('rpc', 'Revenue per call', $rpc,
+                $rpc === null ? ($r['shifts'] > 0 ? 'No calls logged' : '—') : self::money($rpc),
+                (float) $cfg['rpc_target'], self::money((float) $cfg['rpc_target'])),
         ];
+    }
+
+    /** $8.13 / $8 / $1,240 — cents only where they matter. */
+    public static function money(float $v): string
+    {
+        return '$' . number_format($v, ($v < 100 && round($v, 2) != round($v)) ? 2 : 0);
     }
 
     /**
@@ -373,6 +390,9 @@ final class KraEngine
         }
         $weak = null;
         foreach ($levers as $l) {
+            if ($l['key'] === 'rpc') {
+                continue;   // conversion × profit per sale: already covered by those two
+            }
             if ($l['ratio'] !== null && $l['ratio'] < 1 && ($weak === null || $l['ratio'] < $weak['ratio'])) {
                 $weak = $l;
             }
@@ -444,9 +464,15 @@ final class KraEngine
     {
         $members = array_values(array_filter(array_map(fn($i) => $all[$i] ?? null, $ids),
             fn($m) => $m !== null && in_array($m['role'], ['agent', 'supervisor'], true)));
-        $mco = 0.0; $target = 0.0; $past = 0; $setUp = 0;
+        $mco = 0.0; $target = 0.0; $past = 0; $setUp = 0; $calls = 0; $loggedMco = 0.0;
         foreach ($members as $m) {
             $mco += $m['mco'];
+            // Revenue per call counts only people who log calls: someone selling
+            // with no calls logged would otherwise inflate the team's figure.
+            if ($m['calls'] > 0) {
+                $calls += $m['calls'];
+                $loggedMco += $m['mco'];
+            }
             if ($m['levels'] !== null) {
                 $target += $m['levels']['l2'];
                 $setUp++;
@@ -467,6 +493,8 @@ final class KraEngine
             'progress'  => $target > 0 ? round($mco / $target * 100) : null,
             'projected' => round($mco * $scale, 2),
             'past_l1'   => $past,
+            'calls'     => $calls,
+            'rpc'       => $calls > 0 ? round($loggedMco / $calls, 2) : null,
             'share_inr' => $share,
             'bonus_inr' => 0,
         ];
@@ -842,6 +870,7 @@ final class KraEngine
             'month'     => $snap['month'],
             'days_left' => $snap['days_left'],
             'usd_inr'   => (float) $snap['config']['usd_inr'],
+            'rpc_target'=> (float) $snap['config']['rpc_target'],
             'me'        => $me,
             'nightly'   => ($me['next'] && $snap['days_left'] > 0) ? (int) ceil($me['next']['away'] / $snap['days_left']) : null,
             'bests'     => $this->bests($userId, $snap['month']),
@@ -860,7 +889,7 @@ final class KraEngine
                 $card['teams'] = [];
                 foreach ($snap['people'] as $p) {
                     if ($p['role'] === 'supervisor' && in_array($p['id'], $me['team']['ids'], true)) {
-                        $card['teams'][] = ['name' => $p['name'], 'progress' => $p['team']['progress'], 'past_l1' => $p['team']['past_l1'],
+                        $card['teams'][] = ['name' => $p['name'], 'progress' => $p['team']['progress'], 'past_l1' => $p['team']['past_l1'], 'rpc' => $p['team']['rpc'],
                                             'count' => $p['team']['count'], 'weakest' => self::teamWeakest($snap['people'], $p['team']['ids'])];
                     }
                 }
@@ -890,6 +919,8 @@ final class KraEngine
             'weak_key' => $p['gap']['lever'] ?? null,
             'calls_ps' => $p['levers'][0]['text'],
             'conv'     => $p['levers'][1]['text'],
+            'rpc'      => $p['levers'][3]['text'],
+            'rpc_ok'   => $p['levers'][3]['ok'],
         ];
     }
 

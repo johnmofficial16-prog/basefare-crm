@@ -66,6 +66,7 @@ async function insights(slot, acts, query) {
         <div><span>Card authorizations sent</span><b>${f.num(fu.auths)}</b>${fu.auths ? html`<em>${Math.round(fu.signed / fu.auths * 100)}% signed by the customer</em>` : ''}</div>
         <div><span>Sales approved</span><b>${f.num(fu.sales)}</b>${fu.calls && fu.sales ? html`<em>1 in ${Math.max(1, Math.round(fu.calls / fu.sales))} logged calls</em>` : ''}</div>
         <div><span>Profit per sale</span><b>${fu.pps === null ? '—' : usd(fu.pps)}</b></div>
+        <div><span>Revenue per call</span><b>${fu.rpc ?? '—'}</b><em>Target ${d.rpc_target}${fu.rpc ? (fu.rpc_ok ? ' · on target' : ' · below') : ''}</em></div>
       </div>
     </div></div>
 
@@ -74,12 +75,13 @@ async function insights(slot, acts, query) {
 
     <div class="card"><div class="card__h"><h2>Everyone</h2><span class="sub">Incentive amounts are visible only here</span></div>
       <div class="tablewrap"><table class="rtable kra-table">
-        <thead><tr><th>Person</th><th>To target</th><th>${d.is_current ? 'Month end at this pace' : 'Month end'}</th><th>Weakest area</th><th class="num">Incentive</th><th></th></tr></thead>
+        <thead><tr><th>Person</th><th>To target</th><th>${d.is_current ? 'Month end at this pace' : 'Month end'}</th><th>Revenue per call<div class="kra-meta">target ${d.rpc_target}</div></th><th>Weakest area</th><th class="num">Incentive</th><th></th></tr></thead>
         <tbody>${d.people.map((p) => html`<tr>
           <td><b>${p.name}</b><div class="kra-meta">${p.role}${p.leader ? ' · ' + p.leader : ''}</div></td>
           <td>${p.progress === null ? html`<span class="kra-meta">${p.set_up || p.role_key === 'manager' ? '—' : 'No target'}</span>`
             : html`<div class="kra-prog"><span><i data-w="${p.progress}"></i></span>${p.progress}%</div>`}</td>
           <td>${usd(p.projected)}${p.level_at_pace !== null ? html`<div class="kra-meta">${p.level_at_pace === 0 ? 'below Level 1' : 'Level ' + p.level_at_pace}</div>` : ''}</td>
+          <td>${p.rpc ? html`${p.rpc.text}${p.rpc.ok ? '' : html`<div><span class="pill pill--sm p-warn">Below target</span></div>`}` : html`<span class="kra-meta">—</span>`}</td>
           <td>${p.weakest || html`<span class="kra-meta">—</span>`}${p.quality_hit ? html`<div><span class="pill pill--sm p-warn">Refunds over the limit</span></div>` : ''}</td>
           <td class="num">${f.rupees(p.incentive)}</td>
           <td><button class="btn btn--sm" type="button" data-fb="${p.id}" data-name="${p.name}">Feedback${p.feedback ? html` <span class="kra-meta">(${p.feedback})</span>` : ''}</button></td>

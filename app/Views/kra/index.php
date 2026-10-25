@@ -19,6 +19,16 @@ $inr = function ($v): string {
     }
     return ($v < 0 ? '−₹' : '₹') . $n;
 };
+/** A team's or floor's revenue per call (the client's "RPC") against the target. */
+$rpcLine = function (?float $rpc, string $label) use ($card, $e): string {
+    $target = (float) ($card['rpc_target'] ?? 0);
+    if ($rpc === null) {
+        return '<p class="mt-2 text-[16px]">' . $e($label) . ' · <strong>—</strong> <span class="text-on-surface-variant">(no calls logged yet)</span></p>';
+    }
+    $money = \App\Services\Kra\KraEngine::class;
+    return '<p class="mt-2 text-[16px]">' . $e($label) . ' · <strong>' . $e($money::money($rpc)) . '</strong>'
+        . ($target > 0 ? ' <span class="text-on-surface-variant">(target ' . $e($money::money($target)) . ($rpc >= $target ? ', on target' : '') . ')</span>' : '') . '</p>';
+};
 $me      = $card['me'] ?? null;
 $monthLb = isset($card['month']) ? date('F Y', strtotime($card['month'] . '-01')) : date('F Y');
 $hour    = (int) date('G');
@@ -180,7 +190,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <?php else: ?>
       <section class="k-card p-7" style="flex: 999 1 560px; min-width: 0">
         <p class="text-[14px] font-bold uppercase tracking-wider mb-1.5" style="color:rgb(var(--bf-emerald-800))">No gaps right now</p>
-        <p class="text-[18px] leading-relaxed">All three levers are on target. Keep the rhythm going.</p>
+        <p class="text-[18px] leading-relaxed">Calls, closing and profit per sale are all on target. Keep the rhythm going.</p>
       </section>
       <?php endif; ?>
 
@@ -234,6 +244,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         </div>
         <div class="k-bar mt-6 mb-5"><div class="k-fill" style="width: <?= min(100, (int) ($t['progress'] ?? 0)) ?>%"></div></div>
         <p class="text-[16px] leading-relaxed">At this pace the month ends near <strong><?= $usd($t['projected']) ?></strong><?= $t['target'] > 0 ? ($t['projected'] >= $t['target'] ? ' — <strong>above target</strong>.' : ' — <strong>' . $usd($t['target'] - $t['projected']) . ' short</strong>.') : '.' ?></p>
+        <?= $rpcLine($t['rpc'], 'Floor revenue per call') ?>
       </section>
       <section class="p-7 flex flex-col gap-2.5" style="flex: 1 1 300px; min-width: 0; background: rgb(var(--bf-emerald-50)); border: 1px solid rgb(var(--bf-green-200)); border-radius: 20px">
         <p class="text-[15px] font-semibold" style="color:rgb(var(--bf-emerald-800))">My incentive so far</p>
@@ -250,6 +261,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
         <div class="flex justify-between items-baseline gap-2"><p class="text-[18px] font-bold"><?= $e($tm['name']) ?>'s team</p><p class="text-[16px] font-bold"><?= $tm['progress'] === null ? '—' : (int) $tm['progress'] . '%' ?></p></div>
         <div class="k-bar my-3" style="height:10px"><div class="k-fill" style="width: <?= min(100, (int) ($tm['progress'] ?? 0)) ?>%"></div></div>
         <p class="text-[16px]"><?= (int) $tm['past_l1'] ?> of <?= (int) $tm['count'] ?> past Level 1</p>
+        <p class="text-[16px] mt-1">Revenue per call · <strong><?= $tm['rpc'] === null ? '—' : $e(\App\Services\Kra\KraEngine::money((float) $tm['rpc'])) ?></strong></p>
         <?php if ($tm['weakest']): ?><p class="text-[15px] mt-1" style="color:rgb(var(--bf-yellow-800))">Weakest area: <?= $e($tm['weakest']) ?></p><?php endif; ?>
       </div>
       <?php endforeach; ?>
@@ -273,6 +285,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       </div>
       <div class="k-bar mt-6 mb-5"><div class="k-fill" style="width: <?= min(100, (int) ($t['progress'] ?? 0)) ?>%"></div></div>
       <p class="text-[16px] leading-relaxed"><strong><?= (int) $t['past_l1'] ?> of <?= (int) $t['set_up'] ?></strong> agents past Level 1 — <strong><?= (int) $t['bonus_need'] ?></strong> unlocks your team bonus.</p>
+      <?= $rpcLine($t['rpc'], 'Team revenue per call') ?>
     </section>
     <?php endif; ?>
 
@@ -303,7 +316,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
       <table class="w-full text-[16px]" style="min-width: 640px; border-collapse: collapse">
         <thead><tr class="text-left text-[14px] text-on-surface-variant">
           <th class="px-5 py-3 font-semibold">Agent</th><th class="px-5 py-3 font-semibold">Progress to target</th>
-          <th class="px-5 py-3 font-semibold">Weakest area</th><th class="px-5 py-3 font-semibold">Sales this month</th>
+          <th class="px-5 py-3 font-semibold">Weakest area</th><th class="px-5 py-3 font-semibold">Revenue per call</th><th class="px-5 py-3 font-semibold">Sales this month</th>
         </tr></thead>
         <tbody>
         <?php foreach ($card['team'] as $m): $p = (int) ($m['progress'] ?? 0); ?>
@@ -311,6 +324,7 @@ tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#163274","prim
             <td class="px-5 py-3.5 font-semibold"><?= $e($m['name']) ?></td>
             <td class="px-5 py-3.5"><?php if ($m['set_up']): ?><div class="flex items-center gap-2.5"><div style="width:150px;height:10px;border-radius:5px;background:rgb(var(--bf-slate-200))"><div style="width:<?= min(100, $p) ?>%;height:10px;border-radius:5px;background:<?= $p >= 100 ? 'rgb(var(--bf-emerald-700))' : ($p >= 60 ? 'rgb(var(--bf-blue-700))' : 'rgb(var(--bf-yellow-600))') ?>"></div></div><?= $p ?>%</div><?php else: ?><span class="text-on-surface-variant">Target not set</span><?php endif; ?></td>
             <td class="px-5 py-3.5"><?= $m['weakest'] ? $e(preg_replace('/^Your biggest gap · /', '', $m['weakest'])) : '<span class="text-on-surface-variant">—</span>' ?></td>
+            <td class="px-5 py-3.5"><?= $e($m['rpc']) ?><?= ($m['rpc'] !== '—' && $m['rpc'] !== 'No calls logged' && !$m['rpc_ok']) ? ' <span class="text-[14px]" style="color:rgb(var(--bf-yellow-800))">below target</span>' : '' ?></td>
             <td class="px-5 py-3.5"><?= (int) $m['sales'] ?></td>
           </tr>
         <?php endforeach; ?>

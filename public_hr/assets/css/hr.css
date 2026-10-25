@@ -1280,7 +1280,7 @@ a.attchip:hover { border-color: var(--ink-2); }
 .rtable.kra-people .field { gap: 4px; }
 .rtable.kra-people .input { min-width: 140px; }
 .kra-kpis .kpi .d a { color: var(--gold-ink); font-weight: 600; }
-.kra-funnel { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.kra-funnel { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
 .kra-funnel > div { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 12px; background: var(--paper); border: 1px solid var(--line); }
 .kra-funnel span { font-size: var(--fs-meta); color: var(--meta); font-weight: 600; }
 .kra-funnel b { font-size: 24px; }

@@ -25,7 +25,7 @@ final class Kra
         ['Agent levels', ['l1_multiple', 'target_multiple', 'l3_ratio', 'rate1', 'rate2', 'rate3']],
         ['Team leaders and managers', ['tl_share', 'tl_bonus_pct', 'tl_bonus_inr', 'mgr_share']],
         ['Safety rules', ['cap_pct', 'quality_limit', 'quality_cut', 'refund_cutoff']],
-        ['What a good night looks like', ['calls_target', 'conv_target', 'pps_target']],
+        ['What a good night looks like', ['calls_target', 'conv_target', 'pps_target', 'rpc_target']],
         ['Spot rewards (paid automatically, within the budget)', ['spot_first_sale', 'spot_best_week', 'spot_best_month', 'spot_budget']],
     ];
 
@@ -219,8 +219,12 @@ final class Kra
         $names = array_map(fn($p) => $p['name'], $people);
 
         $mco = 0.0; $target = 0.0; $proj = 0.0; $past = 0; $setUp = 0; $calls = 0; $sales = 0; $noLog = [];
+        $loggedMco = 0.0;   // revenue per call counts only people who log calls
         foreach ($sellers as $p) {
             $mco += $p['mco'];
+            if ($p['calls'] > 0) {
+                $loggedMco += $p['mco'];
+            }
             $proj += $p['projected'];
             $calls += $p['calls'];
             $sales += $p['sales'];
@@ -260,6 +264,10 @@ final class Kra
         $rows = [];
         foreach ($people as $p) {
             $lvAtPace = null;
+            // Revenue per call: a manager's is their floor's; everyone else's is their own
+            $rpc = $p['role'] === 'manager'
+                ? (($p['team']['rpc'] ?? null) === null ? null : ['text' => KraEngine::money((float) $p['team']['rpc']), 'ok' => $p['team']['rpc'] >= (float) $cfg['rpc_target']])
+                : ($p['levers'][3]['value'] === null ? null : ['text' => $p['levers'][3]['text'], 'ok' => $p['levers'][3]['ok']]);
             if ($p['levels'] !== null) {
                 $lvAtPace = $p['projected'] >= $p['levels']['l3'] ? 3 : ($p['projected'] >= $p['levels']['l2'] ? 2 : ($p['projected'] >= $p['levels']['l1'] ? 1 : 0));
             }
@@ -274,6 +282,7 @@ final class Kra
                 'mco'       => $p['role'] === 'manager' ? ($p['team']['mco'] ?? 0) : $p['mco'],
                 'projected' => $p['role'] === 'manager' ? ($p['team']['projected'] ?? 0) : $p['projected'],
                 'level_at_pace' => $lvAtPace,
+                'rpc'       => $rpc,
                 'weakest'   => $p['gap'] ? preg_replace('/^Your biggest gap · /', '', $p['gap']['title']) : null,
                 'quality_hit' => $p['quality_hit'],
                 'incentive' => $locked !== null ? ($locked[$p['id']] ?? 0) : $p['incentive_total'],
@@ -291,6 +300,12 @@ final class Kra
             $worth = max(0, $calls * $scale / $convTarget - $sales * $scale) * $pps;
             $actions[] = 'The floor turns 1 in ' . max(1, (int) round($calls / max(1, $sales))) . ' logged calls into a sale; the target is 1 in ' . (int) $convTarget . '.'
                 . ($worth > 0 ? ' Reaching it is worth about $' . number_format($worth) . ' more Net MCO this month — closing practice with the team leaders pays first.' : '');
+        }
+        $rpcTarget = (float) $cfg['rpc_target'];
+        $floorRpc = $calls > 0 ? $loggedMco / $calls : null;
+        if ($floorRpc !== null && $floorRpc < $rpcTarget) {
+            $actions[] = 'The floor makes ' . KraEngine::money($floorRpc) . ' Net MCO per logged call; the revenue-per-call target is ' . KraEngine::money($rpcTarget) . '.'
+                . ' That gap closes through more sales from the same calls and more profit on each sale.';
         }
         $behind = array_values(array_filter($rows, fn($r) => $r['role_key'] !== 'manager' && $r['set_up'] && $r['progress'] !== null));
         usort($behind, fn($a, $b) => $a['progress'] <=> $b['progress']);
@@ -321,7 +336,9 @@ final class Kra
                              'cap' => $fc ? $fc['cap'] : 0, 'scale' => $fc ? $fc['scale'] : 1, 'breakeven_set' => $fc ? $fc['breakeven_set'] : false],
             'booster'    => $active ? ['rule' => $active[0]['rule'], 'spent' => $active[0]['spent'], 'budget' => $active[0]['budget'],
                                        'sales' => $active[0]['sales'], 'mco' => $active[0]['mco'], 'ends_at' => $active[0]['ends_at']] : null,
-            'funnel'     => ['calls' => $calls, 'auths' => $auths, 'signed' => $signed, 'sales' => $sales, 'pps' => $sales > 0 ? round($mco / $sales) : null],
+            'funnel'     => ['calls' => $calls, 'auths' => $auths, 'signed' => $signed, 'sales' => $sales, 'pps' => $sales > 0 ? round($mco / $sales) : null,
+                             'rpc' => $floorRpc === null ? null : KraEngine::money($floorRpc), 'rpc_ok' => $floorRpc !== null && $floorRpc >= $rpcTarget],
+            'rpc_target' => KraEngine::money($rpcTarget),
             'people'     => $rows,
             'actions'    => $actions,
         ];
