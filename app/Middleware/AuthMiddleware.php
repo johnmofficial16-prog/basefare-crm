@@ -76,7 +76,7 @@ class AuthMiddleware
         // Until they choose their own, every page sends them to do it — so a
         // manager or admin who reset it can't keep using the account (audit 26 Oct 2026).
         if (!empty($_SESSION['must_change_password'])
-            && !in_array($request->getUri()->getPath(), ['/account/password', '/logout'], true)) {
+            && !in_array($request->getUri()->getPath(), ['/account/password', '/account/backup-codes', '/logout'], true)) {
             $response = new SlimResponse();
             if (str_contains($request->getHeaderLine('Accept'), 'application/json')
                 || $request->getHeaderLine('X-Requested-With') === 'XMLHttpRequest') {

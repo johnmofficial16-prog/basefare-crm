@@ -429,6 +429,13 @@ $app->group('', function ($group) {
 // Choose your own password after someone else reset it (security audit
 // 26 Oct 2026). AuthMiddleware sends every other page here until it's done.
 // ==========================================================================
+// Admin sign-in, second step (app code). Before sign-in completes, so no AuthMiddleware:
+// TwoStepController only acts on the session the password step left behind.
+$app->get('/login/two-step', [\App\Controllers\TwoStepController::class, 'show']);
+$app->post('/login/two-step', [\App\Controllers\TwoStepController::class, 'verify']);
+$app->get('/account/backup-codes', [\App\Controllers\TwoStepController::class, 'backupCodes'])
+    ->add(new AuthMiddleware());
+
 $app->get('/account/password', [\App\Controllers\AccountController::class, 'passwordForm'])
     ->add(new AuthMiddleware());
 $app->post('/account/password', [\App\Controllers\AccountController::class, 'savePassword'])

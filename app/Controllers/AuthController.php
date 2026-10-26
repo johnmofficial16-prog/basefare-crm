@@ -97,77 +97,15 @@ class AuthController
             \App\Models\LoginAttempt::clearFor($ip);
             \App\Models\LoginAttempt::clearAccount($email);
 
-            // Regenerate session ID to prevent fixation payload injections
-            session_regenerate_id(true);
-
-            // Store the active session ID for concurrent login detection
-            $user->active_session_id = session_id();
-            $user->save();
-
-            $_SESSION['user_id'] = $user->id;
-            $_SESSION['role'] = $user->role;
-            $_SESSION['user_name'] = $user->name;
-            $_SESSION['active_session_id'] = session_id(); // Cache it in session to save DB queries
-            $_SESSION['last_activity'] = time(); // Initialize inactivity timer
-            // Aisha greets on EVERY login, not once a day: this flag is the
-            // trigger, set here because login is the only moment that reliably
-            // means "they just arrived". Closing and reopening the browser ends
-            // the session, so the next sign-in gets a fresh greeting.
-            $_SESSION['buddy_greet_due'] = true;
-            // Staff survey: ask again on every sign-in until it has been filled.
-            $_SESSION['staff_survey_due'] = true;
-            // Simple view: an admin account flagged for the simplified interface
-            // starts there on every sign-in (full access is one click away).
-            $_SESSION['simple_mode'] = $user->role === \App\Models\User::ROLE_ADMIN && !empty($user->simple_view);
-            $_SESSION['simple_available'] = $_SESSION['simple_mode'];   // shows "Back to Simple view" in the full CRM
-            // Theme: their own dark-mode choice (NULL = the standard light look).
-            $_SESSION['theme'] = \App\Services\Theme::normalise($user->theme ?? null);
-            // Password reset by someone else: they choose their own before anything else.
-            $_SESSION['must_change_password'] = !empty($user->must_change_password);
-
-            // ── Audit: record the successful login ──────────────────────────
-            // Until now nothing recorded a successful login anywhere: logout was
-            // logged, failures went to `login_attempts` (and were cleared on
-            // success), and `active_session_id` keeps no history. That made
-            // "who actually logged in on date X" unanswerable, so attendance
-            // reporting had to fall back on clock-in as a proxy.
-            //
-            // Best-effort by design — a logging failure must never stop someone
-            // signing in.
-            try {
-                \Illuminate\Database\Capsule\Manager::table('activity_log')->insert([
-                    'user_id'     => $user->id,
-                    'action'      => 'login',
-                    'entity_type' => 'users',
-                    'entity_id'   => $user->id,
-                    'details'     => json_encode([
-                        'role'       => $user->role,
-                        'user_agent' => mb_substr($userAgent, 0, 255),
-                    ]),
-                    'ip_address'  => $ip,
-                    'created_at'  => date('Y-m-d H:i:s'),
-                ]);
-            } catch (\Throwable $e) {
-                error_log('[AuthController] login activity_log insert failed: ' . $e->getMessage());
+            // ── Admins: second step (app code) unless this computer is remembered ──
+            if (\App\Services\TwoStep::requiredFor($user)
+                && !(\App\Services\TwoStep::isSetUp($user) && \App\Services\TwoStep::isRemembered($user))) {
+                session_regenerate_id(true);
+                $_SESSION['two_step'] = ['uid' => (int) $user->id, 'redirect' => $redirect, 'at' => time(), 'tries' => 0];
+                return $response->withHeader('Location', '/login/two-step')->withStatus(302);
             }
 
-            if ($redirect === '/dashboard' && $_SESSION['simple_mode']) {
-                $redirect = '/simple';
-            }
-
-            // Auto-redirect mobile admins to the mobile panel
-            if ($redirect === '/dashboard' && $user->role === \App\Models\User::ROLE_ADMIN) {
-                $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
-                if (preg_match('/Mobile|Android|iPhone|iPad|iPod/i', $userAgent)) {
-                    $redirect = '/admin/mobile';
-                }
-            }
-
-            if ($_SESSION['must_change_password']) {
-                $redirect = '/account/password';
-            }
-
-            return $response->withHeader('Location', $redirect)->withStatus(302);
+            return $this->completeLogin($response, $user, $redirect);
         }
 
         // Failure – record the attempt (per IP and per account)
@@ -175,6 +113,88 @@ class AuthController
         \App\Models\LoginAttempt::recordAccountFailure($email);
         $_SESSION['login_error'] = 'Invalid email or password.';
         return $response->withHeader('Location', '/login')->withStatus(302);
+    }
+
+    /**
+     * Start the signed-in session (after the password, and for admins after the
+     * second step too — TwoStepController calls this).
+     */
+    public function completeLogin(Response $response, \App\Models\User $user, string $redirect): Response
+    {
+        $ip        = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        unset($_SESSION['two_step']);
+        // Regenerate session ID to prevent fixation payload injections
+        session_regenerate_id(true);
+
+        // Store the active session ID for concurrent login detection
+        $user->active_session_id = session_id();
+        $user->save();
+
+        $_SESSION['user_id'] = $user->id;
+        $_SESSION['role'] = $user->role;
+        $_SESSION['user_name'] = $user->name;
+        $_SESSION['active_session_id'] = session_id(); // Cache it in session to save DB queries
+        $_SESSION['last_activity'] = time(); // Initialize inactivity timer
+        // Aisha greets on EVERY login, not once a day: this flag is the
+        // trigger, set here because login is the only moment that reliably
+        // means "they just arrived". Closing and reopening the browser ends
+        // the session, so the next sign-in gets a fresh greeting.
+        $_SESSION['buddy_greet_due'] = true;
+        // Staff survey: ask again on every sign-in until it has been filled.
+        $_SESSION['staff_survey_due'] = true;
+        // Simple view: an admin account flagged for the simplified interface
+        // starts there on every sign-in (full access is one click away).
+        $_SESSION['simple_mode'] = $user->role === \App\Models\User::ROLE_ADMIN && !empty($user->simple_view);
+        $_SESSION['simple_available'] = $_SESSION['simple_mode'];   // shows "Back to Simple view" in the full CRM
+        // Theme: their own dark-mode choice (NULL = the standard light look).
+        $_SESSION['theme'] = \App\Services\Theme::normalise($user->theme ?? null);
+        // Password reset by someone else: they choose their own before anything else.
+        $_SESSION['must_change_password'] = !empty($user->must_change_password);
+
+        // ── Audit: record the successful login ──────────────────────────
+        // Until now nothing recorded a successful login anywhere: logout was
+        // logged, failures went to `login_attempts` (and were cleared on
+        // success), and `active_session_id` keeps no history. That made
+        // "who actually logged in on date X" unanswerable, so attendance
+        // reporting had to fall back on clock-in as a proxy.
+        //
+        // Best-effort by design — a logging failure must never stop someone
+        // signing in.
+        try {
+            \Illuminate\Database\Capsule\Manager::table('activity_log')->insert([
+                'user_id'     => $user->id,
+                'action'      => 'login',
+                'entity_type' => 'users',
+                'entity_id'   => $user->id,
+                'details'     => json_encode([
+                    'role'       => $user->role,
+                    'user_agent' => mb_substr($userAgent, 0, 255),
+                ]),
+                'ip_address'  => $ip,
+                'created_at'  => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[AuthController] login activity_log insert failed: ' . $e->getMessage());
+        }
+
+        if ($redirect === '/dashboard' && $_SESSION['simple_mode']) {
+            $redirect = '/simple';
+        }
+
+        // Auto-redirect mobile admins to the mobile panel
+        if ($redirect === '/dashboard' && $user->role === \App\Models\User::ROLE_ADMIN) {
+            $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+            if (preg_match('/Mobile|Android|iPhone|iPad|iPod/i', $userAgent)) {
+                $redirect = '/admin/mobile';
+            }
+        }
+
+        if ($_SESSION['must_change_password']) {
+            $redirect = '/account/password';
+        }
+
+        return $response->withHeader('Location', $redirect)->withStatus(302);
     }
 
     /**
