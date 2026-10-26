@@ -9,3 +9,15 @@ RewriteRule ^case_study_images(/|$) - [F,L]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [QSA,L]
+
+# crm.base-fare.com points straight at this folder and, on Hostinger, does NOT
+# read the project-root .htaccess — so the rules that matter here live here too
+# (found live, audit 26 Oct 2026).
+# PHP error logs (PHP names them `error_log`, next to the script that failed):
+<FilesMatch "^(error_log|php_errors?\.log)$|\.(log|sql|bak|env|md|ini)$">
+    Require all denied
+</FilesMatch>
+Options -Indexes
+<IfModule mod_headers.c>
+    Header always set X-Robots-Tag "noindex, nofollow"
+</IfModule>

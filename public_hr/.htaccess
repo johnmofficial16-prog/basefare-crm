@@ -24,6 +24,11 @@ DirectoryIndex index.html
 <FilesMatch "\.(php|phtml|sql|md|env|log|ini|lock|json)$">
   Require all denied
 </FilesMatch>
+# PHP's own error log has no extension (`error_log`); hr.base-fare.com doesn't
+# read the project-root .htaccess on Hostinger, so it's refused here (audit 26 Oct 2026).
+<Files "error_log">
+  Require all denied
+</Files>
 <Files "index.php">
   Require all granted
 </Files>
@@ -38,6 +43,7 @@ DirectoryIndex index.html
   Header always set X-Frame-Options "DENY"
   Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
   Header always set Strict-Transport-Security "max-age=31536000"
+  Header always set X-Robots-Tag "noindex, nofollow"
   # Always revalidate the app shell and its modules (cheap 304s), so a deploy
   # is picked up at once. Module URLs carry no version: one URL per module.
   <FilesMatch "\.(html|js|css|webmanifest)$">
