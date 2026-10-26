@@ -151,6 +151,13 @@ class AuthController
         $_SESSION['theme'] = \App\Services\Theme::normalise($user->theme ?? null);
         // Password reset by someone else: they choose their own before anything else.
         $_SESSION['must_change_password'] = !empty($user->must_change_password);
+        // Developer account: start in dev view, with the view switcher.
+        if (!empty($user->is_dev)) {
+            \App\Services\DevMode::begin($user);
+            if ($redirect === '/dashboard') {
+                $redirect = '/dev';
+            }
+        }
 
         // ── Audit: record the successful login ──────────────────────────
         // Until now nothing recorded a successful login anywhere: logout was
@@ -202,9 +209,14 @@ class AuthController
      */
     public function logout(Request $request, Response $response): Response
     {
-        if (isset($_SESSION['user_id'])) {
+        if (\App\Services\DevMode::active()) {
+            // A developer signing out: never clock out (or end the session of)
+            // whoever they were viewing as — only their own account is touched.
+            \App\Services\DevMode::log('dev_logout');
+            $userId = \App\Services\DevMode::devId();
+        } elseif (isset($_SESSION['user_id'])) {
             $userId = $_SESSION['user_id'];
-            
+
             // Auto-clock-out on logout to prevent abuse loopholes
             $attendanceService = new \App\Services\AttendanceService();
             $stateInfo = $attendanceService->getCurrentState($userId);

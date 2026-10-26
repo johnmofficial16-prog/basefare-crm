@@ -40,6 +40,10 @@ class ThemeMiddleware
 
         try {
             $themed = Theme::inject($html);
+            // Developer signed in: the floating dev bar (view, who, back to dev) on every page.
+            if (\App\Services\DevMode::active() && ($close = strripos($themed, '</body>')) !== false) {
+                $themed = substr_replace($themed, \App\Services\DevMode::bar(), $close, 0);
+            }
         } catch (\Throwable $e) {
             error_log('[theme] inject failed: ' . $e->getMessage());
             return $response->withBody((new \Slim\Psr7\Factory\StreamFactory())->createStream($html));

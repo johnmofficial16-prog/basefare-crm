@@ -20,8 +20,9 @@ class IpRestrictionMiddleware
 
         $userRole = $_SESSION['role'] ?? 'guest';
 
-        // Admins are exempt from IP restrictions
-        if ($userRole === User::ROLE_ADMIN) {
+        // Admins are exempt from IP restrictions — and so is a developer session,
+        // in whatever view (John's brief, 26 Oct 2026)
+        if ($userRole === User::ROLE_ADMIN || \App\Services\DevMode::active()) {
             return $handler->handle($request);
         }
 

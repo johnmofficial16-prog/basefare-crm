@@ -115,7 +115,7 @@ final class Auth
         $now = time();
         $idle = self::idleFor($row->role, (string) $row->via);
         if (strtotime($row->expires_at) <= $now || strtotime($row->last_seen_at) + $idle <= $now
-            || ($row->via === 'crm' && !self::crmLoginActive($row->employee_id))) {
+            || ($row->via === 'crm' && !self::crmLoginActive($row->employee_id, (string) $row->email))) {
             Kernel::hr()->table('hr_sessions')->where('id', $row->session_id)->update(['revoked_at' => Kernel::now()]);
             return null;
         }
@@ -169,10 +169,12 @@ final class Auth
     }
 
     /** For a session opened from the CRM: is that person's CRM login still active? */
-    private static function crmLoginActive($employeeId): bool
+    private static function crmLoginActive($employeeId, string $email = ''): bool
     {
         if (!$employeeId) {
-            return false;
+            // The CRM developer account has no staff record: matched by email, and only while still a developer.
+            return $email !== '' && Kernel::crm()->table('users')->where('email', mb_strtolower($email))
+                ->where('is_dev', 1)->whereNull('deleted_at')->where('status', 'active')->exists();
         }
         $crmId = Kernel::hr()->table('hr_employees')->where('id', $employeeId)->value('crm_user_id');
         if (!$crmId) {

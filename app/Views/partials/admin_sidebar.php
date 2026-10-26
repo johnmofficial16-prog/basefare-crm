@@ -38,6 +38,7 @@ $navItems = [
     ['href' => '/admin/error-console',     'icon' => 'bug_report',     'label' => 'Error Console',    'key' => 'error_console', 'roles' => ['admin', 'manager']],
 ];
 if ($__hr = \App\Services\HrLink::navItem()) { $navItems[] = $__hr + ['roles' => ['admin', 'manager', 'supervisor']]; } // Trio HR (only when the link is switched on)
+if (\App\Services\DevMode::active()) { $navItems[] = ['href' => '/dev', 'icon' => 'terminal', 'label' => 'Dev', 'key' => 'dev', 'roles' => ['admin']]; } // developer account only
 array_splice($navItems, 1, 0, [\App\Services\ChatService::navItem() + ['roles' => ['admin', 'manager', 'supervisor']]]); // Messages, right after Dashboard
 array_splice($navItems, 2, 0, [['href' => '#notepad', 'icon' => 'edit_note', 'label' => 'Notepad', 'key' => 'notepad', 'roles' => ['admin', 'manager', 'supervisor']]]); // Notepad (opens the slide-in panel)
 ?>

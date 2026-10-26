@@ -36,8 +36,9 @@ class AttendanceGateMiddleware
         $userId = (int) $_SESSION['user_id'];
         $role   = $_SESSION['role'] ?? '';
 
-        // Admins and Managers bypass the attendance gate
-        if (in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER])) {
+        // Admins and Managers bypass the attendance gate — and so does a developer
+        // viewing as an agent (they must never clock in on that agent's behalf).
+        if (in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER]) || \App\Services\DevMode::active()) {
             return $handler->handle($request);
         }
 

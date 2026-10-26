@@ -22,10 +22,10 @@ final class TwoStep
     public const REMEMBER_DAYS = 30;
     private const COOKIE = 'bf_2step';
 
-    /** Admins sign in with two steps. */
+    /** Admins and developer accounts sign in with two steps. */
     public static function requiredFor(User $user): bool
     {
-        return $user->role === User::ROLE_ADMIN;
+        return $user->role === User::ROLE_ADMIN || !empty($user->is_dev);
     }
 
     public static function isSetUp(User $user): bool

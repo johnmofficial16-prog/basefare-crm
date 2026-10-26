@@ -46,6 +46,19 @@ class AuthMiddleware
         $userId   = $_SESSION['user_id'];
         $userRole = $_SESSION['role'] ?? 'guest';
 
+        // ── 0. Developer session (view switcher) ─────────────────────────
+        // $_SESSION['dev'] is who is REALLY signed in; user_id may be someone
+        // they're viewing as. The developer's own account is re-checked every
+        // minute; the person being viewed is never touched (no clock-out, no
+        // "one session at a time", no forced password change on their behalf).
+        $isDev = \App\Services\DevMode::active();
+        if ($isDev && !\App\Services\DevMode::stillValid()) {
+            $_SESSION = [];
+            session_destroy();
+            $response = new SlimResponse();
+            return $response->withHeader('Location', '/login?expired=1')->withStatus(302);
+        }
+
         // ── 1a. Revalidate the account against the database ──────────────
         // The role was previously trusted for the life of the session and never
         // re-read, and suspending/deleting/demoting a user did not touch their
@@ -56,6 +69,12 @@ class AuthMiddleware
         if (time() - $lastCheck > 60) {
             $fresh = User::whereNull('deleted_at')->find($userId);
 
+            if ((!$fresh || $fresh->status !== User::STATUS_ACTIVE) && \App\Services\DevMode::actingAs()) {
+                // The person a developer was viewing as was switched off: back to dev view.
+                \App\Services\DevMode::restoreSelf();
+                $response = new SlimResponse();
+                return $response->withHeader('Location', '/dev')->withStatus(302);
+            }
             if (!$fresh || $fresh->status !== User::STATUS_ACTIVE) {
                 // Account suspended, deactivated or deleted — end the session now.
                 $_SESSION = [];
@@ -75,7 +94,7 @@ class AuthMiddleware
         // ── 1a-ii. One-time password after a reset by someone else ──────
         // Until they choose their own, every page sends them to do it — so a
         // manager or admin who reset it can't keep using the account (audit 26 Oct 2026).
-        if (!empty($_SESSION['must_change_password'])
+        if (!$isDev && !empty($_SESSION['must_change_password'])
             && !in_array($request->getUri()->getPath(), ['/account/password', '/account/backup-codes', '/logout'], true)) {
             $response = new SlimResponse();
             if (str_contains($request->getHeaderLine('Accept'), 'application/json')
@@ -92,7 +111,7 @@ class AuthMiddleware
         // their session, so an existing desktop session is left intact).
         // Public customer-facing pages don't use this middleware, so the
         // acceptance / e-ticket links customers open on phones still work.
-        if ($userRole !== User::ROLE_ADMIN
+        if ($userRole !== User::ROLE_ADMIN && !$isDev
             && preg_match('/Mobile|Android|iPhone|iPad|iPod/i', $request->getHeaderLine('User-Agent'))) {
             $response = new SlimResponse();
             $response->getBody()->write(
@@ -121,7 +140,8 @@ class AuthMiddleware
         }
 
         // ── 3. Inactivity timeout (agent/supervisor only) ────────────────
-        if (!in_array($userRole, self::EXEMPT_ROLES)) {
+        // (Not for a developer viewing as an agent: it would clock THAT agent out.)
+        if (!$isDev && !in_array($userRole, self::EXEMPT_ROLES)) {
             $lastActivity = $_SESSION['last_activity'] ?? 0;
             $elapsed      = time() - $lastActivity;
 
@@ -149,7 +169,8 @@ class AuthMiddleware
         $_SESSION['last_activity'] = time();
 
         // ── 4. Concurrent login detection (agent/supervisor only) ────────
-        if (!in_array($userRole, self::EXEMPT_ROLES)) {
+        // (Not for a developer: viewing as someone must never log that person out.)
+        if (!$isDev && !in_array($userRole, self::EXEMPT_ROLES)) {
             $currentSessionId = session_id();
             $storedSessionId  = $_SESSION['active_session_id'] ?? null;
 

@@ -100,6 +100,9 @@ $errorMiddleware->setDefaultErrorHandler(function (
 // Include routes
 require __DIR__ . '/../app/routes.php';
 
+// Developer view switcher: log every action taken while viewing as someone else
+$app->add(new \App\Middleware\DevAuditMiddleware());
+
 // CRM theme (Peacock / Night Shift) on staff pages — see App\Services\Theme
 $app->add(new \App\Middleware\ThemeMiddleware());
 

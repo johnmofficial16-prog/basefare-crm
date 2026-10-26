@@ -303,8 +303,9 @@ final class Api
             }
             // A sign-in like any other (new-device email on an unknown device), marked as opened from the CRM:
             // bank changes and ID documents then need a password sign-in.
+            // (The developer account has no mailbox and already passed the CRM's app code: no new-device email.)
             return self::signedIn($res, Auth::complete($account, Ctx::clientIp(), Auth::clientUa($req),
-                SecondStep::trustedDevice($req, (int) $account->id), false, false, 'crm'));
+                SecondStep::trustedDevice($req, (int) $account->id), !empty($account->dev), false, 'crm'));
         })->add($open);
 
         // Invites and password resets (token travels in the body, never the URL path)

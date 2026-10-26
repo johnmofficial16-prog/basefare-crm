@@ -433,7 +433,8 @@ async function refreshBell(background = false) {
   try { setBell((await api.get('/notifications', { background })).unread); } catch {}
   // Staff: unread replies and announcements on the Inbox tab.
   const tb = $('[data-tabbadge="inbox"]');
-  if (tb && state.session.employee) {
+  // (The session can end during the await above — sign-out elsewhere or the idle timeout.)
+  if (tb && state.session?.employee) {
     try {
       const n = (await api.get('/me/mail/unread', { background: true })).unread;
       tb.hidden = !n;

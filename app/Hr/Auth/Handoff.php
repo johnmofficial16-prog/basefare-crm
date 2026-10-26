@@ -103,9 +103,31 @@ final class Handoff
             throw $fail();
         }
 
-        $crm = Kernel::crm()->table('users')->where('id', $data['u'])->first(['id', 'status', 'deleted_at', 'email', 'name']);
+        $crm = Kernel::crm()->table('users')->where('id', $data['u'])->first(['id', 'status', 'deleted_at', 'email', 'name', 'is_dev']);
         if (!$crm || $crm->status !== 'active' || $crm->deleted_at) {
             throw new ApiError(403, 'handoff_user', 'Your CRM login is not active, so Trio HR can\'t open from it. Please speak to the HR admin.');
+        }
+
+        // The CRM developer account (John's brief, 26 Oct 2026): opens Trio HR as an
+        // owner, with no staff record and no separate password. Safe because the CRM
+        // already required its password AND app code. Not on the staff list.
+        if (!empty($crm->is_dev)) {
+            $email = mb_strtolower((string) $crm->email);
+            $account = $db->table('hr_accounts')->where('email', $email)->first();
+            if (!$account) {
+                $id = $db->table('hr_accounts')->insertGetId([
+                    'employee_id' => null, 'display_name' => trim((string) $crm->name) ?: 'Developer', 'email' => $email,
+                    'role' => 'owner', 'status' => 'active', 'created_at' => Kernel::now(), 'updated_at' => Kernel::now(),
+                ]);
+                $account = $db->table('hr_accounts')->where('id', $id)->first();
+                Audit::log('account.create', ['account_id' => (int) $id, 'summary' => 'Developer account opened Trio HR from the CRM for the first time']);
+            }
+            if ($account->employee_id !== null || $account->status !== 'active') {
+                throw new ApiError(403, 'handoff_dev', 'This developer sign-in is switched off in Trio HR.');
+            }
+            Audit::log('signin.crm', ['account_id' => (int) $account->id, 'summary' => 'Developer opened Trio HR from the CRM']);
+            $account->dev = true;
+            return $account;
         }
         $e = $db->table('hr_employees')->where('crm_user_id', $crm->id)->first(['id', 'full_name', 'work_email', 'personal_email', 'status']);
         if (!$e) {

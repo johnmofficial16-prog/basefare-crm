@@ -429,6 +429,11 @@ $app->group('', function ($group) {
 // Choose your own password after someone else reset it (security audit
 // 26 Oct 2026). AuthMiddleware sends every other page here until it's done.
 // ==========================================================================
+// Developer home + view switcher (users.is_dev). DevController 404s for anyone
+// else; no IpRestrictionMiddleware (the dev account has no office-network limit).
+$app->get('/dev', [\App\Controllers\DevController::class, 'index'])->add(new AuthMiddleware());
+$app->post('/dev/view', [\App\Controllers\DevController::class, 'switchView'])->add(new AuthMiddleware());
+
 // Admin sign-in, second step (app code). Before sign-in completes, so no AuthMiddleware:
 // TwoStepController only acts on the session the password step left behind.
 $app->get('/login/two-step', [\App\Controllers\TwoStepController::class, 'show']);

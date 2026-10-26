@@ -18,9 +18,13 @@ class ThemeController
 {
     public function save(Request $request, Response $response): Response
     {
-        $uid = (int) ($_SESSION['user_id'] ?? 0);
+        // A developer viewing as someone changes their OWN look, never that person's.
+        $uid = (int) (\App\Services\DevMode::devId() ?? $_SESSION['user_id'] ?? 0);
         $body = (array) ($request->getParsedBody() ?? []);
         $wanted = Theme::normalise(isset($body['theme']) ? (string) $body['theme'] : null);
+        if (\App\Services\DevMode::active()) {
+            $_SESSION['dev']['theme'] = $wanted;
+        }
 
         if ($uid <= 0) {
             return $this->json($response, ['error' => 'Please sign in again.'], 401);

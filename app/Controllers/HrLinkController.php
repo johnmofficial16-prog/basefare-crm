@@ -20,6 +20,16 @@ class HrLinkController
         }
         $userId = (int) ($_SESSION['user_id'] ?? 0);
         $role = (string) ($_SESSION['role'] ?? '');
+        // Developer in dev/admin view: straight into Trio HR as its owner account
+        // (no HR password — the CRM already required password + app code). While
+        // viewing as someone, Trio HR opens as that person.
+        if (\App\Services\DevMode::active()) {
+            if (\App\Services\DevMode::actingAs() === null) {
+                $userId = (int) \App\Services\DevMode::devId();
+                $role = 'dev';
+            }
+            \App\Services\DevMode::log('dev_open_hr', ['as_user_id' => \App\Services\DevMode::actingAs()]);
+        }
         $to = $request->getQueryParams()['to'] ?? null;
         return $response
             ->withHeader('Location', HrLink::destination($userId, $role, is_string($to) ? $to : null))
