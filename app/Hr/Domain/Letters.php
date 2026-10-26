@@ -28,7 +28,7 @@ final class Letters
         'draft' => 'Draft', 'pending_check' => 'Waiting for a second check', 'issued' => 'Issued',
         'acknowledged' => 'Acknowledged', 'void' => 'Cancelled',
     ];
-    private const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    public const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // payslips use the same codes
     private const FIELD_LABELS = [
         'signatory.name' => 'the authorised signatory (Settings → Company)', 'signatory.title' => "the signatory's designation (Settings → Company)",
         'employee.address' => "the employee's address", 'employee.last_working_day' => 'the last working day', 'employee.notice_days' => 'the notice period',
@@ -571,7 +571,8 @@ final class Letters
             ->where('l.verify_code', $code)->whereIn('l.status', ['issued', 'acknowledged', 'void'])
             ->first(['l.number', 'l.status', 'l.issued_at', 'l.void_reason', 'l.data', 'e.full_name', 't.name']);
         if (!$l) {
-            return ['found' => false];
+            // Payslips carry the same kind of code (Phase 3).
+            return Payroll::verifyPayslip($code) ?? ['found' => false];
         }
         $data = json_decode((string) $l->data, true) ?: [];
         $company = $data['letterhead'] ?? Settings::get('company');

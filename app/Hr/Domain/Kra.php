@@ -593,6 +593,9 @@ final class Kra
     public static function reopenPayouts(Ctx $c): array
     {
         $month = self::pastMonth($c);
+        if (Payroll::monthUsedByLockedRun($month, 'incentive')) {
+            throw ApiError::conflict(date('F Y', strtotime($month . '-01')) . "'s incentives were paid through a locked payroll, so they can't be reopened.");
+        }
         $n = Kernel::crm()->transaction(function () use ($month) {
             Kernel::crm()->table('kra_payouts')->where('month', $month)->delete();
             return Kernel::crm()->table('kra_closed_months')->where('month', $month)->delete();

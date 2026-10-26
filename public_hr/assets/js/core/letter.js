@@ -45,17 +45,17 @@ export function letterSheet(d, o = {}) {
     <div class="ltr__rule" aria-hidden="true"></div>
     <div class="ltr__meta"><span><b>Ref. No.:</b> ${l.number || '—'}</span><span><b>Date:</b> ${l.date}</span></div>
     <h2 class="ltr__subject">${l.subject}</h2>
-    <div class="doc ltr__body">${raw(l.html)}</div>
+    <div class="doc ltr__body">${o.body || raw(l.html)}</div>
     <div class="ltr__close">
-      <div class="ltr__sign">
+      ${o.unsigned ? html`<div class="ltr__sign"><span>${o.unsigned}</span></div>` : html`<div class="ltr__sign">
         <span>For ${lh.legal_name || 'Trio Tours & Travels Private Limited'}</span>
         <i class="ltr__sigspace" aria-hidden="true"></i>
         <b>${lh.signatory_name || 'Authorised signatory'}</b>
         <span>${lh.signatory_title || ''}</span>
-      </div>
+      </div>`}
       ${o.qr && issued && l.verify_url ? html`<aside class="ltr__verify">
-        <div class="ltr__qr">${raw(qrSvg(l.verify_url, { ecc: 'M', border: 2, label: 'Scan to check this letter is genuine' }))}</div>
-        <p><span class="ltr__k">Verify this letter</span>Scan the code, or go to<br><b class="nowrap">${verifyHost}/verify</b><br>and enter <b class="tnum nowrap">${l.verify_code}</b>.</p>
+        <div class="ltr__qr">${raw(qrSvg(l.verify_url, { ecc: 'M', border: 2, label: `Scan to check this ${o.kind || 'letter'} is genuine` }))}</div>
+        <p><span class="ltr__k">Verify this ${o.kind || 'letter'}</span>Scan the code, or go to<br><b class="nowrap">${verifyHost}/verify</b><br>and enter <b class="tnum nowrap">${l.verify_code}</b>.</p>
       </aside>` : ''}
     </div>
     ${l.ack_at ? html`<p class="ltr__ack">Read and accepted by ${l.ack_name} in Trio HR on ${day(l.ack_at)}.</p>` : ''}

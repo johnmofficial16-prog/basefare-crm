@@ -1296,3 +1296,64 @@ a.attchip:hover { border-color: var(--ink-2); }
 /* On a phone the KRA tables scroll sideways inside their card instead of crushing each name onto three lines. */
 .rtable.kra-table { min-width: 760px; }
 .rtable.kra-table td:first-child b { white-space: nowrap; }
+
+/* ---------- Payroll ---------- */
+.pay-gaps { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+.pay-gaps a { color: inherit; font-weight: 600; }
+.pay-err { margin: 0; color: var(--bad); font-weight: 600; font-size: var(--fs-meta); }
+.pay-err:empty { display: none; }
+.rtable.payt tbody tr.is-bad td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+.rtable.payt td .meta { display: block; }
+.slip__h { font-size: var(--fs-list); font-weight: 700; color: var(--ink-2); margin: 8px 0 0; }
+.slipsum { display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--r); background: var(--paper); border: 1px solid var(--line); font-size: var(--fs-list); }
+.slipsum div { display: flex; justify-content: space-between; gap: 12px; }
+.slipsum span { color: var(--meta); }
+.slipsum .is-net { border-top: 1px solid var(--line); padding-top: 8px; font-size: var(--fs-card); }
+.slipsum .is-net span { color: var(--ink); font-weight: 700; }
+.whys { display: grid; }
+.why { border-top: 1px solid var(--line); }
+.why:first-child { border-top: 0; }
+.why summary { display: flex; align-items: center; gap: 12px; padding: 12px 2px; cursor: pointer; list-style: none; font-size: var(--fs-list); }
+.why summary::-webkit-details-marker { display: none; }
+.why summary span { flex: 1; min-width: 0; }
+.why summary span::after { content: "Why?"; margin-left: 8px; font-size: var(--fs-meta); font-weight: 600; color: var(--gold-ink); text-decoration: underline; text-underline-offset: 3px; }
+.why[open] summary span::after { content: "Hide"; }
+.why p { margin: 0 0 12px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--gold-wash); color: var(--ink-2); font-size: var(--fs-meta); line-height: 1.55; }
+.why .linkbtn { margin: -4px 0 12px; }
+.slipnet .v { font-size: 34px; margin: 4px 0 2px; }
+.slabs { display: grid; gap: 8px; max-width: 560px; }
+.slabrow { display: grid; grid-template-columns: minmax(0, 1fr) 110px 36px; gap: 10px; align-items: center; }
+.slabrow--h { font-size: var(--fs-label); font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--meta); }
+.drawer .timeline { margin-top: 8px; }
+
+/* The payslip on the letter sheet (sizes in page millimetres, like the letter). */
+.ltr__body .slip__who { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: calc(var(--u) * 2.6) calc(var(--u) * 5); margin: 0 0 calc(var(--u) * 6); font-family: var(--sans); }
+.ltr__body .slip__who dt { font-size: calc(var(--u) * 2.3); font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #7A5F1C; }
+.ltr__body .slip__who dd { margin: calc(var(--u) * .5) 0 0; font-size: calc(var(--u) * 3.2); color: #1F2430; overflow-wrap: anywhere; }
+.ltr__body .slip__t { width: 100%; border-collapse: collapse; font-family: var(--sans); font-size: calc(var(--u) * 3.1); }
+.ltr__body .slip__t th, .ltr__body .slip__t td { padding: calc(var(--u) * 1.9) calc(var(--u) * 2.4); text-align: left; border-bottom: 1px solid #E6E1D6; }
+.ltr__body .slip__t thead th { background: #0B2353; color: #fff; font-size: calc(var(--u) * 2.5); letter-spacing: .12em; text-transform: uppercase; font-weight: 700; border: 0; }
+.ltr__body .slip__t tfoot th { background: #FBF6EA; color: #0B2353; font-weight: 700; border-bottom: 0; border-top: 1px solid #D8CBA5; }
+.ltr__body .slip__t .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ltr__body .slip__t td.n, .ltr__body .slip__t tbody td:nth-child(2) { border-right: 1px solid #E6E1D6; }
+.ltr__body .slip__t thead th:nth-child(2) { border-right: 1px solid rgba(255,255,255,.25); }
+.ltr__body .slip__t tfoot th:nth-child(2) { border-right: 1px solid #D8CBA5; }
+.ltr__body .slip__t td:last-child, .ltr__body .slip__t th:last-child { border-right: 0; }
+.ltr__body .slip__net { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: calc(var(--u) * 1) calc(var(--u) * 4); margin-top: calc(var(--u) * 5); padding: calc(var(--u) * 4) calc(var(--u) * 5); border: 1px solid #D8CBA5; border-left: calc(var(--u) * 1.2) solid #A8842C; border-radius: calc(var(--u) * 1.5); background: #FFFDF9; font-family: var(--sans); }
+.ltr__body .slip__net span { font-weight: 700; color: #0B2353; font-size: calc(var(--u) * 3.6); }
+.ltr__body .slip__net b { font-size: calc(var(--u) * 6.4); color: #0B2353; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.ltr__body .slip__net small { grid-column: 1 / -1; color: #59606F; font-size: calc(var(--u) * 2.9); }
+.ltr__body .slip__note { margin-top: calc(var(--u) * 4); font-family: var(--sans); font-size: calc(var(--u) * 2.8); color: #59606F; }
+@container (max-width: 560px) {
+  .ltr__body .slip__who { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ltr__body .slip__who dt { font-size: 11px; }
+  .ltr__body .slip__who dd, .ltr__body .slip__t { font-size: 13px; }
+  .ltr__body .slip__t thead th { font-size: 11px; }
+  .ltr__body .slip__t th, .ltr__body .slip__t td { padding: 7px 6px; }
+  .ltr__body .slip__net b { font-size: 24px; }
+  .ltr__body .slip__net span { font-size: 15px; }
+  .ltr__body .slip__net small, .ltr__body .slip__note { font-size: 13px; }
+}
+@media print { .ltr__body .slip__t, .ltr__body .slip__net { break-inside: avoid; } }
+/* Several drawer buttons wrap on a phone instead of running off the edge. */
+@media (max-width: 560px) { .drawer__f { flex-wrap: wrap; } .drawer__f .spacer { display: none; } }

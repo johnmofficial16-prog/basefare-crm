@@ -926,6 +926,9 @@ final class Attendance
         $ym = (string) $c->str('month', 7, true, 'The month');
         [, , $label] = self::month($ym);
         $reason = (string) $c->str('reason', 255, true, 'A reason');
+        if (Payroll::monthUsedByLockedRun($ym)) {
+            throw ApiError::conflict('Payroll for ' . $label . ' is locked, so its attendance can\'t be reopened. Locked months are never recalculated.');
+        }
         $n = Kernel::hr()->table('hr_attendance_months')->where('month', $ym)->where('status', 'locked')->update([
             'status' => 'unlocked', 'unlocked_by' => $c->accountId(), 'unlocked_at' => Kernel::now(), 'unlock_reason' => $reason,
         ]);

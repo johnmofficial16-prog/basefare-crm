@@ -21,6 +21,7 @@ const ADMIN_NAV = [
   { key: 'people', label: 'People', icon: 'users', href: '#/people' },
   { key: 'attendance', label: 'Attendance', icon: 'clock', href: '#/attendance' },
   { key: 'kra', label: 'KRA & incentives', icon: 'chart', href: '#/kra' },
+  { key: 'payroll', label: 'Payroll', icon: 'wallet', href: '#/payroll' },
   { k: 'Company' },
   { key: 'letters', label: 'Letters', icon: 'file', href: '#/letters', badge: true },
   { key: 'policies', label: 'Policies', icon: 'flag', href: '#/policies' },
@@ -30,13 +31,11 @@ const ADMIN_NAV = [
 
 // Modules still to come, folded under "Coming next" so the built ones fit a laptop screen.
 const SOON_NAV = [
-  { key: 'payroll', label: 'Payroll', icon: 'wallet', href: '#/payroll', soon: 'Phase 3' },
-  { key: 'tax', label: 'Tax (TDS)', icon: 'receipt', href: '#/tax', soon: 'Phase 3' },
   { key: 'hiring', label: 'Hiring & joining', icon: 'brief', href: '#/hiring', soon: 'Phase 4' },
 ];
 const navLink = (n) => html`<a href="${n.href}" data-nav="${n.key}">${icon(n.icon)}<span>${n.label}</span>${n.badge ? html`<em data-badge="${n.key}" hidden></em>` : ''}${n.soon ? html`<span class="soon">${n.soon}</span>` : ''}</a>`;
 
-// Pay lives under More until payroll starts.
+// Pay lives under More: the tab bar has room for five.
 const STAFF_TABS = [
   { key: 'me', label: 'Home', icon: 'home', href: '#/me' },
   { key: 'inbox', label: 'Inbox', icon: 'mail', href: '#/me/mail', badge: true },
@@ -82,7 +81,10 @@ const ROUTES = [
   [/^\/attendance\/holidays$/, 'attendance', 'holidays', 'admin', 'attendance'],
   [/^\/attendance\/balances$/, 'attendance', 'balances', 'admin', 'attendance'],
   [/^\/kra$/, 'kra', 'render', 'admin', 'kra'],
-  [/^\/(hiring|payroll|tax)$/, 'soon', 'render', 'admin', '$1'],
+  [/^\/payroll$/, 'payroll', 'render', 'admin', 'payroll'],
+  [/^\/payroll\/runs\/(\d+)$/, 'payroll', 'run', 'admin', 'payroll'],
+  [/^\/tax$/, 'payroll', 'taxPage', 'admin', 'payroll'],
+  [/^\/(hiring)$/, 'soon', 'render', 'admin', '$1'],
   [/^\/help$/, 'mail', 'render', 'admin', 'mail'],
   [/^\/me$/, 'staff', 'home', 'staff', 'me'],
   [/^\/me\/attendance$/, 'staff', 'attendance', 'staff', 'attendance'],
@@ -90,6 +92,7 @@ const ROUTES = [
   [/^\/me\/leave$/, 'staff', 'leave', 'staff', 'leave'],
   [/^\/me\/leave\/new$/, 'staff', 'leaveNew', 'staff', 'leave'],
   [/^\/me\/pay$/, 'staff', 'pay', 'staff', 'more'],
+  [/^\/me\/pay\/(\d+)$/, 'staff', 'payslip', 'staff', 'more'],
   [/^\/me\/mail$/, 'inbox', 'list', 'staff', 'inbox'],
   [/^\/me\/mail\/new$/, 'inbox', 'compose', 'staff', 'inbox'],
   [/^\/me\/mail\/(\d+)$/, 'inbox', 'thread', 'staff', 'inbox'],
@@ -110,7 +113,7 @@ const ROUTES = [
 export const isAdmin = () => ['owner', 'admin'].includes(state.session?.account?.role);
 
 const TITLES = {
-  signin: 'Sign in', forgot: 'Forgot password', welcome: 'Welcome', reset: 'New password', verify: 'Check a letter',
+  signin: 'Sign in', forgot: 'Forgot password', welcome: 'Welcome', reset: 'New password', verify: 'Check a letter or payslip',
   today: 'Today', floor: 'Tonight on the floor', compliance: 'Compliance', approvals: 'Approvals', people: 'People', org: 'Org chart',
   letters: 'Letters', policies: 'Policies', settings: 'Settings', account: 'My account', me: 'Home', attendance: 'Attendance',
   leave: 'Leave', pay: 'Pay', more: 'More', hiring: 'Hiring & joining', payroll: 'Payroll',
@@ -513,6 +516,10 @@ function palette() {
       { label: 'Close the month for payroll', href: '#/attendance/close', icon: 'lock', keywords: 'month end lock payroll ready no punch' },
       { label: 'Holidays', href: '#/attendance/holidays', icon: 'sun', keywords: 'holiday calendar diwali' },
       { label: 'Leave balances', hint: 'Opening balances for the year', href: '#/attendance/balances', icon: 'sun', keywords: 'leave balance opening casual sick earned' },
+      { label: 'Payroll', hint: 'Monthly runs, payslips and the ICICI file', href: '#/payroll', icon: 'wallet', keywords: 'salary pay payslip bank icici run' },
+      { label: 'Salaries', hint: "Everyone's monthly salary", href: '#/payroll?tab=salaries', icon: 'wallet', keywords: 'salary increment ctc pay' },
+      { label: 'Advances', href: '#/payroll?tab=advances', icon: 'wallet', keywords: 'advance loan recover' },
+      { label: 'Tax set-up', hint: 'Regime, previous employer, declarations', href: '#/payroll?tab=tax', icon: 'receipt', keywords: 'tds tax regime pan income' },
       { label: 'Compliance dates', hint: 'TDS, returns and other deadlines', href: '#/compliance', icon: 'shield', keywords: 'tds form 138 deadline due' },
     ],
   });

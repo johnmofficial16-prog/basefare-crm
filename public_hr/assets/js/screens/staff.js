@@ -6,6 +6,7 @@ import { api } from '../core/api.js';
 import { skeleton, errorView, confirmSheet, toast, busy } from '../core/ui.js';
 import * as f from '../core/fmt.js';
 import { letterSheet } from '../core/letter.js';
+import { slipTitle, whyList } from '../core/payslip.js';
 import * as att from '../core/att.js';
 import { go, signOut } from '../app.js';
 
@@ -126,12 +127,20 @@ export async function home({ main, head }) {
       <div><b>${n.title}</b><span>${n.text}</span></div>${icon('chev', 'chev')}</a>`)}</div>` : ''}
     <div class="tile2">
       <a class="tile tile--link" href="#/me/leave"><span class="label">Leave left</span><div class="v tnum">${d.leave[0] ? f.bal(free(d.leave[0])) : '0'} <small class="muted">${d.leave[0] ? f.lower(d.leave[0].name.replace(' leave', '')) : ''}</small></div><span class="meta">${leaveLine}</span></a>
-      <a class="tile tile--link" href="#/me/pay"><span class="label">Payslips</span><div class="v">Soon</div><span class="meta">From December pay</span></a>
+      <a class="tile tile--link" href="#/me/pay" id="paytile"><span class="label">Latest payslip</span><div class="v tnum">—</div><span class="meta">Pay and tax</span></a>
     </div>
     <a class="bigbtn" href="#/me/leave/new">${icon('sun')}Ask for leave</a>
     ${d.requests.length ? html`<div class="tile tile--list"><div class="listhead"><b>Your requests</b><a href="#/me/requests">See all</a></div>${d.requests.slice(0, 4).map((r) => reqRow(r))}</div>` : ''}`);
   tickPunch(main);
   wirePunch(main);
+  api.get('/me/pay', { background: true }).then((p) => {
+    const t = $('#paytile', main);
+    const s = p.payslips[0];
+    if (!t || !s) { if (t) $('.meta', t).textContent = 'None yet'; return; }
+    t.href = `#/me/pay/${s.id}`;
+    $('.v', t).textContent = f.rupees(s.net);
+    $('.meta', t).textContent = s.kind === 'settlement' ? `Final settlement · ${s.month}` : s.month;
+  }).catch(() => {});
 }
 
 // ---- Attendance -------------------------------------------------------------------------
@@ -322,18 +331,48 @@ export async function leaveNew({ main, head }) {
 
 export async function pay({ main, head }) {
   head({ title: 'Pay' });
+  mount(main, skeleton('list'));
+  let d;
   let p = null;
-  try { p = await api.get('/me/profile'); } catch {}
+  try { [d, p] = await Promise.all([api.get('/me/pay'), api.get('/me/profile').catch(() => null)]); } catch (err) { mount(main, errorView(err)); return; }
+  const y = d.ytd;
   mount(main, html`
-    <div class="tile"><div class="empty">
-      <div class="dot d-gold">${icon('wallet')}</div>
-      <b>Your payslips will appear here</b>
-      <p>Trio HR plans to pay salaries from December 2026. Until then, payslips come the usual way. Every line will have a "Why?" that explains it.</p>
-    </div></div>
+    ${d.payslips.length ? html`
+      <div class="tile2">
+        <div class="tile"><span class="label">Paid this tax year</span><div class="v tnum">${f.rupees(y.net)}</div><span class="meta">${d.tax_year}, after deductions</span></div>
+        <div class="tile"><span class="label">Income tax so far</span><div class="v tnum">${f.rupees(y.tds)}</div><span class="meta">On ${f.rupees(y.taxable)} taxable pay</span></div>
+      </div>
+      <div class="tile tile--list"><div class="listhead"><b>Payslips</b></div>
+        ${d.payslips.map((s) => html`<a class="listrow" href="#/me/pay/${s.id}">${icon('file')}<div><b>${s.kind === 'settlement' ? `Final settlement · ${s.month}` : s.month}</b><small>${s.number}</small></div>
+          <span class="r"><b class="tnum">${f.rupees(s.net)}</b>${icon('chev', 'chev')}</span></a>`)}</div>`
+      : html`<div class="tile"><div class="empty">
+        <div class="dot d-gold">${icon('wallet')}</div>
+        <b>Your payslips will appear here</b>
+        <p>Once HR pays a month's salary through Trio HR, its payslip shows here, with a "Why?" on every line.</p>
+      </div></div>`}
+    ${d.advances.length ? html`<div class="tile tile--list"><div class="listhead"><b>Advances</b></div>
+      ${d.advances.map((a) => html`<div class="listrow">${icon('wallet')}<div><b>${f.rupees(a.remaining)} left of ${f.rupees(a.amount)}</b><small>${f.rupees(a.monthly)} a month comes off your salary · ${a.reason}</small></div></div>`)}</div>` : ''}
     <div class="tile tile--list">
       <a class="listrow" href="#/me/bank">${icon('wallet')}<div><b>Bank account for salary</b><small>${p?.bank ? `${p.bank.account}${p.bank.ifsc ? ' · ' + p.bank.ifsc : ''}` : 'Not added yet'}</small></div><span class="r">${icon('chev', 'chev')}</span></a>
-      <div class="listrow">${icon('receipt')}<div><b>Tax (TDS)</b><small>Your regime choice, declarations and Form 130 come with payroll.</small></div></div>
+      <a class="listrow" href="#/me/mail/new">${icon('receipt')}<div><b>Tax: ${d.regime === 'old' ? 'old regime' : 'new regime'}</b><small>To change your regime, or tell HR about income from a previous job this year, write to HR.</small></div><span class="r">${icon('chev', 'chev')}</span></a>
     </div>`);
+}
+
+export async function payslip({ main, head, params }) {
+  head({ title: 'Payslip', back: '#/me/pay' });
+  mount(main, skeleton('list'));
+  let d;
+  try { d = await api.get(`/me/payslips/${params[0]}`); } catch (err) { mount(main, errorView(err)); return; }
+  const s = d.payslip;
+  mount(main, html`
+    <div class="tile slipnet"><span class="label">${slipTitle(s)}</span><div class="v tnum">${f.rupees(s.net)}</div>
+      <span class="meta">Paid to your bank account${s.bank ? ` ${s.bank}` : ''} · ${f.bal(s.paid_days)} of ${s.days_in_month} days paid</span></div>
+    <div class="tile"><span class="label">Earnings · ${f.rupees(s.gross)}</span><div class="whys">${whyList(s.earnings)}</div></div>
+    <div class="tile"><span class="label">Deductions · ${f.rupees(s.total_deductions)}</span>
+      <div class="whys">${s.deductions.length ? whyList(s.deductions, '− ') : html`<p class="muted">Nothing was deducted.</p>`}</div></div>
+    <p class="meta center">Tap a line to see why. ${s.number}</p>
+    <a class="btn btn--block" href="print.html?payslip=${s.id}&as=me" target="_blank" rel="noopener">${icon('down')}Download or print</a>
+    <a class="btn btn--block btn--quiet" href="#/me/mail/new">Something looks wrong? Write to HR</a>`);
 }
 
 // ---- More ----------------------------------------------------------------------------------------
@@ -356,7 +395,7 @@ export function more({ main, head, session }) {
       ${['owner', 'admin'].includes(session.account.role) ? html`<a class="listrow" href="#/today">${icon('home')}<div><b>Back to the admin console</b></div></a>` : ''}
       <button class="listrow" type="button" id="so">${icon('out')}<div><b>Sign out</b></div></button>
     </div>
-    <div class="tile"><span class="label">Coming soon</span><p class="meta">Punch in and out, payslips and your incentive statement.</p></div>`);
+    <div class="tile"><span class="label">Coming soon</span><p class="meta">Your incentive statement.</p></div>`);
   $('#so', main).addEventListener('click', signOut);
 }
 
