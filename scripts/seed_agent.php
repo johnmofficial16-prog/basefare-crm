@@ -21,16 +21,18 @@ $capsule->addConnection([
 $capsule->setAsGlobal();
 $capsule->bootEloquent();
 
-// Create a test agent
+// Create a test agent — with a random password shown once (it used to be the
+// literal "password", which also reset the live account each run; audit 26 Oct 2026)
+$password = rtrim(strtr(base64_encode(random_bytes(12)), '+/', '-_'), '=');
 $agent = User::updateOrCreate(
     ['email' => 'agent@base-fare.com'],
     [
         'name' => 'Test Agent',
-        'password_hash' => password_hash('password', PASSWORD_BCRYPT),
+        'password_hash' => password_hash($password, PASSWORD_BCRYPT),
         'role' => User::ROLE_AGENT,
         'status' => 'active',
         'grace_period_mins' => 30
     ]
 );
 
-echo "Test Agent seeded: agent@base-fare.com / password\n";
+echo "Test Agent seeded: agent@base-fare.com / {$password}  (shown once)\n";

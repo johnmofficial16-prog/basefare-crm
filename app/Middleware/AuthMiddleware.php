@@ -72,6 +72,20 @@ class AuthMiddleware
             $_SESSION['_acct_checked_at'] = time();
         }
 
+        // ── 1a-ii. One-time password after a reset by someone else ──────
+        // Until they choose their own, every page sends them to do it — so a
+        // manager or admin who reset it can't keep using the account (audit 26 Oct 2026).
+        if (!empty($_SESSION['must_change_password'])
+            && !in_array($request->getUri()->getPath(), ['/account/password', '/logout'], true)) {
+            $response = new SlimResponse();
+            if (str_contains($request->getHeaderLine('Accept'), 'application/json')
+                || $request->getHeaderLine('X-Requested-With') === 'XMLHttpRequest') {
+                $response->getBody()->write(json_encode(['error' => 'Please choose your own password first.']));
+                return $response->withHeader('Content-Type', 'application/json')->withStatus(403);
+            }
+            return $response->withHeader('Location', '/account/password')->withStatus(302);
+        }
+
         // ── 1b. Mobile device restriction ────────────────────────────────
         // Only admins may use the CRM on a mobile device. Non-admins get a
         // "desktop only" page on every authenticated route (we do NOT destroy

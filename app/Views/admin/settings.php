@@ -187,6 +187,22 @@ tailwind.config = {
       </div>
     </div>
 
+    <!-- ── Office TV scoreboard PIN ───────────────────────────────────────── -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+        <span class="material-symbols-outlined text-primary text-lg">tv</span>
+        <h2 class="font-bold text-slate-900" style="font-family:Manrope">Office TV Scoreboard</h2>
+      </div>
+      <div class="p-6">
+        <div class="max-w-sm">
+          <label class="field-label" for="tv_pin">New TV PIN</label>
+          <input class="field-input" type="password" id="tv_pin" name="tv_pin" minlength="8" maxlength="64" autocomplete="new-password"
+                 placeholder="<?= $cfg('tv_pin', '') !== '' ? 'A PIN is set — type a new one to change it' : 'Not set — the scoreboard is off' ?>">
+          <p class="text-sm text-slate-500 mt-1.5">At least 8 characters. Used once on the office TV at <span class="font-mono">/liveboard/score</span>. Leave blank to keep the current PIN.</p>
+        </div>
+      </div>
+    </div>
+
     <!-- ── System Info (read-only) ───────────────────────────────────────── -->
     <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
       <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">

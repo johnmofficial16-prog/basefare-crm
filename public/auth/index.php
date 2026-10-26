@@ -19,6 +19,7 @@
 // Adjust path depth based on your project structure
 $basePath = dirname(__DIR__, 2); // /public/auth → project root
 require $basePath . '/vendor/autoload.php';
+\App\Services\PublicPageHeaders::send();
 
 $dotenv = Dotenv\Dotenv::createImmutable($basePath);
 try { $dotenv->load(); } catch (\Throwable $e) {}
@@ -59,6 +60,19 @@ $acceptance = $service->findValidByToken($rawToken);
 if (!$acceptance) {
     $error = 'not_found';
     goto render;
+}
+
+// A finished link stops showing the booking (security audit 26 Oct 2026): links
+// get forwarded and sit in inboxes for years. Expired or cancelled ones show
+// nothing; a signed one keeps its confirmation page for 30 days, then closes.
+// Our own copy of everything stays in the CRM.
+if (!$acceptance->isPending()) {
+    $signedAt = $acceptance->approved_at ?? $acceptance->updated_at;
+    if ($acceptance->status !== AcceptanceRequest::STATUS_APPROVED
+        || ($signedAt && Carbon::parse($signedAt)->lt(Carbon::now()->subDays(30)))) {
+        $error = 'not_found';
+        goto render;
+    }
 }
 
 // ─── POST: Process submission ─────────────────────────────────────────────────

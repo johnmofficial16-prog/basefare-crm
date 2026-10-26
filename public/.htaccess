@@ -1,6 +1,10 @@
 Options -MultiViews
 RewriteEngine On
 
+# Customer booking screenshots were once saved here and served to anyone
+# (audit 26 Oct 2026). Nothing in this folder is ever meant for the web.
+RewriteRule ^case_study_images(/|$) - [F,L]
+
 # Route all non-file, non-directory requests to index.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

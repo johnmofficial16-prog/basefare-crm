@@ -30,6 +30,11 @@ final class Auth
     private const ADMIN_MAX = 12 * 3600;
     private const STAFF_IDLE = 14 * 86400;
     private const STAFF_MAX = 30 * 86400;
+    // Opened from the CRM (often a shared office PC): ends with the browser, after
+    // 30 idle minutes, or after 12 hours — and only while the CRM login is still
+    // active (security audit 26 Oct 2026).
+    private const CRM_IDLE = 30 * 60;
+    private const CRM_MAX = 12 * 3600;
     private const LOCK_AFTER = 5;
     private const LOCK_SECONDS = 15 * 60;
     private const IP_WINDOW = 15 * 60;
@@ -49,7 +54,11 @@ final class Auth
 
     public static function cookie(string $value, int $maxAge): string
     {
-        $parts = [self::cookieName() . '=' . $value, 'Path=/', 'HttpOnly', 'SameSite=Strict', 'Max-Age=' . max(0, $maxAge)];
+        // A negative age = a browser-session cookie (gone when the browser closes)
+        $parts = [self::cookieName() . '=' . $value, 'Path=/', 'HttpOnly', 'SameSite=Strict'];
+        if ($maxAge >= 0) {
+            $parts[] = 'Max-Age=' . $maxAge;
+        }
         if (!Kernel::isLocal()) {
             $parts[] = 'Secure';
         }
@@ -104,8 +113,9 @@ final class Auth
             return null;
         }
         $now = time();
-        $idle = self::isAdminRole($row->role) ? self::ADMIN_IDLE : self::STAFF_IDLE;
-        if (strtotime($row->expires_at) <= $now || strtotime($row->last_seen_at) + $idle <= $now) {
+        $idle = self::idleFor($row->role, (string) $row->via);
+        if (strtotime($row->expires_at) <= $now || strtotime($row->last_seen_at) + $idle <= $now
+            || ($row->via === 'crm' && !self::crmLoginActive($row->employee_id))) {
             Kernel::hr()->table('hr_sessions')->where('id', $row->session_id)->update(['revoked_at' => Kernel::now()]);
             return null;
         }
@@ -153,12 +163,30 @@ final class Auth
         ];
     }
 
+    private static function idleFor(string $role, string $via): int
+    {
+        return $via === 'crm' ? self::CRM_IDLE : (self::isAdminRole($role) ? self::ADMIN_IDLE : self::STAFF_IDLE);
+    }
+
+    /** For a session opened from the CRM: is that person's CRM login still active? */
+    private static function crmLoginActive($employeeId): bool
+    {
+        if (!$employeeId) {
+            return false;
+        }
+        $crmId = Kernel::hr()->table('hr_employees')->where('id', $employeeId)->value('crm_user_id');
+        if (!$crmId) {
+            return false;
+        }
+        return Kernel::crm()->table('users')->where('id', $crmId)->whereNull('deleted_at')->where('status', 'active')->exists();
+    }
+
     /** @return array{0:string,1:array} [cookie token, session] */
     private static function openSession(object $account, string $ip, string $ua, string $via = 'password'): array
     {
         $token = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
         $now = Kernel::now();
-        $max = self::isAdminRole($account->role) ? self::ADMIN_MAX : self::STAFF_MAX;
+        $max = $via === 'crm' ? self::CRM_MAX : (self::isAdminRole($account->role) ? self::ADMIN_MAX : self::STAFF_MAX);
         $csrf = bin2hex(random_bytes(32));
         $id = Kernel::hr()->table('hr_sessions')->insertGetId([
             'account_id'   => $account->id,
@@ -181,7 +209,7 @@ final class Auth
             'employee_id'  => $account->employee_id,
             'display_name' => $account->display_name,
             'email'        => $account->email,
-            'idle_seconds' => self::isAdminRole($account->role) ? self::ADMIN_IDLE : self::STAFF_IDLE,
+            'idle_seconds' => self::idleFor($account->role, $via),
             'max_seconds'  => $max,
             'via'          => $via === 'crm' ? 'crm' : 'password',
         ]];
@@ -208,8 +236,14 @@ final class Auth
         // (The dummy is a real Argon2id hash of a random string nobody knows.)
         $ok = password_verify($password, $hash ?? '$argon2id$v=19$m=65536,t=4,p=1$V082TDBhSEhpalMxV1hxOQ$Q9gaw8ECBzvWlDHQRfsOo+8c21I4pu5GLE0+4R3rUxI');
 
+        // "Paused" and "switched off" are told only to someone who typed the RIGHT
+        // password (the owner). Anyone else gets the same reply as a wrong password,
+        // so these messages can't be used to find out which emails have accounts.
         if ($account && $account->locked_until && strtotime($account->locked_until) > time()) {
             self::recordAttempt($ip, $email, false);
+            if (!$ok) {
+                throw new ApiError(401, 'bad_credentials', "That email and password don't match. Check them and try again.");
+            }
             $mins = (int) ceil((strtotime($account->locked_until) - time()) / 60);
             throw new ApiError(423, 'locked', "This account is paused for {$mins} more " . ($mins === 1 ? 'minute' : 'minutes') . ' after too many wrong passwords. You can also reset your password.');
         }
@@ -225,7 +259,7 @@ final class Auth
                 $db->table('hr_accounts')->where('id', $account->id)->update($update);
                 Audit::log('signin.fail', ['account_id' => $account->id, 'detail' => ['locked' => $fails >= self::LOCK_AFTER]]);
             }
-            if ($account && $account->status === 'disabled') {
+            if ($ok && $account && $account->status === 'disabled') {
                 throw new ApiError(401, 'disabled', 'This account has been switched off. Please speak to the HR admin.');
             }
             throw new ApiError(401, 'bad_credentials', "That email and password don't match. Check them and try again.");
@@ -252,7 +286,7 @@ final class Auth
     {
         [$token, $session] = self::openSession($account, $ip, $ua, $via);
         Audit::log('signin.ok', ['account_id' => $account->id]);
-        $cookies = [self::cookie($token, (int) $session['max_seconds'])];
+        $cookies = [self::cookie($token, $via === 'crm' ? -1 : (int) $session['max_seconds'])];
         if (!$trusted) {
             if ($passedEmailCode) {
                 // The emailed code already told them about this device.

@@ -18,6 +18,15 @@
     Require all denied
 </FilesMatch>
 
+# ── PHP's own error logs ─────────────────────────────────────────────────────
+# PHP writes a file literally named `error_log` (no extension) next to whatever
+# script hit an error — cron jobs write one here at the root. It held table
+# names, user ids and booking references and was readable at
+# base-fare.com/crm/error_log (audit 26 Oct 2026). No real page has this name.
+<FilesMatch "^(error_log|php_errors?\.log)$">
+    Require all denied
+</FilesMatch>
+
 # ── One-off maintenance scripts that must stay CLI-only ──────────────────────
 # These connect to the production database. They are kept in the repo because
 # they are run over SSH; they must never be executable over HTTP.
@@ -28,7 +37,21 @@
 # ── Application directories — never served directly ──────────────────────────
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteRule ^(app|vendor|database|scripts|scratch|cron|storage|\.git)(/.*)?$ - [F,L]
+    RewriteRule ^(app|vendor|database|scripts|scratch|cron|storage|docs|\.git|\.claude)(/.*)?$ - [F,L]
+    # Nothing at the project root is a web page. The CRM is served from public/
+    # (crm.base-fare.com points there), so a file sitting at the root — a stray
+    # export, a screenshot, a one-off script — is only ever reachable through
+    # base-fare.com/crm/<file>. Refuse them all. public/ and public_hr/ have their
+    # own RewriteEngine, so this rule never runs for the real CRM or HR pages.
+    RewriteRule ^[^/]+$ - [F,L]
+</IfModule>
+
+# ── Keep the CRM and HR portal out of search engines ─────────────────────────
+# Applies to everything under this folder: crm.base-fare.com, hr.base-fare.com
+# and base-fare.com/crm. The public website (base-fare.com) is a different
+# folder and is not affected.
+<IfModule mod_headers.c>
+    Header always set X-Robots-Tag "noindex, nofollow"
 </IfModule>
 
 # ── No directory listings ────────────────────────────────────────────────────

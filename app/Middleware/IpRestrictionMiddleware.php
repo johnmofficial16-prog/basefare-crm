@@ -33,29 +33,7 @@ class IpRestrictionMiddleware
         }
 
         $clientIp = self::resolveClientIp();
-
-        // Check if IP is in the whitelist table
-        // Also support dynamic DNS by checking if the DB holds hostnames,
-        // but since users enter IPs or hostnames, let's just resolve DB values
-        $whitelistedRecords = DB::table('ip_whitelist')->pluck('ip_address')->toArray();
-        $isAllowed = false;
-
-        foreach ($whitelistedRecords as $allowedValue) {
-            $allowedValue = trim($allowedValue);
-
-            // If it's a hostname (DDNS), resolve it to an IP first
-            if (!filter_var($allowedValue, FILTER_VALIDATE_IP) && !str_contains($allowedValue, '*')) {
-                $resolvedIp = gethostbyname($allowedValue);
-                if ($resolvedIp !== $allowedValue) {
-                    $allowedValue = $resolvedIp;
-                }
-            }
-
-            if ($this->isIpAllowed($clientIp, $allowedValue)) {
-                $isAllowed = true;
-                break;
-            }
-        }
+        $isAllowed = $this->ipListed($clientIp);
 
         if (!$isAllowed) {
             // Save user info before destroying session
@@ -88,6 +66,39 @@ class IpRestrictionMiddleware
         }
 
         return $handler->handle($request);
+    }
+
+    /** Is this IP on the office allowlist (IPs, wildcard prefixes or DDNS hostnames)? */
+    private function ipListed(string $clientIp): bool
+    {
+        foreach (DB::table('ip_whitelist')->pluck('ip_address')->toArray() as $allowedValue) {
+            $allowedValue = trim($allowedValue);
+
+            // If it's a hostname (DDNS), resolve it to an IP first
+            if (!filter_var($allowedValue, FILTER_VALIDATE_IP) && !str_contains($allowedValue, '*')) {
+                $resolvedIp = gethostbyname($allowedValue);
+                if ($resolvedIp !== $allowedValue) {
+                    $allowedValue = $resolvedIp;
+                }
+            }
+
+            if ($this->isIpAllowed($clientIp, $allowedValue)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * For pages outside the login (the office TV scoreboard): true when office-network
+     * restriction is off, or when this request comes from an allowlisted network.
+     */
+    public static function fromOfficeNetwork(): bool
+    {
+        if (DB::table('system_config')->where('key', 'ip_whitelisting_enabled')->value('value') !== '1') {
+            return true;
+        }
+        return (new self())->ipListed(self::resolveClientIp());
     }
 
     /**

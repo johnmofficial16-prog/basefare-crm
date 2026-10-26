@@ -106,4 +106,50 @@ class LoginAttempt extends Model
     {
         static::where('ip_address', $ip)->delete();
     }
+
+    // -------------------------------------------------------------------------
+    // Per-account limit (audit 26 Oct 2026). The per-IP limit alone let anyone
+    // guess one person's password from many addresses. Each account also gets a
+    // row of its own, keyed "acct:" + a hash of the email in the same column
+    // (fits varchar(45), so no migration).
+    // -------------------------------------------------------------------------
+    const ACCOUNT_MAX       = 10;   // failures on one account…
+    const ACCOUNT_LOCK_MINS = 15;   // …within this window pause that account
+
+    private static function accountKey(string $email): string
+    {
+        return 'acct:' . sha1(strtolower(trim($email)));
+    }
+
+    public static function accountLocked(string $email): bool
+    {
+        if (trim($email) === '') {
+            return false;
+        }
+        $r = static::where('ip_address', self::accountKey($email))->first();
+        return $r !== null && $r->attempts >= self::ACCOUNT_MAX
+            && Carbon::now()->lt($r->last_attempt_at->copy()->addMinutes(self::ACCOUNT_LOCK_MINS));
+    }
+
+    public static function recordAccountFailure(string $email): void
+    {
+        if (trim($email) === '') {
+            return;
+        }
+        $key = self::accountKey($email);
+        $r = static::where('ip_address', $key)->first();
+        if ($r === null) {
+            static::create(['ip_address' => $key, 'email' => null, 'attempts' => 1, 'last_attempt_at' => Carbon::now()]);
+            return;
+        }
+        $expired = Carbon::now()->gte($r->last_attempt_at->copy()->addMinutes(self::ACCOUNT_LOCK_MINS));
+        $r->attempts = $expired ? 1 : $r->attempts + 1;
+        $r->last_attempt_at = Carbon::now();
+        $r->save();
+    }
+
+    public static function clearAccount(string $email): void
+    {
+        static::where('ip_address', self::accountKey($email))->delete();
+    }
 }

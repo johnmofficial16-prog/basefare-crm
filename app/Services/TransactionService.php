@@ -576,7 +576,9 @@ class TransactionService
         }
         // Universal search — matches name, phone, email, or PNR
         if (!empty($filters['search'])) {
-            $term = '%' . $filters['search'] . '%';
+            // % and _ are LIKE wildcards: typed as-is they matched every row
+            // ("_____" listed the whole company — audit 26 Oct 2026). Search for them literally.
+            $term = '%' . addcslashes((string) $filters['search'], '\\%_') . '%';
             $query->where(function ($q) use ($term) {
                 $q->where('customer_name', 'LIKE', $term)
                   ->orWhere('customer_phone', 'LIKE', $term)
@@ -810,21 +812,11 @@ class TransactionService
         // never actually ran. Anyone with a live admin session (unlocked laptop,
         // stolen cookie, XSS) could dump every stored card. No bypass now.
         $admin = \App\Models\User::findOrFail($adminId);
-        $envAdminPass = $_ENV['ADMIN_PASSWORD_OVERRIDE'] ?? getenv('ADMIN_PASSWORD_OVERRIDE') ?? null;
 
-        $isValidPassword = false;
-
-        // The operator's OWN password is always accepted first. (Previously, if
-        // the override was set, an admin's real password was rejected outright.)
-        if (!empty($admin->password_hash) && password_verify($password, $admin->password_hash)) {
-            $isValidPassword = true;
-        } elseif ($admin->role === 'admin' && !empty($envAdminPass) && hash_equals((string) $envAdminPass, $password)) {
-            // DEPRECATED shared override — retained only so admins aren't locked
-            // out mid-migration. Remove ADMIN_PASSWORD_OVERRIDE from .env once
-            // every admin has a working individual password.
-            $isValidPassword = true;
-            error_log('[SECURITY] Deprecated ADMIN_PASSWORD_OVERRIDE used for card reveal by user ' . $adminId);
-        }
+        // Only the operator's OWN password. The shared ADMIN_PASSWORD_OVERRIDE
+        // from .env was removed (audit 26 Oct 2026): that file was public for six
+        // weeks in July, so the shared value has to be treated as known.
+        $isValidPassword = !empty($admin->password_hash) && password_verify($password, $admin->password_hash);
 
         if (!$isValidPassword) {
             throw new \RuntimeException('Invalid password. Card reveal denied.');

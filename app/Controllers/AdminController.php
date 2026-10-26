@@ -72,6 +72,18 @@ class AdminController
             }
         }
 
+        // ── Office TV scoreboard PIN (stored hashed; blank = keep the current one) ──
+        $tvPin = trim((string) ($body['tv_pin'] ?? ''));
+        if ($tvPin !== '') {
+            if (strlen($tvPin) < 8 || strlen($tvPin) > 64) {
+                $errors[] = 'The TV PIN must be 8 to 64 characters.';
+            } else {
+                DB::table('system_config')->updateOrInsert(['key' => 'tv_pin'], [
+                    'value' => password_hash($tvPin, PASSWORD_DEFAULT), 'updated_by' => $adminId, 'updated_at' => $now,
+                ]);
+            }
+        }
+
         foreach ($keys as $key => $rule) {
             if (!isset($body[$key])) continue;
             $val = (int) $body[$key];

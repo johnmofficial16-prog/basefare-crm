@@ -15,15 +15,59 @@ class LiveBoardController
     // PIN HELPERS
     // =========================================================================
 
-    private function getPin(): string
+    /**
+     * The TV PIN as stored (a password hash, set in Admin → Settings), or null when
+     * none is set — then the board stays off. Hardened 26 Oct 2026 (audit): it used
+     * to fall back to "1234", and the 5-try limit lived in the session, so a script
+     * with no cookie could try every PIN and read every agent's sales.
+     */
+    private function storedPin(): ?string
     {
-        return DB::table('system_config')->where('key', 'tv_pin')->value('value') ?? '1234';
+        $v = (string) (DB::table('system_config')->where('key', 'tv_pin')->value('value') ?? '');
+        return $v === '' ? null : $v;
+    }
+
+    private function pinMatches(string $stored, string $entered): bool
+    {
+        if (str_starts_with($stored, '$2y$') || str_starts_with($stored, '$argon2')) {
+            return password_verify($entered, $stored);
+        }
+        // A PIN typed straight into the database (old way): only if it's a real one
+        return strlen($stored) >= 8 && hash_equals($stored, $entered);
+    }
+
+    /** Failed PIN tries are counted in the database: per address, and for the whole floor. */
+    private const TRIES_PER_IP  = 5;
+    private const TRIES_ALL     = 20;
+    private const LOCK_MINS     = 30;
+
+    private function tooManyTries(string $ip): bool
+    {
+        foreach (['tv:' . $ip => self::TRIES_PER_IP, 'tv:all' => self::TRIES_ALL] as $key => $max) {
+            $r = DB::table('login_attempts')->where('ip_address', $key)->first();
+            if ($r && $r->attempts >= $max && strtotime((string) $r->last_attempt_at) > time() - self::LOCK_MINS * 60) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function recordTry(string $ip): void
+    {
+        foreach (['tv:' . $ip, 'tv:all'] as $key) {
+            $r = DB::table('login_attempts')->where('ip_address', $key)->first();
+            $fresh = !$r || strtotime((string) $r->last_attempt_at) <= time() - self::LOCK_MINS * 60;
+            DB::table('login_attempts')->updateOrInsert(['ip_address' => $key], [
+                'attempts' => $fresh ? 1 : $r->attempts + 1, 'last_attempt_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
     }
 
     private function isPinVerified(): bool
     {
         if (session_status() === PHP_SESSION_NONE) session_start();
-        return ($_SESSION['tv_pin_verified'] ?? false) === true;
+        return ($_SESSION['tv_pin_verified'] ?? false) === true
+            && \App\Middleware\IpRestrictionMiddleware::fromOfficeNetwork();
     }
 
     // =========================================================================
@@ -54,38 +98,35 @@ class LiveBoardController
         if (session_status() === PHP_SESSION_NONE) session_start();
 
         $body    = (array)$request->getParsedBody();
-        $entered = trim($body['pin'] ?? '');
-        $correct = $this->getPin();
+        $entered = trim((string) ($body['pin'] ?? ''));
+        $stored  = $this->storedPin();
+        $ip      = (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+        $back    = $response->withHeader('Location', '/liveboard/score')->withStatus(302);
 
-        // Throttle brute force. This endpoint sits outside every middleware group,
-        // so without a limiter the whole 4-digit PIN space is exhaustible in
-        // seconds — and the feed behind it exposes per-agent revenue and profit.
-        $now      = time();
-        $attempts = $_SESSION['tv_pin_attempts'] ?? 0;
-        $lockedTo = $_SESSION['tv_pin_locked_until'] ?? 0;
-
-        if ($lockedTo > $now) {
-            $_SESSION['tv_pin_error'] = 'Too many attempts. Try again in '
-                . max(1, (int) ceil(($lockedTo - $now) / 60)) . ' minute(s).';
-            return $response->withHeader('Location', '/liveboard/score')->withStatus(302);
+        if ($stored === null) {
+            $_SESSION['tv_pin_error'] = 'The scoreboard is off. An admin sets its PIN in Admin → Settings.';
+            return $back;
+        }
+        if (!\App\Middleware\IpRestrictionMiddleware::fromOfficeNetwork()) {
+            $_SESSION['tv_pin_error'] = 'The scoreboard only opens on the office network.';
+            return $back;
+        }
+        if ($this->tooManyTries($ip)) {
+            $_SESSION['tv_pin_error'] = 'Too many attempts. Try again in ' . self::LOCK_MINS . ' minutes.';
+            return $back;
         }
 
-        if (hash_equals($correct, $entered)) {
+        if ($entered !== '' && $this->pinMatches($stored, $entered)) {
+            session_regenerate_id(true);
             $_SESSION['tv_pin_verified'] = true;
-            unset($_SESSION['tv_pin_attempts'], $_SESSION['tv_pin_locked_until'], $_SESSION['tv_pin_error']);
+            unset($_SESSION['tv_pin_error']);
+            DB::table('login_attempts')->where('ip_address', 'tv:' . $ip)->delete();
         } else {
-            $attempts++;
-            $_SESSION['tv_pin_attempts'] = $attempts;
-            if ($attempts >= 5) {
-                $_SESSION['tv_pin_locked_until'] = $now + 900; // 15 minutes
-                $_SESSION['tv_pin_attempts']     = 0;
-                $_SESSION['tv_pin_error']        = 'Too many attempts. Try again in 15 minutes.';
-            } else {
-                $_SESSION['tv_pin_error'] = 'Incorrect PIN. Please try again.';
-            }
+            $this->recordTry($ip);
+            $_SESSION['tv_pin_error'] = 'Incorrect PIN. Please try again.';
         }
 
-        return $response->withHeader('Location', '/liveboard/score')->withStatus(302);
+        return $back;
     }
 
     // =========================================================================

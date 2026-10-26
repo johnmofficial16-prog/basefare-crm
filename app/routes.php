@@ -426,6 +426,15 @@ $app->group('', function ($group) {
 ->add(new AuthMiddleware());
 
 // ==========================================================================
+// Choose your own password after someone else reset it (security audit
+// 26 Oct 2026). AuthMiddleware sends every other page here until it's done.
+// ==========================================================================
+$app->get('/account/password', [\App\Controllers\AccountController::class, 'passwordForm'])
+    ->add(new AuthMiddleware());
+$app->post('/account/password', [\App\Controllers\AccountController::class, 'savePassword'])
+    ->add(new AuthMiddleware());
+
+// ==========================================================================
 // Theme — each person's own dark-mode switch (sidebar footer).
 // ==========================================================================
 $app->post('/theme', [ThemeController::class, 'save'])

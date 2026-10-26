@@ -65,25 +65,20 @@ class AuthController
 
         $user = \App\Models\User::where('email', $email)->where('status', 'active')->first();
 
-        // Allow admin password override via .env
-        $envAdminPass = $_ENV['ADMIN_PASSWORD_OVERRIDE'] ?? getenv('ADMIN_PASSWORD_OVERRIDE') ?? null;
-        $isValidPass = false;
+        // Each person's OWN password only. The shared ADMIN_PASSWORD_OVERRIDE from
+        // .env (which signed in as ANY admin) was removed in the audit of 26 Oct
+        // 2026: that file was publicly readable for six weeks in July, so the
+        // shared value must be treated as known.
+        $isValidPass = $user && !empty($user->password_hash) && password_verify($password, $user->password_hash);
 
-        if ($user) {
-            // The user's OWN password is always checked first. Previously, if the
-            // override was set, an admin's individual password was rejected
-            // outright — so all admins shared one plaintext credential from .env,
-            // password changes had no effect, and the audit trail could not tell
-            // which human logged in.
-            if (!empty($user->password_hash) && password_verify($password, $user->password_hash)) {
-                $isValidPass = true;
-            } elseif ($user->role === 'admin' && !empty($envAdminPass) && hash_equals((string) $envAdminPass, $password)) {
-                // DEPRECATED shared override — kept only so admins aren't locked
-                // out mid-migration. Delete ADMIN_PASSWORD_OVERRIDE from .env once
-                // every admin has a working individual password.
-                $isValidPass = true;
-                error_log('[SECURITY] Deprecated ADMIN_PASSWORD_OVERRIDE used to log in as ' . $user->email);
-            }
+        // Per-account limit as well as per-IP: guessing one person's password
+        // from many addresses is stopped after ACCOUNT_MAX failures.
+        // (Checked for every email typed, real or not, so the message gives away nothing.)
+        if (\App\Models\LoginAttempt::accountLocked($email)) {
+            $_SESSION['login_error'] = 'Too many failed attempts on this account. Please try again in '
+                . \App\Models\LoginAttempt::ACCOUNT_LOCK_MINS . ' minutes, or ask an admin to reset your password.';
+            \App\Models\LoginAttempt::recordFailure($ip, $email);
+            return $response->withHeader('Location', '/login')->withStatus(302);
         }
 
         // Check against secure Bcrypt password hash or .env override
@@ -98,8 +93,9 @@ class AuthController
                 return $response->withHeader('Location', '/login')->withStatus(302);
             }
 
-            // Successful login – reset any failure counters for this IP
+            // Successful login – reset any failure counters for this IP and account
             \App\Models\LoginAttempt::clearFor($ip);
+            \App\Models\LoginAttempt::clearAccount($email);
 
             // Regenerate session ID to prevent fixation payload injections
             session_regenerate_id(true);
@@ -126,6 +122,8 @@ class AuthController
             $_SESSION['simple_available'] = $_SESSION['simple_mode'];   // shows "Back to Simple view" in the full CRM
             // Theme: their own dark-mode choice (NULL = the standard light look).
             $_SESSION['theme'] = \App\Services\Theme::normalise($user->theme ?? null);
+            // Password reset by someone else: they choose their own before anything else.
+            $_SESSION['must_change_password'] = !empty($user->must_change_password);
 
             // ── Audit: record the successful login ──────────────────────────
             // Until now nothing recorded a successful login anywhere: logout was
@@ -165,11 +163,16 @@ class AuthController
                 }
             }
 
+            if ($_SESSION['must_change_password']) {
+                $redirect = '/account/password';
+            }
+
             return $response->withHeader('Location', $redirect)->withStatus(302);
         }
 
-        // Failure – record the attempt
+        // Failure – record the attempt (per IP and per account)
         \App\Models\LoginAttempt::recordFailure($ip, $email);
+        \App\Models\LoginAttempt::recordAccountFailure($email);
         $_SESSION['login_error'] = 'Invalid email or password.';
         return $response->withHeader('Location', '/login')->withStatus(302);
     }

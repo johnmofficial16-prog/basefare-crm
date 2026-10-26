@@ -139,7 +139,15 @@ class TransactionController
         // claims a wider scope than was actually applied.
         $crossAgentSearch = $isTargetedLookup && !$isAdmin;
 
-        $data = $this->service->list($page, 25, $filters, $agentFilter, $agentIds);
+        // A lookup beyond your own records shows one short page: enough to find the
+        // customer on the phone, never a list to page through.
+        $data = ($crossAgentSearch && !$isCsa)
+            ? $this->service->list(1, self::CROSS_AGENT_CAP, $filters, $agentFilter, $agentIds)
+            : $this->service->list($page, 25, $filters, $agentFilter, $agentIds);
+        if ($crossAgentSearch && !$isCsa) {
+            $data['pages'] = 1;
+            $data['page']  = 1;
+        }
 
         // ── "Today" quick stats ──────────────────────────────────────────────
         // Counted over the operations business day (6 PM → 6 PM by default), not
@@ -1099,35 +1107,38 @@ class TransactionController
      */
     private static function isTargetedLookup(string $term): bool
     {
+        // Tightened 26 Oct 2026 (audit): "_____", "%%%%%" and "@gmail.com" all
+        // passed the old length checks and listed every booking in the company.
+        // A lookup beyond your own records must now name ONE customer:
         $term = trim($term);
-        if ($term === '') {
+        if ($term === '' || preg_match('/[%_\\\\]/', $term)) {
             return false;
         }
 
-        // Email: needs a local part and something after the "@"
-        if (str_contains($term, '@') && strlen($term) >= 5) {
-            return true;
+        // A full email address (not a fragment like "@gmail.com")
+        if (str_contains($term, '@')) {
+            return filter_var($term, FILTER_VALIDATE_EMAIL) !== false;
         }
 
-        // Phone: 7+ digits once separators are stripped
+        // A phone number: 7+ digits once separators are stripped, and nothing else
         $digits = preg_replace('/\D/', '', $term);
-        if (strlen($digits) >= 7) {
+        if (strlen($digits) >= 7 && preg_match('/^[\d\s()+.\-]+$/', $term)) {
             return true;
         }
 
-        if (strlen($term) < 5) {
-            return false;
+        // A booking reference: 5–8 letters and digits, with at least one of each
+        if (preg_match('/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9]{5,8}$/', $term)) {
+            return true;
         }
 
-        // Block bare high-frequency fragments that would match huge swathes of
-        // the customer base while technically clearing the length bar.
-        $generic = ['gmail', 'yahoo', 'hotmail', 'outlook', 'email', '.com', 'admin', 'test'];
-        if (in_array(strtolower($term), $generic, true)) {
-            return false;
-        }
-
-        return true;
+        // A full name: at least two words of 2+ letters ("Maria Lopez", not "Maria")
+        $words = preg_split('/\s+/', $term);
+        $named = array_filter($words, fn($w) => preg_match('/^\p{L}[\p{L}\'\-.]+$/u', $w));
+        return count($words) >= 2 && count($named) >= 2;
     }
+
+    /** Most rows a lookup beyond your own records returns — a customer lookup, never a list. */
+    private const CROSS_AGENT_CAP = 10;
 
     private function getManagerTeamIds(int $managerId): array
     {

@@ -200,7 +200,7 @@ $avatarBg = ['#163274', '#0f766e', '#7c3aed', '#c2410c', '#2563eb', '#be185d', '
     var pass = genPass();
     SimpleUI.confirm({
       title: 'Give ' + b.dataset.name + ' a new password?', icon: 'key', confirmText: 'Yes, change it',
-      lines: ['Their old password stops working straight away.', 'You\'ll need to pass the new one on to them.'],
+      lines: ['Their old password stops working straight away.', 'This is a one-time password: they choose their own the first time they sign in.'],
       input: { label: 'New password', value: pass, required: true, requiredText: 'Please enter a password (at least 8 characters).' }
     }).then(function (r) {
       if (!r.ok) return;

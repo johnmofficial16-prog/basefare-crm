@@ -416,9 +416,11 @@ class ETicketController
     {
         $eticket = ETicket::findOrFail((int)$args['id']);
         $body    = $request->getParsedBody() ?? [];
-        $role    = $_SESSION['role'] ?? 'agent';
 
-
+        // Same rule as viewing it: only people who may open this e-ticket can add to its notes.
+        if (!$this->canAccessETicket($eticket)) {
+            return $this->jsonError($response, 'Access denied.', 403);
+        }
 
         if (empty($body['csrf_token']) || $body['csrf_token'] !== ($_SESSION['csrf_token'] ?? '')) {
             return $this->jsonError($response, 'CSRF validation failed.', 403);

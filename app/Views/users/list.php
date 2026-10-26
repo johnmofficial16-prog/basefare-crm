@@ -519,7 +519,7 @@ function submitReset() {
   .then(function(data) {
     if (data.success) {
       closeResetModal();
-      showToast('Password reset successfully.', 'success');
+      showToast('One-time password set. They choose their own when they sign in.', 'success');
     } else {
       errMsg.textContent = data.error || 'Failed to reset password.';
       errEl.classList.remove('hidden');

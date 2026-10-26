@@ -15,6 +15,7 @@
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 $basePath = dirname(__DIR__, 2); // /public/eticket → project root
 require $basePath . '/vendor/autoload.php';
+\App\Services\PublicPageHeaders::send();
 
 $dotenv = Dotenv\Dotenv::createImmutable($basePath);
 try { $dotenv->load(); } catch (\Throwable $e) {}
@@ -46,17 +47,22 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // ─── Token resolution ─────────────────────────────────────────────────────────
 $rawToken = trim($_GET['token'] ?? $_POST['token'] ?? '');
-$eticket  = $rawToken ? ETicket::where('token', $rawToken)->first() : null;
+$eticket  = preg_match('/^[a-f0-9]{64}$/', $rawToken) ? ETicket::where('token', $rawToken)->first() : null;
+
+// Links close 13 months after the e-ticket was issued — past any travel date
+// (airlines sell ~11 months ahead). Old links get forwarded and sit in inboxes;
+// our own copy stays in the CRM. (Security audit 26 Oct 2026.)
+if ($eticket && $eticket->created_at && Carbon::parse($eticket->created_at)->lt(Carbon::now()->subMonths(13))) {
+    $eticket = null;
+}
 
 // ─── Helper: record acknowledgment ───────────────────────────────────────────
 function recordAcknowledgment(ETicket $eticket, string $rawToken): void {
     if ($eticket->isAcknowledged()) return;
 
-    $ip = $_SERVER['HTTP_X_FORWARDED_FOR']
-        ?? $_SERVER['HTTP_X_REAL_IP']
-        ?? $_SERVER['REMOTE_ADDR']
-        ?? 'unknown';
-    $ip = trim(explode(',', $ip)[0]);
+    // The real connection address. X-Forwarded-For is just a header the visitor
+    // can set to anything, which made this record useless as dispute evidence.
+    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
     $ua = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
 
     $eticket->update([

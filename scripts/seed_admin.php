@@ -25,7 +25,8 @@ $capsule->bootEloquent();
 
 // Seed Admin User
 $email = 'admin@base-fare.com';
-$password = 'password';
+// A random password, shown once (it used to be the literal "password" — security audit 26 Oct 2026).
+$password = rtrim(strtr(base64_encode(random_bytes(12)), '+/', '-_'), '=');
 
 $exists = Capsule::table('users')->where('email', $email)->first();
 
@@ -39,7 +40,7 @@ if (!$exists) {
         'created_at' => date('Y-m-d H:i:s'),
         'updated_at' => date('Y-m-d H:i:s'),
     ]);
-    echo "Admin user created!\n";
+    echo "Admin user created: {$email} / {$password}  (shown once — change it after first sign-in)\n";
 } else {
     echo "Admin user already exists!\n";
 }

@@ -338,6 +338,16 @@ class UserService
 
         $user->update(['password_hash' => password_hash($newPassword, PASSWORD_BCRYPT)]);
 
+        // Reset by someone else = a one-time password: they choose their own at the
+        // next sign-in, so the person who reset it can't keep using the account.
+        if ($userId !== $adminId) {
+            try {
+                DB::table('users')->where('id', $userId)->update(['must_change_password' => 1]);
+            } catch (\Throwable $e) {
+                error_log('[UserService] must_change_password not set (migration 2026_10_31 run?): ' . $e->getMessage());
+            }
+        }
+
         $this->log($adminId, 'password_reset', 'users', $userId, [
             'target_name'  => $user->name,
             'target_email' => $user->email,
