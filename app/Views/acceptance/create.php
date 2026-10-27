@@ -2445,15 +2445,23 @@ function parseGDSDate(d) {
   return dt;
 }
 
-// parseGDSDate resolves each date's year on its own, so an itinerary crossing
-// New Year (30DEC -> 17JAN) can come back ~360 days apart or even negative,
-// depending on today's date. No itinerary leg is ~a year long, so unwrap it.
+// Days from segment A's date to segment B's. Never compare the years
+// parseGDSDate picks for each date on its own: its 180-day window splits them.
+// On 27 Oct 2026 it put 24MAR in 2027 but 27JUL in 2026, so a JFK-HKG 24MAR /
+// HKG-JFK 27JUL return came out 240 days backwards and was blocked as an
+// "impossible connection". GDS segments are listed in travel order and a ticket
+// is valid for under a year, so B is the next 'DDMON' on or after A: same
+// year as A, or the year after when that would put it more than a week before
+// A. A 1-7 day step back is kept negative; that is a real date typo to flag.
 function getDateDiffDays(dateA, dateB) {
   const a = parseGDSDate(dateA), b = parseGDSDate(dateB);
   if (!a || !b) return 0;
+  b.setFullYear(a.getFullYear());
   let d = Math.round((b - a) / 86400000);
-  if (d >  300) d -= 365;
-  if (d < -300) d += 365;
+  if (d < -7) {
+    b.setFullYear(a.getFullYear() + 1);
+    d = Math.round((b - a) / 86400000);
+  }
   return d;
 }
 
