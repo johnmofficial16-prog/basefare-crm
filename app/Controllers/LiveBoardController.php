@@ -66,8 +66,7 @@ class LiveBoardController
     private function isPinVerified(): bool
     {
         if (session_status() === PHP_SESSION_NONE) session_start();
-        return ($_SESSION['tv_pin_verified'] ?? false) === true
-            && \App\Middleware\IpRestrictionMiddleware::fromOfficeNetwork();
+        return ($_SESSION['tv_pin_verified'] ?? false) === true;
     }
 
     // =========================================================================
@@ -107,10 +106,9 @@ class LiveBoardController
             $_SESSION['tv_pin_error'] = 'The scoreboard is off. An admin sets its PIN in Admin → Settings.';
             return $back;
         }
-        if (!\App\Middleware\IpRestrictionMiddleware::fromOfficeNetwork()) {
-            $_SESSION['tv_pin_error'] = 'The scoreboard only opens on the office network.';
-            return $back;
-        }
+        // No office-network check (removed 27 Oct 2026 at John's request: the TV
+        // couldn't open from a centre whose IP isn't on the list). The hashed
+        // 8+ character PIN and the database throttle below keep guessing out.
         if ($this->tooManyTries($ip)) {
             $_SESSION['tv_pin_error'] = 'Too many attempts. Try again in ' . self::LOCK_MINS . ' minutes.';
             return $back;
